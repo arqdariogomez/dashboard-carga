@@ -1,0 +1,9 @@
+@echo off
+echo Starting development server...
+start npm run dev
+echo Waiting for server to start...
+timeout /t 3 /nobreak >nul
+echo Opening browser...
+start http://localhost:5173
+echo Development server started and browser opened!
+pause

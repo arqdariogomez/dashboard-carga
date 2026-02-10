@@ -1,0 +1,89 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --color-bg-primary: #FFFFFF;
+  --color-bg-secondary: #F7F7F5;
+  --color-bg-sidebar: #F7F7F5;
+  --color-text-primary: #37352F;
+  --color-text-secondary: #787774;
+  --color-border: #E9E9E7;
+  --color-accent-blue: #D3E5EF;
+  --color-accent-green: #DBEDDB;
+  --color-accent-yellow: #FFF3D1;
+  --color-accent-orange: #FADEC9;
+  --color-accent-red: #FFE2DD;
+  --color-accent-purple: #E8DEEE;
+  --color-person-1: #579DFF;
+  --color-person-2: #6EC98D;
+  --color-person-3: #E2945E;
+  --color-person-4: #9F8FEF;
+  --color-person-5: #F87171;
+  --color-person-6: #F59E0B;
+}
+
+* {
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d1cf;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #a0a09e;
+}
+
+/* Pulse animation for critical load */
+@keyframes load-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.08); opacity: 0.85; }
+}
+
+.load-pulse {
+  animation: load-pulse 2s ease-in-out infinite;
+}
+
+/* Today line animation */
+@keyframes today-pulse {
+  0%, 100% { opacity: 0.7; }
+  50% { opacity: 1; }
+}
+
+.today-line {
+  animation: today-pulse 2s ease-in-out infinite;
+}
+
+/* Smooth slide-in for detail panel */
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.slide-in-right {
+  animation: slide-in-right 0.25s ease-out forwards;
+}
+
+/* Fade in */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+  animation: fade-in 0.2s ease-out forwards;
+}
