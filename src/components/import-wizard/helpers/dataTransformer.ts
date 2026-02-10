@@ -1,12 +1,15 @@
-/**
- * Transform raw Excel data to Project[] using column mappings
- */
-
 import * as XLSX from 'xlsx';
 import type { Project, AppConfig } from '@/lib/types';
 import { computeProjectFields } from '@/lib/workloadEngine';
 import { parseAssignees } from '@/lib/assigneeHelpers';
 import type { ColumnMapping } from './columnDetector';
+import {
+  enrichRowsWithParent,
+  createRowIndexMap,
+  resolveParentIds,
+  type RowWithParent,
+  type RowIndexMap,
+} from './indentDetector';
 
 function parseExcelDate(value: unknown): Date | null {
   if (!value) return null;
@@ -83,6 +86,9 @@ export interface TransformOptions {
   mappings: ColumnMapping[];
   config: AppConfig;
   skipGroupRows?: number[]; // row indices to skip
+  nameColumnName?: string; // column name for hierarchy detection (usually 'Proyecto')
+  detectHierarchy?: boolean; // if true, detect indent levels and calculate parentId
+  indentLevels?: number[]; // optional precomputed indent levels aligned with rows[]
 }
 
 /**
@@ -92,7 +98,7 @@ export function transformToProjects(
   rows: Record<string, unknown>[],
   options: TransformOptions
 ): Project[] {
-  const { mappings, config, skipGroupRows = [] } = options;
+  const { mappings, config, skipGroupRows = [], nameColumnName, detectHierarchy = false } = options;
   const skipSet = new Set(skipGroupRows);
 
   // Build field->column lookup
@@ -109,8 +115,13 @@ export function transformToProjects(
     return row[col];
   };
 
+  // Pre-process: enrich rows with hierarchy if requested
+  // Must be done AFTER filtering skip rows, so indices match
   const projects: Project[] = [];
+  const rowIndexToProjectId = new Map<number, string>();
+  const originalRowToProjectId = new Map<number, string>(); // Maps original row indices to project IDs
 
+  // First pass: build projects (filtering by skipGroupRows)
   for (let i = 0; i < rows.length; i++) {
     if (skipSet.has(i)) continue;
     
@@ -120,8 +131,10 @@ export function transformToProjects(
     // Skip rows without a project name
     if (!name || String(name).trim().length === 0) continue;
 
+    const projectId = `import-${i}-${Date.now()}`;
+
     const rawProject = {
-      id: `import-${i}-${Date.now()}`,
+      id: projectId,
       name: String(name).trim(),
       branch: getVal(row, 'branch') ? String(getVal(row, 'branch')).trim() : '',
       startDate: parseExcelDate(getVal(row, 'startDate')),
@@ -133,9 +146,67 @@ export function transformToProjects(
       blockedBy: getVal(row, 'blockedBy') ? String(getVal(row, 'blockedBy')).trim() : null,
       blocksTo: getVal(row, 'blocksTo') ? String(getVal(row, 'blocksTo')).trim() : null,
       reportedLoad: parsePercentage(getVal(row, 'reportedLoad')),
+      parentId: undefined as string | null | undefined, // Will be set later
+      isExpanded: true,
     };
 
-    projects.push(computeProjectFields(rawProject, config));
+    // Track mapping from row index to project ID
+    originalRowToProjectId.set(i, projectId);
+
+    const computed = computeProjectFields(rawProject as Omit<Project, 'assignedDays' | 'balanceDays' | 'dailyLoad' | 'totalHours'>, config);
+    projects.push(computed);
+  }
+
+  // Second pass: resolve parentIds if hierarchy was detected
+  if (detectHierarchy && nameColumnName) {
+    // Build enrichedRows using optional precomputed indentLevels (from Excel alignment) if provided
+    const indentLevels = options.indentLevels;
+
+    // Compute parent references for each row index in the provided `rows` array
+    const enrichedRows: RowWithParent[] = rows.map((r, idx) => ({
+      ...r,
+      _rowIndex: idx,
+      _indentLevel: indentLevels && typeof indentLevels[idx] === 'number' ? indentLevels[idx] : (enrichRowsWithParent([r], nameColumnName)[0]._indentLevel || 0),
+      _parentRowIndex: -1,
+    }));
+
+    // Calculate parents using indentLevels, ignoring empty rows (rows[] already filtered)
+    for (let i = 0; i < enrichedRows.length; i++) {
+      const level = enrichedRows[i]._indentLevel ?? 0;
+      if (level === 0) {
+        enrichedRows[i]._parentRowIndex = -1;
+        continue;
+      }
+
+      // Prefer immediate parent with level === level-1
+      let parentIdx = -1;
+      for (let j = i - 1; j >= 0; j--) {
+        const jl = enrichedRows[j]._indentLevel ?? 0;
+        if (jl === level - 1) { parentIdx = j; break; }
+      }
+
+      // Fallback: nearest ancestor with level < current level
+      if (parentIdx === -1) {
+        for (let j = i - 1; j >= 0; j--) {
+          const jl = enrichedRows[j]._indentLevel ?? 0;
+          if (jl < level) { parentIdx = j; break; }
+        }
+      }
+
+      enrichedRows[i]._parentRowIndex = parentIdx === -1 ? -1 : parentIdx;
+    }
+
+    // Map enriched parent indexes to project.parentId using originalRowToProjectId map
+    projects.forEach((project) => {
+      const originalRowIdx = Array.from(originalRowToProjectId.entries()).find(([_, id]) => id === project.id)?.[0];
+      if (typeof originalRowIdx === 'number') {
+        const enriched = enrichedRows[originalRowIdx];
+        if (enriched && typeof enriched._parentRowIndex === 'number' && enriched._parentRowIndex !== -1) {
+          const parentId = originalRowToProjectId.get(enriched._parentRowIndex);
+          if (parentId) project.parentId = parentId;
+        }
+      }
+    });
   }
 
   return projects;

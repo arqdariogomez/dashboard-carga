@@ -11,6 +11,10 @@ export interface Project {
   blockedBy: string | null;
   blocksTo: string | null;
   reportedLoad: number | null;
+  // Hierarchy
+  parentId?: string | null;
+  isExpanded?: boolean;
+  hierarchyLevel?: number;
   // Computed fields
   assignedDays: number;
   balanceDays: number;
@@ -81,4 +85,6 @@ export type AppAction =
   | { type: 'ADD_PROJECT'; payload: Project }
   | { type: 'DELETE_PROJECT'; payload: string }
   | { type: 'REORDER_PROJECTS'; payload: string[] }
+  | { type: 'UPDATE_HIERARCHY'; payload: { projectId: string; newParentId: string | null } }
+  | { type: 'TOGGLE_EXPANSION'; payload: string }
   | { type: 'MARK_SAVED' };

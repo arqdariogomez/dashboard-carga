@@ -4,6 +4,8 @@ import { ValidationMessage, ValidationSummary } from '../ui/ValidationMessage';
 import { validateImportData } from '../helpers/validationEngine';
 import { buildRawForValidation } from '../helpers/dataTransformer';
 import { detectGroupRows } from '../helpers/indentDetector';
+import { detectIndentLevels } from '../helpers/indentDetector';
+import type { RowWithParent } from '../helpers/indentDetector';
 import type { ColumnMapping } from '../helpers/columnDetector';
 import type { ValidationIssue } from '../helpers/validationEngine';
 import type { ParsedSheetData } from './Step1_FileSelect';
@@ -36,6 +38,58 @@ export function Step3_DataPreview({ sheetData, mappings, onComplete, onBack }: S
   const rawProjects = useMemo(() => {
     return buildRawForValidation(sheetData.rows, mappings, skipGroupRows);
   }, [sheetData.rows, mappings, skipGroupRows]);
+
+  // Hierarchy preview: compute parent mapping using indent levels (exceljs-provided or fallback)
+  const hierarchyPreview = useMemo(() => {
+    const nameCol = mappings.find(m => m.field === 'name')?.excelColumn || sheetData.headers[0];
+    const indentLevelsAll = sheetData.indentLevelsByColumn ? sheetData.indentLevelsByColumn[nameCol] : undefined;
+
+    // Build list of kept original indices after skipping group rows
+    const keptIndices: number[] = [];
+    for (let i = 0; i < sheetData.rows.length; i++) {
+      if (!skipGroupRows.includes(i)) keptIndices.push(i);
+    }
+
+    // Get indent level map fallback using text-based detection
+    const textIndentMap = detectIndentLevels(sheetData.rows, sheetData.headers[0]);
+
+    // Build nodes array with indent and text
+    const nodes: Array<{ originalIndex: number; text: string; indent: number }> = keptIndices.map((origIdx) => {
+      const row = sheetData.rows[origIdx];
+      const rawText = row[nameCol] ?? '';
+      const text = String(rawText).trim();
+      const indent = indentLevelsAll && typeof indentLevelsAll[origIdx] === 'number'
+        ? indentLevelsAll[origIdx]
+        : (textIndentMap.get(origIdx) ?? 0);
+      return { originalIndex: origIdx, text, indent };
+    });
+
+    // Compute parent index within nodes array
+    const parentIdxArr: number[] = new Array(nodes.length).fill(-1);
+    for (let i = 0; i < nodes.length; i++) {
+      const level = nodes[i].indent || 0;
+      if (level === 0) { parentIdxArr[i] = -1; continue; }
+      let p = -1;
+      for (let j = i - 1; j >= 0; j--) {
+        if ((nodes[j].indent || 0) === level - 1) { p = j; break; }
+      }
+      if (p === -1) {
+        for (let j = i - 1; j >= 0; j--) {
+          if ((nodes[j].indent || 0) < level) { p = j; break; }
+        }
+      }
+      parentIdxArr[i] = p;
+    }
+
+    // Build children counts
+    const childrenCount = new Array(nodes.length).fill(0);
+    for (let i = 0; i < parentIdxArr.length; i++) {
+      const p = parentIdxArr[i];
+      if (p !== -1) childrenCount[p]++;
+    }
+
+    return { nodes, parentIdxArr, childrenCount };
+  }, [sheetData, mappings, skipGroupRows]);
 
   // Run validation
   const validation = useMemo(() => {
@@ -214,13 +268,35 @@ export function Step3_DataPreview({ sheetData, mappings, onComplete, onBack }: S
         <h3 className="text-xs font-semibold text-text-secondary uppercase tracking-wider mb-2">
           Vista previa de datos ({rawProjects.length} filas)
         </h3>
-        <DataPreviewTable
-          rows={sheetData.rows}
-          headers={sheetData.headers}
-          mappings={mappings}
-          issues={validation.issues}
-          maxRows={25}
-        />
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <DataPreviewTable
+              rows={sheetData.rows}
+              headers={sheetData.headers}
+              mappings={mappings}
+              issues={validation.issues}
+              maxRows={12}
+            />
+          </div>
+
+          <div>
+            <h4 className="text-xs font-medium text-text-primary mb-2">Vista previa de jerarquía</h4>
+            <div className="p-3 rounded-xl border border-border bg-white max-h-[420px] overflow-auto text-sm">
+              {hierarchyPreview.nodes.length === 0 ? (
+                <p className="text-xs text-text-secondary">No hay filas para previsualizar.</p>
+              ) : (
+                <ul>
+                  {hierarchyPreview.nodes.slice(0, 50).map((n, idx) => (
+                    <li key={n.originalIndex} className="flex items-center gap-2" style={{ paddingLeft: `${(n.indent || 0) * 14}px` }}>
+                      <div className="w-4 text-[11px] text-text-secondary">{hierarchyPreview.childrenCount[idx] > 0 ? '▸' : ''}</div>
+                      <div className="truncate">{n.text}</div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Action buttons */}

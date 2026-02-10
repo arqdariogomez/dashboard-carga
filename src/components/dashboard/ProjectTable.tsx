@@ -1,10 +1,12 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { LoadBubble } from '@/components/shared/LoadBubble';
-import { formatDateShort } from '@/lib/dateUtils';
+import { formatDateShort, format } from '@/lib/dateUtils';
 import { computeProjectFields } from '@/lib/workloadEngine';
 import { parseAssignees } from '@/lib/assigneeHelpers';
 import { exportToExcel, copyAsCSV } from '@/lib/exportUtils';
+import { ExpandableCell, useHierarchyDisplay } from '@/components/dashboard/ExpandableCell';
+import { validateNoCircles, getCollapsedMetricsSummary, getChildren } from '@/lib/hierarchyEngine';
 import {
   ArrowUpDown, Search, ChevronDown, ChevronRight, Plus, Trash2,
   Download, ClipboardCopy, Check, GripVertical, AlertTriangle,
@@ -298,16 +300,25 @@ function SortableRow({
   project,
   onUpdate,
   onDelete,
+  onToggleExpand,
+  hasChildren,
   allBranches,
   bgClass,
+  allProjects,
 }: {
   project: Project;
   onUpdate: (id: string, updates: Partial<Project>) => void;
   onDelete: (id: string) => void;
+  onToggleExpand: (id: string) => void;
+  hasChildren: boolean;
   allBranches: string[];
   bgClass?: string;
+  allProjects: Project[];
 }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editingName, setEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState(project.name);
+  
   const {
     attributes,
     listeners,
@@ -329,6 +340,14 @@ function SortableRow({
 
   const types = ['Proyecto', 'Lanzamiento', 'En radar'];
 
+  // Compute collapsed summary if parent is collapsed and has children
+  const isCollapsed = hasChildren && !(project.isExpanded ?? true);
+  const collapsedSummary = isCollapsed ? getCollapsedMetricsSummary(project.id, allProjects) : null;
+
+  useEffect(() => {
+    setEditNameValue(project.name);
+  }, [project.name]);
+
   return (
     <tr
       ref={setNodeRef}
@@ -347,13 +366,27 @@ function SortableRow({
         </button>
       </td>
 
-      {/* Name */}
-      <td className="px-3 py-2 border-b border-border text-sm text-text-primary font-medium min-w-[180px]">
-        <EditableTextCell
-          value={project.name}
-          onChange={(v) => onUpdate(project.id, { name: v })}
-          placeholder="Nombre del proyecto"
-          className="font-medium"
+      {/* Name - with hierarchy support */}
+      <td className="border-b border-border text-sm text-text-primary font-medium min-w-[200px] px-0 py-2">
+        <ExpandableCell
+          project={project}
+          hasChildren={hasChildren}
+          onToggleExpand={onToggleExpand}
+          onUpdateName={(v) => onUpdate(project.id, { name: v })}
+          isEditing={editingName}
+          editValue={editNameValue}
+          onEditChange={(v) => setEditNameValue(v)}
+          onStartEdit={() => setEditingName(true)}
+          onFinishEdit={(v) => {
+            onUpdate(project.id, { name: v });
+            setEditingName(false);
+          }}
+          onCancelEdit={() => {
+            setEditingName(false);
+            setEditNameValue(project.name);
+          }}
+          onIndent={(id) => handleIndent(id)}
+          onOutdent={(id) => handleOutdent(id)}
         />
       </td>
 
@@ -369,38 +402,64 @@ function SortableRow({
 
       {/* Start date */}
       <td className="px-3 py-2 border-b border-border text-xs">
-        <EditableDateCell
-          value={project.startDate}
-          onChange={(v) => onUpdate(project.id, { startDate: v })}
-          hasError={!!hasDateError}
-        />
+        {isCollapsed && collapsedSummary ? (
+          <div className="text-text-secondary">
+            {collapsedSummary.startDate ? format(new Date(collapsedSummary.startDate), 'dd/MM') : '—'}
+          </div>
+        ) : (
+          <EditableDateCell
+            value={project.startDate}
+            onChange={(v) => onUpdate(project.id, { startDate: v })}
+            hasError={!!hasDateError}
+          />
+        )}
       </td>
 
       {/* End date */}
       <td className="px-3 py-2 border-b border-border text-xs">
-        <EditableDateCell
-          value={project.endDate}
-          onChange={(v) => onUpdate(project.id, { endDate: v })}
-          hasError={!!hasDateError}
-        />
+        {isCollapsed && collapsedSummary ? (
+          <div className="text-text-secondary">
+            {collapsedSummary.endDate ? format(new Date(collapsedSummary.endDate), 'dd/MM') : '—'}
+          </div>
+        ) : (
+          <EditableDateCell
+            value={project.endDate}
+            onChange={(v) => onUpdate(project.id, { endDate: v })}
+            hasError={!!hasDateError}
+          />
+        )}
       </td>
 
       {/* Assignee */}
       <td className="px-3 py-2 border-b border-border text-xs min-w-[100px]">
-        <EditableAssigneesCell
-          value={project.assignees}
-          onChange={(v) => onUpdate(project.id, { assignees: v })}
-        />
+        {isCollapsed && collapsedSummary ? (
+          <div className="text-text-secondary">
+            {collapsedSummary.assignees && collapsedSummary.assignees.length > 0
+              ? collapsedSummary.assignees.join(' / ')
+              : '—'}
+          </div>
+        ) : (
+          <EditableAssigneesCell
+            value={project.assignees}
+            onChange={(v) => onUpdate(project.id, { assignees: v })}
+          />
+        )}
       </td>
 
       {/* Days required */}
       <td className="px-3 py-2 border-b border-border text-xs text-center">
-        <EditableNumberCell
-          value={project.daysRequired}
-          onChange={(v) => onUpdate(project.id, { daysRequired: v })}
-          min={0}
-          hasWarning={!!hasDaysWarning}
-        />
+        {isCollapsed && collapsedSummary ? (
+          <div className="text-text-secondary">
+            {collapsedSummary.daysRequired > 0 ? collapsedSummary.daysRequired : '—'}
+          </div>
+        ) : (
+          <EditableNumberCell
+            value={project.daysRequired}
+            onChange={(v) => onUpdate(project.id, { daysRequired: v })}
+            min={0}
+            hasWarning={!!hasDaysWarning}
+          />
+        )}
       </td>
 
       {/* Priority */}
@@ -504,6 +563,62 @@ export function ProjectTable() {
     dispatch({ type: 'DELETE_PROJECT', payload: id });
   }, [dispatch]);
 
+  const handleToggleExpand = useCallback((id: string) => {
+    dispatch({ type: 'TOGGLE_EXPANSION', payload: id });
+  }, [dispatch]);
+
+  const handleIndent = useCallback((projectId: string) => {
+    const order = state.projectOrder.length > 0 ? [...state.projectOrder] : state.projects.map(p => p.id);
+    const idx = order.indexOf(projectId);
+    if (idx <= 0) return;
+    const targetParentId = order[idx - 1];
+    if (!targetParentId) return;
+
+    // Validate
+    if (!validateNoCircles(projectId, targetParentId, state.projects)) return;
+
+    dispatch({ type: 'UPDATE_HIERARCHY', payload: { projectId, newParentId: targetParentId } });
+
+    // Move project to be right after parent
+    const parentPos = order.indexOf(targetParentId);
+    const newOrder = (() => {
+      const copy = [...order];
+      const [item] = copy.splice(idx, 1);
+      copy.splice(parentPos + 1, 0, item);
+      return copy;
+    })();
+    dispatch({ type: 'REORDER_PROJECTS', payload: newOrder });
+  }, [state.projectOrder, state.projects, dispatch]);
+
+  const handleOutdent = useCallback((projectId: string) => {
+    const order = state.projectOrder.length > 0 ? [...state.projectOrder] : state.projects.map(p => p.id);
+    const idx = order.indexOf(projectId);
+    if (idx === -1) return;
+    const project = state.projects.find(p => p.id === projectId);
+    if (!project) return;
+    const currentParentId = project.parentId;
+    if (!currentParentId) return; // already root
+
+    const parentProject = state.projects.find(p => p.id === currentParentId);
+    const newParentId = parentProject?.parentId ?? null;
+
+    // Validate
+    if (!validateNoCircles(projectId, newParentId, state.projects)) return;
+
+    dispatch({ type: 'UPDATE_HIERARCHY', payload: { projectId, newParentId } });
+
+    // Move project to after current parent
+    const parentPos = order.indexOf(currentParentId);
+    const insertPos = Math.min(parentPos + 1, order.length);
+    const newOrder = (() => {
+      const copy = [...order];
+      const [item] = copy.splice(idx, 1);
+      copy.splice(insertPos, 0, item);
+      return copy;
+    })();
+    dispatch({ type: 'REORDER_PROJECTS', payload: newOrder });
+  }, [state.projectOrder, state.projects, dispatch]);
+
   const handleAddProject = useCallback(() => {
     const newProject = computeProjectFields({
       id: `proj-new-${Date.now()}`,
@@ -535,7 +650,7 @@ export function ProjectTable() {
   }, [state.projects]);
 
   const handleDragEnd = useCallback((event: DragEndEvent) => {
-    const { active, over } = event;
+    const { active, over, delta } = event;
     if (!over || active.id === over.id) return;
 
     const currentOrder = state.projectOrder.length > 0
@@ -547,10 +662,68 @@ export function ProjectTable() {
 
     if (oldIndex === -1 || newIndex === -1) return;
 
-    currentOrder.splice(oldIndex, 1);
-    currentOrder.splice(newIndex, 0, String(active.id));
+    // Determine horizontal movement to trigger indent/outdent
+    const deltaX = delta?.x ?? 0;
+    const INDENT_THRESHOLD = 40; // pixels for significant horizontal drag
+    const SMALL_MOVE_THRESHOLD = 20; // pixels for "drop on" detection
 
-    dispatch({ type: 'REORDER_PROJECTS', payload: currentOrder });
+    // Helper: move element in array
+    const move = (arr: string[], from: number, to: number) => {
+      const copy = [...arr];
+      const [item] = copy.splice(from, 1);
+      copy.splice(to, 0, item);
+      return copy;
+    };
+
+    const activeProject = state.projects.find(p => p.id === String(active.id));
+    const targetProject = state.projects.find(p => p.id === String(over.id));
+
+    // If moved right sufficiently -> attempt to indent (make child of previous sibling OR drop target)
+    if (deltaX > INDENT_THRESHOLD) {
+      const targetParentIdx = Math.max(0, newIndex - 1);
+      const targetParentId = currentOrder[targetParentIdx];
+      if (targetParentId) {
+        dispatch({ type: 'UPDATE_HIERARCHY', payload: { projectId: String(active.id), newParentId: targetParentId } });
+        const parentPos = currentOrder.indexOf(targetParentId);
+        const newOrder = move(currentOrder, oldIndex, parentPos + 1);
+        dispatch({ type: 'REORDER_PROJECTS', payload: newOrder });
+      }
+      return;
+    }
+
+    // If small horizontal movement (within ±20px) OR drop on different project -> consider making child
+    if (Math.abs(deltaX) <= SMALL_MOVE_THRESHOLD && targetProject) {
+      // Make active a child of the drop target
+      dispatch({ type: 'UPDATE_HIERARCHY', payload: { projectId: String(active.id), newParentId: String(over.id) } });
+      // Expand target to show the new child
+      dispatch({ type: 'TOGGLE_EXPANSION', payload: { projectId: String(over.id), isExpanded: true } });
+      // Move active to be right after target in order
+      const targetPos = currentOrder.indexOf(String(over.id));
+      const newOrder = move(currentOrder, oldIndex, targetPos + 1);
+      dispatch({ type: 'REORDER_PROJECTS', payload: newOrder });
+      return;
+    }
+
+    // If moved left sufficiently -> outdent (set parent to parent's parent)
+    if (deltaX < -INDENT_THRESHOLD) {
+      if (!activeProject) return;
+      const currentParentId = activeProject.parentId || null;
+      if (currentParentId) {
+        const parentProject = state.projects.find(p => p.id === currentParentId);
+        const newParentId = parentProject?.parentId ?? null;
+        dispatch({ type: 'UPDATE_HIERARCHY', payload: { projectId: String(active.id), newParentId } });
+
+        const parentPos = currentOrder.indexOf(currentParentId);
+        const insertPos = parentPos + 1;
+        const newOrder = move(currentOrder, oldIndex, insertPos);
+        dispatch({ type: 'REORDER_PROJECTS', payload: newOrder });
+      }
+      return;
+    }
+
+    // Default: reorder in list only
+    const newOrder = move(currentOrder, oldIndex, newIndex);
+    dispatch({ type: 'REORDER_PROJECTS', payload: newOrder });
   }, [state.projectOrder, state.projects, dispatch]);
 
   const branchOptions = useMemo(() => {
@@ -559,8 +732,26 @@ export function ProjectTable() {
     return Array.from(set).sort();
   }, [allBranches, state.projects]);
 
+  // Get hierarchy display info (visible projects, children map)
+  const { childrenMap, visibleProjects } = useHierarchyDisplay(state.projects);
+
   const sorted = useMemo(() => {
-    const filtered = orderedFilteredProjects.filter((p) =>
+    // First apply hierarchy visibility (respect expansion state)
+    const hierarchyFiltered = state.projects.filter(p => {
+      if (!p.parentId) return true; // Root projects always visible
+      
+      // Check if any ancestor is collapsed
+      let current = p.parentId;
+      while (current) {
+        const parent = state.projects.find(pr => pr.id === current);
+        if (!parent?.isExpanded) return false;
+        current = parent?.parentId;
+      }
+      return true;
+    });
+
+    // Then apply search and type filtering
+    const filtered = hierarchyFiltered.filter((p) =>
       p.name.toLowerCase().includes(search.toLowerCase())
     );
 
@@ -589,7 +780,7 @@ export function ProjectTable() {
     }
 
     return { scheduled, unscheduled, radar };
-  }, [orderedFilteredProjects, sortKey, sortDir, search]);
+  }, [state.projects, sortKey, sortDir, search]);
 
   const SortHeader = ({ label, field, className }: { label: string; field: SortKey; className?: string }) => (
     <th
@@ -619,7 +810,7 @@ export function ProjectTable() {
         </div>
 
         <span className="text-xs text-text-secondary">
-          {orderedFilteredProjects.length} proyectos
+          {state.projects.length} proyectos
         </span>
 
         <div className="flex-1" />
@@ -681,7 +872,10 @@ export function ProjectTable() {
                     project={p}
                     onUpdate={handleUpdate}
                     onDelete={handleDelete}
+                    onToggleExpand={handleToggleExpand}
+                    hasChildren={(childrenMap.get(p.id)?.length ?? 0) > 0}
                     allBranches={branchOptions}
+                    allProjects={state.projects}
                   />
                 ))}
               </SortableContext>
@@ -708,8 +902,11 @@ export function ProjectTable() {
                           project={p}
                           onUpdate={handleUpdate}
                           onDelete={handleDelete}
+                          onToggleExpand={handleToggleExpand}
+                          hasChildren={(childrenMap.get(p.id)?.length ?? 0) > 0}
                           allBranches={branchOptions}
                           bgClass="bg-accent-yellow/5"
+                          allProjects={state.projects}
                         />
                       ))}
                     </SortableContext>
@@ -739,8 +936,11 @@ export function ProjectTable() {
                           project={p}
                           onUpdate={handleUpdate}
                           onDelete={handleDelete}
+                          onToggleExpand={handleToggleExpand}
+                          hasChildren={(childrenMap.get(p.id)?.length ?? 0) > 0}
                           allBranches={branchOptions}
                           bgClass="opacity-60"
+                          allProjects={state.projects}
                         />
                       ))}
                     </SortableContext>
@@ -752,7 +952,7 @@ export function ProjectTable() {
         </DndContext>
 
         {/* Empty state */}
-        {orderedFilteredProjects.length === 0 && (
+        {state.projects.length === 0 && (
           <div className="flex flex-col items-center justify-center py-16 text-text-secondary">
             <div className="w-16 h-16 rounded-2xl bg-bg-secondary flex items-center justify-center mb-3">
               <Search size={28} className="text-text-secondary/50" />

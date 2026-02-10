@@ -4,6 +4,7 @@ import { LoadBubble } from '@/components/shared/LoadBubble';
 import { Toggle } from '@/components/shared/Toggle';
 import { DateRangeSlider } from '@/components/shared/DateRangeSlider';
 import { aggregateByPeriod, getPersons } from '@/lib/workloadEngine';
+import { isParent, aggregateFromChildren } from '@/lib/hierarchyEngine';
 import { format, isSameDay, addMonths, addWeeks, addDays, startOfMonth, startOfWeek, isToday, eachDayOfInterval, getDay } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Calendar, X } from 'lucide-react';
@@ -202,6 +203,15 @@ export function WorkloadGrid() {
     if (!detailPanel) return [];
     return detailPanel.projects.map(pl => {
       const fullProject = filteredProjects.find(p => p.id === pl.projectId);
+      if (!fullProject) return { ...pl, fullProject: undefined };
+
+      // If the project is a parent in the currently visible set, aggregate visible children
+      if (isParent(fullProject.id, filteredProjects)) {
+        const aggregated = aggregateFromChildren(fullProject.id, filteredProjects, state.config);
+        const merged: Project = { ...fullProject, ...aggregated } as Project;
+        return { ...pl, fullProject: merged };
+      }
+
       return { ...pl, fullProject };
     });
   }, [detailPanel, filteredProjects]);

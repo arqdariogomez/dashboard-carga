@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import type { Project } from './types';
 import { format } from 'date-fns';
+import { buildHierarchy, calculateIndentLevels } from './hierarchyEngine';
 
 function formatDate(d: Date | null): string {
   if (!d) return '';
@@ -27,7 +28,19 @@ function projectToRow(p: Project) {
 }
 
 export function exportToExcel(projects: Project[], fileName?: string) {
-  const rows = projects.map(projectToRow);
+  // Build hierarchical order for export
+  const roots = buildHierarchy(projects);
+
+  const rowsWithLevel: { row: ReturnType<typeof projectToRow>; level: number }[] = [];
+
+  const traverse = (node: any, level: number) => {
+    rowsWithLevel.push({ row: projectToRow(node), level });
+    (node.children || []).forEach((c: any) => traverse(c, level + 1));
+  };
+
+  roots.forEach(r => traverse(r, 0));
+
+  const rows = rowsWithLevel.map(r => r.row);
   const ws = XLSX.utils.json_to_sheet(rows);
 
   // Set column widths
@@ -50,6 +63,28 @@ export function exportToExcel(projects: Project[], fileName?: string) {
 
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Proyectos');
+
+  // Apply indent formatting to first column (Proyecto)
+  try {
+    for (let i = 0; i < rowsWithLevel.length; i++) {
+      const excelRow = i + 2; // header is row 1
+      const cellRef = `A${excelRow}`;
+      const level = rowsWithLevel[i].level || 0;
+      const cell = ws[cellRef];
+      if (cell) {
+        // set alignment indent (may not be supported by all readers)
+        // @ts-ignore - sheetjs style
+        cell.s = cell.s || {};
+        // @ts-ignore
+        cell.s.alignment = { ...(cell.s.alignment || {}), indent: level };
+        // Fallback: prepend a few NBSPs to visually indent if styles not supported
+        const nbsp = '\u00A0'.repeat(level * 3);
+        cell.v = `${nbsp}${cell.v}`;
+      }
+    }
+  } catch (e) {
+    // ignore styling errors
+  }
 
   const outputName = fileName
     ? fileName.replace(/\.xlsx?$/i, '') + '_export.xlsx'

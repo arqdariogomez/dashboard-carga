@@ -1,21 +1,69 @@
 import type { Project, PersonWorkload, ProjectLoad, AppConfig, FilterState, Granularity } from './types';
 import { getWorkingDays, countWorkingDays, isSameDay, getWeekRanges, getMonthRanges } from './dateUtils';
+import { getDescendants, isParent, getAncestors } from './hierarchyEngine';
 
-export function computeProjectFields(project: Omit<Project, 'assignedDays' | 'balanceDays' | 'dailyLoad' | 'totalHours'>, config: AppConfig): Project {
+export function computeProjectFields(project: Omit<Project, 'assignedDays' | 'balanceDays' | 'dailyLoad' | 'totalHours'>, config: AppConfig, allProjects?: Project[]): Project {
   let assignedDays = 0;
   let balanceDays = 0;
   let dailyLoad = 0;
   let totalHours = 0;
 
-  if (project.startDate && project.endDate) {
-    assignedDays = countWorkingDays(project.startDate, project.endDate, config);
-    balanceDays = assignedDays - project.daysRequired;
-    dailyLoad = assignedDays > 0 ? project.daysRequired / assignedDays : 0;
-    totalHours = project.daysRequired * config.hoursPerDay;
+  // If this is a parent project, use aggregated dates from children
+  let startDate = project.startDate;
+  let endDate = project.endDate;
+  let assignees = project.assignees;
+  let daysRequired = project.daysRequired;
+  let priority = project.priority;
+
+  if (allProjects && isParent(project.id, allProjects)) {
+    const descendants = getDescendants(project.id, allProjects);
+    if (descendants.length > 0) {
+      // Aggregated dates: min start, max end
+      const allDates = descendants
+        .flatMap(p => {
+          const dates: Date[] = [];
+          if (p.startDate) dates.push(p.startDate);
+          if (p.endDate) dates.push(p.endDate);
+          return dates;
+        });
+
+      if (allDates.length > 0) {
+        startDate = new Date(Math.min(...allDates.map(d => d.getTime())));
+        endDate = new Date(Math.max(...allDates.map(d => d.getTime())));
+      }
+
+      // Aggregated assignees: unique set
+      const allAssignees = new Set<string>();
+      descendants.forEach(p => {
+        p.assignees.forEach(a => allAssignees.add(a));
+      });
+      assignees = Array.from(allAssignees).sort();
+
+      // Aggregated daysRequired: sum
+      daysRequired = descendants.reduce((sum, p) => sum + p.daysRequired, 0);
+
+      // Aggregated priority: weighted average by daysRequired
+      const totalDays = daysRequired || 1;
+      priority = Math.round(
+        descendants.reduce((sum, p) => sum + p.priority * p.daysRequired, 0) / totalDays
+      );
+    }
+  }
+
+  if (startDate && endDate) {
+    assignedDays = countWorkingDays(startDate, endDate, config);
+    balanceDays = assignedDays - daysRequired;
+    dailyLoad = assignedDays > 0 ? daysRequired / assignedDays : 0;
+    totalHours = daysRequired * config.hoursPerDay;
   }
 
   return {
     ...project,
+    startDate,
+    endDate,
+    assignees,
+    daysRequired,
+    priority,
     assignedDays,
     balanceDays,
     dailyLoad,
@@ -45,8 +93,9 @@ export function getBranches(projects: Project[]): string[] {
   return Array.from(branches).sort();
 }
 
-export function applyFilters(projects: Project[], filters: FilterState): Project[] {
-  return projects.filter((p) => {
+export function applyFilters(projects: Project[], filters: FilterState, config: AppConfig): Project[] {
+  // First pass: apply basic filters per-project
+  const matched = projects.filter((p) => {
     if (filters.persons.length > 0) {
       const hasMatchingPerson = p.assignees.some(assignee => filters.persons.includes(assignee));
       if (!hasMatchingPerson) return false;
@@ -59,6 +108,21 @@ export function applyFilters(projects: Project[], filters: FilterState): Project
     }
     return true;
   });
+
+  // Expand to include ancestors (parents) of matched projects so hierarchy remains visible
+  const includeIds = new Set<string>();
+  matched.forEach(p => {
+    includeIds.add(p.id);
+    const ancestors = getAncestors(p.id, projects);
+    ancestors.forEach(a => includeIds.add(a.id));
+  });
+
+  // Preserve original order from `projects` argument
+  const expanded = projects.filter(p => includeIds.has(p.id));
+
+  // Recompute aggregated fields for the expanded set so parent rows summarize only visible children
+  const recomputed = expanded.map(p => computeProjectFields(p, config, expanded));
+  return recomputed;
 }
 
 export function calculateDailyWorkload(

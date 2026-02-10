@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs';
 import { Upload, FileSpreadsheet, Loader2, ChevronDown, ChevronUp } from 'lucide-react';
 import { SheetSelector, type SheetInfo } from '../ui/SheetSelector';
 import { detectHeaderRow } from '../helpers/columnDetector';
@@ -12,6 +13,7 @@ export interface ParsedSheetData {
   rawSheetData: unknown[][];
   headerRow: number;
   workbook: XLSX.WorkBook;
+  indentLevelsByColumn?: Record<string, number[]>; // map header -> indent levels per data row
 }
 
 interface Step1Props {
@@ -28,6 +30,7 @@ export function Step1_FileSelect({ onComplete, onLoadSample }: Step1Props) {
   const [headerRow, setHeaderRow] = useState(0);
   const [showHeaderConfig, setShowHeaderConfig] = useState(false);
   const [workbook, setWorkbook] = useState<XLSX.WorkBook | null>(null);
+  const [excelJsWorkbook, setExcelJsWorkbook] = useState<ExcelJS.Workbook | null>(null);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -40,6 +43,16 @@ export function Step1_FileSelect({ onComplete, onLoadSample }: Step1Props) {
       const buffer = await file.arrayBuffer();
       const wb = XLSX.read(buffer, { type: 'array', cellDates: true });
       setWorkbook(wb);
+
+      // Also load ExcelJS workbook to read cell.alignment.indent for visual indentation
+      try {
+        const xlsxWb = new ExcelJS.Workbook();
+        await xlsxWb.xlsx.load(buffer as any);
+        setExcelJsWorkbook(xlsxWb);
+      } catch (e) {
+        // Non-fatal: indentation detection will fallback to text-based method
+        setExcelJsWorkbook(null);
+      }
 
       // Analyze all sheets
       const sheetInfos: SheetInfo[] = wb.SheetNames.map((name) => {
@@ -150,6 +163,28 @@ export function Step1_FileSelect({ onComplete, onLoadSample }: Step1Props) {
       rawSheetData: rawData as unknown[][],
       headerRow,
       workbook,
+      indentLevelsByColumn: (function computeIndentMap() {
+        try {
+          if (!excelJsWorkbook) return undefined;
+          const ws = excelJsWorkbook.getWorksheet(selectedSheet);
+          if (!ws) return undefined;
+          const map: Record<string, number[]> = {};
+          for (let c = 0; c < headers.length; c++) {
+            const colName = headers[c];
+            const levels: number[] = [];
+            for (let i = 0; i < rows.length; i++) {
+              const excelRow = headerRow + 2 + i; // headerRow is 0-based, data rows start headerRow+1 (array), excel row = +1
+              const cell = ws.getCell(excelRow, c + 1);
+              const indent = cell && cell.alignment && (cell.alignment.indent || 0) ? (cell.alignment.indent || 0) : 0;
+              levels.push(indent);
+            }
+            map[colName] = levels;
+          }
+          return map;
+        } catch {
+          return undefined;
+        }
+      })(),
     });
   }, [workbook, selectedSheet, headerRow, fileName, onComplete]);
 

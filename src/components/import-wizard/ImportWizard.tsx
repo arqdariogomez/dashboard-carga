@@ -7,6 +7,7 @@ import { Step3_DataPreview } from './steps/Step3_DataPreview';
 import { Step4_ImportComplete } from './steps/Step4_ImportComplete';
 import type { ColumnMapping } from './helpers/columnDetector';
 import { transformToProjects, saveMappingConfig } from './helpers/dataTransformer';
+import { detectHierarchyChanges } from '@/lib/hierarchyEngine';
 import { useProject } from '@/context/ProjectContext';
 import { createProjectsFromSample } from '@/lib/parseExcel';
 import { SAMPLE_DATA } from '@/lib/constants';
@@ -58,9 +59,14 @@ export function ImportWizard({ onComplete, onClose, isModal = false }: ImportWiz
     
     setMappings(newMappings);
     
+    // detect hierarchy using name column mapping
+    const nameMap = newMappings.find(m => m.field === 'name')?.excelColumn;
     const projects = transformToProjects(sheetData.rows, {
       mappings: newMappings,
       config: state.config,
+      detectHierarchy: true,
+      nameColumnName: nameMap,
+      indentLevels: sheetData.indentLevelsByColumn ? sheetData.indentLevelsByColumn[nameMap || ''] : undefined,
     });
 
     // Save mapping config
@@ -75,6 +81,17 @@ export function ImportWizard({ onComplete, onClose, isModal = false }: ImportWiz
       timestamp: Date.now(),
     });
 
+    // Detect hierarchy changes vs existing state
+    const changes = detectHierarchyChanges(state.projects, projects);
+    if (changes.length > 0) {
+      const msg = changes.length === 1
+        ? `Cambio detectado en jerarquía: ${changes[0].projectPath} cambiará de grupo. ¿Proceder?`
+        : `Se detectaron cambios en jerarquía para varios elementos. Al importar se reemplazarán los grupos. ¿Proceder?`;
+      if (!window.confirm(msg)) {
+        return;
+      }
+    }
+
     dispatch({ type: 'SET_PROJECTS', payload: { projects, fileName: sheetData.fileName } });
     
     setImportedProjects(projects);
@@ -86,10 +103,14 @@ export function ImportWizard({ onComplete, onClose, isModal = false }: ImportWiz
   const handleStep3Complete = useCallback((skipRows: number[]) => {
     if (!sheetData) return;
 
+    const nameMap = mappings.find(m => m.field === 'name')?.excelColumn;
     const projects = transformToProjects(sheetData.rows, {
       mappings,
       config: state.config,
       skipGroupRows: skipRows,
+      detectHierarchy: true,
+      nameColumnName: nameMap,
+      indentLevels: sheetData.indentLevelsByColumn ? sheetData.indentLevelsByColumn[nameMap || ''] : undefined,
     });
 
     // Save mapping config
@@ -103,6 +124,16 @@ export function ImportWizard({ onComplete, onClose, isModal = false }: ImportWiz
       dateFormat: mappings.find(m => m.detectedFormat)?.detectedFormat || 'Auto',
       timestamp: Date.now(),
     });
+
+    const changes = detectHierarchyChanges(state.projects, projects);
+    if (changes.length > 0) {
+      const msg = changes.length === 1
+        ? `Cambio detectado en jerarquía: ${changes[0].projectPath} cambiará de grupo. ¿Proceder?`
+        : `Se detectaron cambios en jerarquía para varios elementos. Al importar se reemplazarán los grupos. ¿Proceder?`;
+      if (!window.confirm(msg)) {
+        return;
+      }
+    }
 
     dispatch({ type: 'SET_PROJECTS', payload: { projects, fileName: sheetData.fileName } });
 

@@ -1,6 +1,7 @@
 import { useMemo, useState, useRef, useCallback } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { getPersons, getActiveProjects } from '@/lib/workloadEngine';
+import { buildHierarchy, isParent } from '@/lib/hierarchyEngine';
 import { getDateRange, format } from '@/lib/dateUtils';
 import { differenceInCalendarDays } from 'date-fns';
 import { getLoadColor, PERSON_COLORS } from '@/lib/constants';
@@ -14,13 +15,25 @@ interface TooltipData {
 }
 
 export function GanttTimeline() {
-  const { filteredProjects, dateRange: globalRange } = useProject();
+  const { state, dispatch, filteredProjects, dateRange: globalRange } = useProject();
   const [collapsedPersons, setCollapsedPersons] = useState<Set<string>>(new Set());
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const activeProjects = useMemo(() => getActiveProjects(filteredProjects), [filteredProjects]);
   const persons = useMemo(() => getPersons(activeProjects), [activeProjects]);
+
+  // Precompute per-person hierarchical roots to avoid hooks inside render loops
+  const personRootsMap = useMemo(() => {
+    const map = new Map<string, any[]>();
+    persons.forEach((person) => {
+      const list = activeProjects
+        .filter((p) => p.assignees.includes(person))
+        .sort((a, b) => (a.startDate!.getTime() - b.startDate!.getTime()));
+      map.set(person, buildHierarchy(list));
+    });
+    return map;
+  }, [activeProjects, persons]);
 
   const range = useMemo(() => {
     return globalRange || getDateRange(activeProjects);
@@ -148,11 +161,127 @@ export function GanttTimeline() {
 
             {/* Person groups */}
             {persons.map((person, personIdx) => {
-              const personProjects = activeProjects
+              const personProjectList = activeProjects
                 .filter((p) => p.assignees.includes(person))
                 .sort((a, b) => (a.startDate!.getTime() - b.startDate!.getTime()));
               const isCollapsed = collapsedPersons.has(person);
               const personColor = PERSON_COLORS[personIdx % PERSON_COLORS.length];
+
+              // Build hierarchical nodes for this person's projects
+              const roots = personRootsMap.get(person) || [];
+
+              const renderNode = (node: Project, level = 0) => {
+                const bar = getBarProps(node as Project);
+                if (!bar) return null;
+
+                const nodeState = state.projects.find(p => p.id === node.id);
+                const expanded = nodeState?.isExpanded ?? true;
+                const hasChildren = isParent(node.id, personProjectList);
+                const dep = dependencies.find(d => d.from.id === node.id);
+
+                return (
+                  <div key={node.id} className="flex border-b border-border hover:bg-bg-secondary/20 transition-colors group/bar">
+                    <div className="w-[200px] min-w-[200px] px-3 py-2 border-r border-border sticky left-0 z-10 bg-white group-hover/bar:bg-bg-secondary/20 transition-colors">
+                      <div className="flex items-center">
+                        <div style={{ paddingLeft: level * 12 }} className="min-w-0">
+                          {hasChildren && (
+                            <button
+                              onClick={() => dispatch({ type: 'TOGGLE_EXPANSION', payload: node.id })}
+                              className="mr-2 text-text-secondary"
+                              aria-label={expanded ? 'Contraer' : 'Expandir'}
+                            >
+                              {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                            </button>
+                          )}
+                          <div className="text-xs text-text-primary truncate inline-block align-middle" title={node.name}>
+                            {node.name}
+                          </div>
+                        </div>
+                        <div className="text-[10px] text-text-secondary pl-2 ml-auto flex items-center gap-1.5">
+                          <span>{(node as Project).branch}</span>
+                          <span>·</span>
+                          <span className="tabular-nums">{(node as Project).daysRequired}d</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex-1 relative h-12 flex items-center">
+                      {/* Bar */}
+                      <div
+                        className="absolute h-7 rounded-md flex items-center overflow-hidden transition-all group-hover/bar:shadow-sm cursor-pointer"
+                        style={{
+                          left: bar.left,
+                          width: bar.width,
+                          background: `linear-gradient(135deg, ${bar.color.bg}, ${bar.color.bg}dd)`,
+                          border: `1.5px solid ${bar.color.text}30`,
+                        }}
+                        onMouseEnter={(e) => handleBarHover(e, node as Project)}
+                        onMouseLeave={() => setTooltip(null)}
+                      >
+                        {bar.width > 40 && (
+                          <span
+                            className="text-[10px] font-semibold truncate px-1.5 whitespace-nowrap"
+                            style={{ color: bar.color.text }}
+                          >
+                            {node.name}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Dependency arrow */}
+                      {dep && (() => {
+                        const targetBar = getBarProps(dep.to);
+                        if (!targetBar) return null;
+                        const fromX = bar.left + bar.width;
+                        const toX = targetBar.left;
+                        if (toX <= fromX) return null;
+
+                        return (
+                          <svg
+                            className="absolute top-0 left-0 pointer-events-none"
+                            style={{ width: timelineWidth, height: 48 }}
+                          >
+                            <path
+                              d={`M ${fromX} 24 C ${fromX + 20} 24, ${toX - 20} 24, ${toX} 24`}
+                              fill="none"
+                              stroke="#9F8FEF"
+                              strokeWidth="1.5"
+                              strokeDasharray="4 2"
+                              opacity="0.6"
+                            />
+                            <polygon
+                              points={`${toX - 5},20 ${toX},24 ${toX - 5},28`}
+                              fill="#9F8FEF"
+                              opacity="0.6"
+                            />
+                          </svg>
+                        );
+                      })()}
+
+                      {/* Today line */}
+                      {showTodayLine && (
+                        <div
+                          className="absolute top-0 bottom-0 w-0.5 bg-red-400/40"
+                          style={{ left: todayOffset * dayWidth }}
+                        />
+                      )}
+                    </div>
+                  </div>
+                );
+              };
+
+              // Render traversal respecting node expansion
+              const renderTree = (nodes: any[], level = 0): any[] => {
+                const items: any[] = [];
+                for (const n of nodes) {
+                  items.push(renderNode(n, level));
+                  const nodeState = state.projects.find(p => p.id === n.id);
+                  const expanded = nodeState?.isExpanded ?? true;
+                  if (n.children && n.children.length > 0 && expanded) {
+                    items.push(...renderTree(n.children, level + 1));
+                  }
+                }
+                return items;
+              };
 
               return (
                 <div key={person}>
@@ -171,13 +300,13 @@ export function GanttTimeline() {
                       </div>
                       <span className="text-sm font-semibold text-text-primary">{person}</span>
                       <span className="text-[10px] text-text-secondary bg-white px-1.5 py-0.5 rounded-full ml-auto">
-                        {personProjects.length}
+                        {personProjectList.length}
                       </span>
                     </div>
 
                     {/* Compact preview when collapsed */}
                     <div className="flex-1 relative h-8">
-                      {isCollapsed && personProjects.map((proj) => {
+                      {isCollapsed && personProjectList.map((proj) => {
                         const bar = getBarProps(proj);
                         if (!bar) return null;
                         return (
@@ -205,91 +334,8 @@ export function GanttTimeline() {
                     </div>
                   </div>
 
-                  {/* Expanded project rows */}
-                  {!isCollapsed && personProjects.map((proj) => {
-                    const bar = getBarProps(proj);
-                    if (!bar) return null;
-
-                    // Check if this project has dependencies to draw
-                    const dep = dependencies.find(d => d.from.id === proj.id);
-
-                    return (
-                      <div key={proj.id} className="flex border-b border-border hover:bg-bg-secondary/20 transition-colors group/bar">
-                        <div className="w-[200px] min-w-[200px] px-3 py-2 border-r border-border sticky left-0 z-10 bg-white group-hover/bar:bg-bg-secondary/20 transition-colors">
-                          <div className="text-xs text-text-primary truncate pl-8 font-medium" title={proj.name}>
-                            {proj.name}
-                          </div>
-                          <div className="text-[10px] text-text-secondary pl-8 flex items-center gap-1.5">
-                            <span>{proj.branch}</span>
-                            <span>·</span>
-                            <span className="tabular-nums">{proj.daysRequired}d</span>
-                          </div>
-                        </div>
-                        <div className="flex-1 relative h-12 flex items-center">
-                          {/* Bar */}
-                          <div
-                            className="absolute h-7 rounded-md flex items-center overflow-hidden transition-all group-hover/bar:shadow-sm cursor-pointer"
-                            style={{
-                              left: bar.left,
-                              width: bar.width,
-                              background: `linear-gradient(135deg, ${bar.color.bg}, ${bar.color.bg}dd)`,
-                              border: `1.5px solid ${bar.color.text}30`,
-                            }}
-                            onMouseEnter={(e) => handleBarHover(e, proj)}
-                            onMouseLeave={() => setTooltip(null)}
-                          >
-                            {/* Project name inside bar */}
-                            {bar.width > 40 && (
-                              <span
-                                className="text-[10px] font-semibold truncate px-1.5 whitespace-nowrap"
-                                style={{ color: bar.color.text }}
-                              >
-                                {proj.name}
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Dependency arrow */}
-                          {dep && (() => {
-                            const targetBar = getBarProps(dep.to);
-                            if (!targetBar) return null;
-                            const fromX = bar.left + bar.width;
-                            const toX = targetBar.left;
-                            if (toX <= fromX) return null;
-
-                            return (
-                              <svg
-                                className="absolute top-0 left-0 pointer-events-none"
-                                style={{ width: timelineWidth, height: 48 }}
-                              >
-                                <path
-                                  d={`M ${fromX} 24 C ${fromX + 20} 24, ${toX - 20} 24, ${toX} 24`}
-                                  fill="none"
-                                  stroke="#9F8FEF"
-                                  strokeWidth="1.5"
-                                  strokeDasharray="4 2"
-                                  opacity="0.6"
-                                />
-                                <polygon
-                                  points={`${toX - 5},20 ${toX},24 ${toX - 5},28`}
-                                  fill="#9F8FEF"
-                                  opacity="0.6"
-                                />
-                              </svg>
-                            );
-                          })()}
-
-                          {/* Today line */}
-                          {showTodayLine && (
-                            <div
-                              className="absolute top-0 bottom-0 w-0.5 bg-red-400/40"
-                              style={{ left: todayOffset * dayWidth }}
-                            />
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                  {/* Expanded hierarchical rows */}
+                  {!isCollapsed && renderTree(roots)}
                 </div>
               );
             })}

@@ -3,6 +3,7 @@ import type { AppState, AppAction, Project } from '@/lib/types';
 import { DEFAULT_STATE, DEFAULT_FILTERS } from '@/lib/constants';
 import { calculateDailyWorkload, applyFilters, getPersons, getBranches, getActiveProjects, computeProjectFields } from '@/lib/workloadEngine';
 import { getDateRange } from '@/lib/dateUtils';
+import { validateNoCircles, aggregateFromChildren } from '@/lib/hierarchyEngine';
 
 const MAX_HISTORY = 50;
 
@@ -14,20 +15,47 @@ interface HistoryState {
 
 // Check if action modifies project data (should be tracked in history)
 function isUndoableAction(action: AppAction): boolean {
-  return ['UPDATE_PROJECT', 'ADD_PROJECT', 'DELETE_PROJECT', 'REORDER_PROJECTS'].includes(action.type);
+  return ['UPDATE_PROJECT', 'ADD_PROJECT', 'DELETE_PROJECT', 'REORDER_PROJECTS', 'UPDATE_HIERARCHY', 'TOGGLE_EXPANSION'].includes(action.type);
 }
 
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'SET_PROJECTS':
-      return {
-        ...state,
-        projects: action.payload.projects,
-        projectOrder: action.payload.projects.map(p => p.id),
-        fileName: action.payload.fileName,
-        lastUpdated: new Date(),
-        hasUnsavedChanges: false,
-      };
+      // Recompute calculated fields with hierarchy awareness and set levels
+      {
+        const incoming = action.payload.projects || [];
+        const projects = incoming.map(p => ({ ...p }));
+
+        // Compute fields with knowledge of all projects
+        const computed = projects.map(p => computeProjectFields(p, state.config, projects));
+
+        // Calculate hierarchy levels and default isExpanded
+        // Try to restore persisted expansion map from localStorage
+        let persistedExpansion: Record<string, boolean> | null = null;
+        try {
+          const raw = localStorage.getItem('workload-dashboard-expanded');
+          if (raw) persistedExpansion = JSON.parse(raw);
+        } catch {
+          persistedExpansion = null;
+        }
+
+        const withLevels = computed.map(p => ({
+          ...p,
+          hierarchyLevel: p.parentId ? (p.hierarchyLevel ?? 0) : 0,
+          isExpanded: (persistedExpansion && typeof persistedExpansion[p.id] === 'boolean')
+            ? persistedExpansion[p.id]
+            : (typeof p.isExpanded === 'boolean' ? p.isExpanded : true),
+        }));
+
+        return {
+          ...state,
+          projects: withLevels,
+          projectOrder: incoming.map(p => p.id),
+          fileName: action.payload.fileName,
+          lastUpdated: new Date(),
+          hasUnsavedChanges: false,
+        };
+      }
     case 'SET_CONFIG':
       return { ...state, config: { ...state.config, ...action.payload } };
     case 'SET_FILTERS':
@@ -44,12 +72,25 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, config: { ...state.config, loadMode: action.payload } };
     case 'UPDATE_PROJECT': {
       const { id, updates } = action.payload;
-      const projects = state.projects.map(p => {
+      let projects = state.projects.map(p => {
         if (p.id !== id) return p;
         const merged = { ...p, ...updates };
-        // Recompute calculated fields
-        return computeProjectFields(merged, state.config);
+        // Recompute calculated fields with hierarchy awareness
+        return computeProjectFields(merged, state.config, state.projects);
       });
+      
+      // If a parent's children changed, re-aggregate the parent
+      const updated = projects.find(p => p.id === id);
+      if (updated?.parentId) {
+        const parentIndex = projects.findIndex(p => p.id === updated.parentId);
+        if (parentIndex !== -1) {
+          projects = projects.map((p, idx) => {
+            if (idx !== parentIndex) return p;
+            return computeProjectFields(p, state.config, projects);
+          });
+        }
+      }
+      
       return { ...state, projects, hasUnsavedChanges: true };
     }
     case 'ADD_PROJECT': {
@@ -64,6 +105,42 @@ function appReducer(state: AppState, action: AppAction): AppState {
     }
     case 'REORDER_PROJECTS': {
       return { ...state, projectOrder: action.payload, hasUnsavedChanges: true };
+    }
+    case 'UPDATE_HIERARCHY': {
+      const { projectId, newParentId } = action.payload;
+      
+      // Validate no circular dependency
+      if (!validateNoCircles(projectId, newParentId, state.projects)) {
+        console.warn('Cannot move project: would create circular dependency');
+        return state;
+      }
+
+      const projects = state.projects.map(p => {
+        if (p.id !== projectId) return p;
+        return { ...p, parentId: newParentId };
+      });
+
+      // Re-aggregate parent if it exists
+      if (newParentId) {
+        const parentIndex = projects.findIndex(p => p.id === newParentId);
+        if (parentIndex !== -1) {
+          const aggregated = aggregateFromChildren(newParentId, projects, state.config);
+          projects[parentIndex] = computeProjectFields(
+            { ...projects[parentIndex], ...aggregated },
+            state.config
+          );
+        }
+      }
+
+      return { ...state, projects, hasUnsavedChanges: true };
+    }
+    case 'TOGGLE_EXPANSION': {
+      const projectId = action.payload;
+      const projects = state.projects.map(p => {
+        if (p.id !== projectId) return p;
+        return { ...p, isExpanded: !p.isExpanded };
+      });
+      return { ...state, projects, hasUnsavedChanges: true };
     }
     case 'MARK_SAVED':
       return { ...state, hasUnsavedChanges: false };
@@ -199,6 +276,19 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state.activeView, state.granularity, state.sidebarCollapsed, state.filters, state.config]);
 
+  // Persist expand/collapse map separately so it survives reloads and imports
+  useEffect(() => {
+    try {
+      const map: Record<string, boolean> = {};
+      state.projects.forEach(p => {
+        if (p.id) map[p.id] = !!p.isExpanded;
+      });
+      localStorage.setItem('workload-dashboard-expanded', JSON.stringify(map));
+    } catch {
+      // ignore
+    }
+  }, [state.projects]);
+
   // Keyboard shortcuts for undo/redo
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -220,8 +310,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   }, [canUndo, canRedo]);
 
   const filteredProjects = useMemo(
-    () => applyFilters(state.projects, state.filters),
-    [state.projects, state.filters]
+    () => applyFilters(state.projects, state.filters, state.config),
+    [state.projects, state.filters, state.config]
   );
 
   // Order filtered projects by projectOrder

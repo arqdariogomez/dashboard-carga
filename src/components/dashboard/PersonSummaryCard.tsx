@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { getPersons, getPersonSummary } from '@/lib/workloadEngine';
+import { buildHierarchy, isParent, aggregateFromChildren } from '@/lib/hierarchyEngine';
 import { LoadBubble } from '@/components/shared/LoadBubble';
 import { PERSON_COLORS, getLoadColor } from '@/lib/constants';
 import { formatDateShort, format } from '@/lib/dateUtils';
@@ -62,6 +63,25 @@ export function PersonSummaryCards() {
           const personProjects = filteredProjects
             .filter(p => p.assignees.includes(summary.person) && p.startDate && p.endDate)
             .sort((a, b) => (a.startDate!.getTime() - b.startDate!.getTime()));
+
+          // Build hierarchical roots and flatten respecting `isExpanded` state
+          const roots = buildHierarchy(personProjects);
+          const flattened: any[] = [];
+          const traverse = (node: any, level = 0) => {
+            // If node is a parent in the currently visible set, aggregate visible children
+            let merged = node as any;
+            if (isParent(node.id, personProjects)) {
+              const aggregated = aggregateFromChildren(node.id, personProjects, state.config);
+              merged = { ...node, ...aggregated };
+            }
+            flattened.push({ node: merged, level });
+            const nodeState = state.projects.find(p => p.id === node.id);
+            const expanded = nodeState?.isExpanded ?? true;
+            if (node.children && node.children.length > 0 && expanded) {
+              node.children.forEach((c: any) => traverse(c, level + 1));
+            }
+          };
+          roots.forEach(r => traverse(r, 0));
 
           return (
             <div
@@ -180,8 +200,9 @@ export function PersonSummaryCards() {
                     Proyectos asignados
                   </div>
                   <div className="space-y-2">
-                    {personProjects.slice(0, 5).map((p) => {
-                      const loadColor = getLoadColor(p.dailyLoad);
+                    {flattened.slice(0, 5).map(({ node, level }, i) => {
+                      const p = node as any;
+                      const loadColor = getLoadColor(p.dailyLoad || 0);
                       const now = new Date();
                       let progress = 0;
                       if (p.startDate && p.endDate) {
@@ -191,14 +212,14 @@ export function PersonSummaryCards() {
                       }
 
                       return (
-                        <div key={p.id} className="group/proj">
+                        <div key={p.id || `flat-${i}`} className="group/proj">
                           <div className="flex items-center justify-between gap-2 mb-1">
-                            <span className="text-xs text-text-primary truncate flex-1 font-medium">{p.name}</span>
+                            <span className="text-xs text-text-primary truncate flex-1 font-medium" style={{ paddingLeft: level * 10 }}>{p.name}</span>
                             <span
                               className="text-[10px] font-bold tabular-nums px-1.5 py-0.5 rounded"
                               style={{ backgroundColor: loadColor.bg, color: loadColor.text }}
                             >
-                              {Math.round(p.dailyLoad * 100)}%
+                              {Math.round((p.dailyLoad || 0) * 100)}%
                             </span>
                           </div>
 
