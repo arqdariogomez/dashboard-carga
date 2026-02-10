@@ -149,7 +149,7 @@ export function GanttTimeline() {
             {/* Person groups */}
             {persons.map((person, personIdx) => {
               const personProjects = activeProjects
-                .filter((p) => p.assignee === person)
+                .filter((p) => p.assignees.includes(person))
                 .sort((a, b) => (a.startDate!.getTime() - b.startDate!.getTime()));
               const isCollapsed = collapsedPersons.has(person);
               const personColor = PERSON_COLORS[personIdx % PERSON_COLORS.length];

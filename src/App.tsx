@@ -50,8 +50,10 @@ function DashboardContent() {
           if (!existingIds.has(p.name)) return false;
           const existing = state.projects.find(ep => ep.name === p.name);
           if (!existing) return false;
+          const sameAssignees = existing.assignees.length === p.assignees.length &&
+            existing.assignees.every((a, i) => a === p.assignees[i]);
           return existing.daysRequired !== p.daysRequired ||
-            existing.assignee !== p.assignee ||
+            !sameAssignees ||
             (existing.startDate?.getTime() || 0) !== (p.startDate?.getTime() || 0) ||
             (existing.endDate?.getTime() || 0) !== (p.endDate?.getTime() || 0);
         }).length;

@@ -1,10 +1,11 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { getPersons } from '@/lib/workloadEngine';
 import { PERSON_COLORS } from '@/lib/constants';
-import { format, isToday } from 'date-fns';
+import { format, isToday, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { LineChart as LineChartIcon } from 'lucide-react';
+import { LineChart as LineChartIcon, ZoomIn, ZoomOut } from 'lucide-react';
+import { DateRangeSlider } from '@/components/shared/DateRangeSlider';
 import {
   Line,
   XAxis,
@@ -20,6 +21,8 @@ import {
 
 export function WorkloadLineChart() {
   const { state, filteredProjects, workloadData, dateRange } = useProject();
+  const [showDateSlider, setShowDateSlider] = useState(false);
+  const [customRange, setCustomRange] = useState<{ start: Date; end: Date } | null>(null);
 
   const persons = useMemo(() => {
     const ps = getPersons(filteredProjects);
@@ -43,14 +46,23 @@ export function WorkloadLineChart() {
       });
     });
 
-    return Array.from(dateMap.entries())
+    let data = Array.from(dateMap.entries())
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([key, data]) => ({
         date: key,
         label: format(new Date(key), 'dd MMM', { locale: es }),
         ...data,
       }));
-  }, [persons, workloadData, dateRange]);
+
+    // Filter by custom range if set
+    if (customRange) {
+      const startStr = format(customRange.start, 'yyyy-MM-dd');
+      const endStr = format(customRange.end, 'yyyy-MM-dd');
+      data = data.filter(d => d.date >= startStr && d.date <= endStr);
+    }
+
+    return data;
+  }, [persons, workloadData, dateRange, customRange]);
 
   // Find today's label for reference line
   const todayLabel = useMemo(() => {
@@ -71,7 +83,67 @@ export function WorkloadLineChart() {
   }
 
   return (
-    <div className="p-4 flex-1">
+    <div className="p-4 flex-1 flex flex-col gap-4">
+      {/* Controls */}
+      <div className="flex items-center justify-between bg-white rounded-lg border border-border px-4 py-2">
+        <label className="text-xs font-medium text-text-secondary">Herramientas de visualización</label>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              if (!customRange || !dateRange) return;
+              const newStart = addDays(customRange.start, -7);
+              const newEnd = addDays(customRange.end, 7);
+              setCustomRange({
+                start: newStart < dateRange.start ? dateRange.start : newStart,
+                end: newEnd > dateRange.end ? dateRange.end : newEnd,
+              });
+            }}
+            className="p-1.5 rounded hover:bg-bg-secondary text-text-secondary hover:text-text-primary transition-colors"
+            title="Zoom out"
+          >
+            <ZoomOut size={16} />
+          </button>
+          <button
+            onClick={() => {
+              if (!customRange) return;
+              const days = Math.ceil((customRange.end.getTime() - customRange.start.getTime()) / (1000 * 60 * 60 * 24));
+              if (days <= 7) return; // No zoom in más de lo mínimo
+              const reduction = Math.ceil(days / 4);
+              setCustomRange({
+                start: addDays(customRange.start, reduction),
+                end: addDays(customRange.end, -reduction),
+              });
+            }}
+            className="p-1.5 rounded hover:bg-bg-secondary text-text-secondary hover:text-text-primary transition-colors"
+            title="Zoom in"
+          >
+            <ZoomIn size={16} />
+          </button>
+          <button
+            onClick={() => setShowDateSlider(!showDateSlider)}
+            className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
+              showDateSlider
+                ? 'bg-accent-blue text-white'
+                : 'hover:bg-bg-secondary text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            📅 Rango
+          </button>
+        </div>
+      </div>
+
+      {/* Date range slider */}
+      {showDateSlider && dateRange && (
+        <DateRangeSlider
+          min={dateRange.start}
+          max={dateRange.end}
+          value={customRange || dateRange}
+          onChange={setCustomRange}
+          label="Rango del gráfico"
+        />
+      )}
+
+      {/* Chart */}
       <div className="bg-white rounded-xl border border-border p-5 h-[500px]">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>

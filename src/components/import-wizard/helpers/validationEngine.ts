@@ -116,7 +116,7 @@ export function validateImportData(projects: RawProject[]): ValidationResult {
     }
 
     // 4. Missing dates warning (when assignee exists)
-    if (proj.assignee && (!proj.startDate || !proj.endDate) && proj.type !== 'En radar') {
+    if (proj.assignees.length > 0 && (!proj.startDate || !proj.endDate) && proj.type !== 'En radar') {
       issues.push({
         rowIndex: row,
         field: 'startDate',
@@ -127,7 +127,7 @@ export function validateImportData(projects: RawProject[]): ValidationResult {
     }
 
     // 5. Missing assignee warning (when dates exist)
-    if (proj.startDate && proj.endDate && !proj.assignee && proj.type !== 'En radar') {
+    if (proj.startDate && proj.endDate && proj.assignees.length === 0 && proj.type !== 'En radar') {
       issues.push({
         rowIndex: row,
         field: 'assignee',
@@ -157,9 +157,7 @@ export function validateImportData(projects: RawProject[]): ValidationResult {
     }
 
     // Collect assignees
-    if (proj.assignee) {
-      allAssignees.push(String(proj.assignee).trim());
-    }
+    proj.assignees.forEach(a => allAssignees.push(a.trim()));
   }
 
   // 7. Check for broken dependencies

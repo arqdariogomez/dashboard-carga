@@ -24,13 +24,15 @@ export function computeProjectFields(project: Omit<Project, 'assignedDays' | 'ba
 }
 
 export function getActiveProjects(projects: Project[]): Project[] {
-  return projects.filter((p) => p.startDate && p.endDate && p.assignee);
+  return projects.filter((p) => p.startDate && p.endDate && p.assignees.length > 0);
 }
 
 export function getPersons(projects: Project[]): string[] {
   const persons = new Set<string>();
   projects.forEach((p) => {
-    if (p.assignee) persons.add(p.assignee);
+    p.assignees.forEach((assignee) => {
+      persons.add(assignee);
+    });
   });
   return Array.from(persons).sort();
 }
@@ -45,8 +47,10 @@ export function getBranches(projects: Project[]): string[] {
 
 export function applyFilters(projects: Project[], filters: FilterState): Project[] {
   return projects.filter((p) => {
-    if (filters.persons.length > 0 && p.assignee && !filters.persons.includes(p.assignee)) return false;
-    if (filters.persons.length > 0 && !p.assignee) return false;
+    if (filters.persons.length > 0) {
+      const hasMatchingPerson = p.assignees.some(assignee => filters.persons.includes(assignee));
+      if (!hasMatchingPerson) return false;
+    }
     if (filters.branches.length > 0 && !filters.branches.includes(p.branch)) return false;
     if (filters.types.length > 0 && !filters.types.includes(p.type)) return false;
     if (filters.showOnlyActive && p.type === 'En radar') return false;
@@ -69,7 +73,7 @@ export function calculateDailyWorkload(
   const workingDays = getWorkingDays(dateRange.start, dateRange.end, config);
 
   for (const person of persons) {
-    const personProjects = activeProjects.filter((p) => p.assignee === person);
+    const personProjects = activeProjects.filter((p) => p.assignees.includes(person));
     const workloads: PersonWorkload[] = [];
 
     for (const day of workingDays) {
@@ -78,14 +82,15 @@ export function calculateDailyWorkload(
 
       for (const proj of personProjects) {
         if (proj.startDate && proj.endDate && day >= proj.startDate && day <= proj.endDate) {
-          const load = proj.dailyLoad;
-          if (load > 0) {
+          // Distribute load among all assignees
+          const loadPerAssignee = proj.dailyLoad / proj.assignees.length;
+          if (loadPerAssignee > 0) {
             projectLoads.push({
               projectId: proj.id,
               projectName: proj.name,
-              dailyLoad: load,
+              dailyLoad: loadPerAssignee,
             });
-            totalLoad += load;
+            totalLoad += loadPerAssignee;
           }
         }
       }
@@ -155,7 +160,7 @@ export function getPersonSummary(
   workloads: PersonWorkload[],
   _config: AppConfig
 ) {
-  const personProjects = projects.filter((p) => p.assignee === person);
+  const personProjects = projects.filter((p) => p.assignees.includes(person));
   const activeProjects = personProjects.filter((p) => p.startDate && p.endDate);
   const today = new Date();
 

@@ -2,6 +2,7 @@ import { useMemo, useState, useCallback } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { LoadBubble } from '@/components/shared/LoadBubble';
 import { Toggle } from '@/components/shared/Toggle';
+import { DateRangeSlider } from '@/components/shared/DateRangeSlider';
 import { aggregateByPeriod, getPersons } from '@/lib/workloadEngine';
 import { format, isSameDay, addMonths, addWeeks, addDays, startOfMonth, startOfWeek, isToday, eachDayOfInterval, getDay } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -22,6 +23,8 @@ export function WorkloadGrid() {
   const { state, dispatch, filteredProjects, workloadData, dateRange } = useProject();
   const [viewStart, setViewStart] = useState<Date | null>(null);
   const [detailPanel, setDetailPanel] = useState<DetailPanel | null>(null);
+  const [showDateSlider, setShowDateSlider] = useState(false);
+  const [customRange, setCustomRange] = useState<{ start: Date; end: Date } | null>(null);
 
   const persons = useMemo(() => {
     const ps = getPersons(filteredProjects);
@@ -258,12 +261,42 @@ export function WorkloadGrid() {
                 <ChevronRight size={16} />
               </button>
             </div>
+
+            {/* Date range slider toggle */}
+            <button
+              onClick={() => setShowDateSlider(!showDateSlider)}
+              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+                showDateSlider
+                  ? 'bg-accent-blue text-white'
+                  : 'hover:bg-bg-secondary text-text-secondary hover:text-text-primary'
+              }`}
+              title="Mostrar/ocultar selector de rango de fechas"
+            >
+              <Calendar size={14} className="inline mr-1" />
+              Fechas
+            </button>
           </div>
 
           <div className="text-xs font-medium text-text-secondary capitalize">
             {rangeLabel}
           </div>
         </div>
+
+        {/* Date Range Slider */}
+        {showDateSlider && dateRange && (
+          <div className="px-4 py-3 bg-white border-b border-border flex-shrink-0">
+            <DateRangeSlider
+              min={dateRange.start}
+              max={dateRange.end}
+              value={customRange || dateRange}
+              onChange={(range) => {
+                setCustomRange(range);
+                setViewStart(range.start);
+              }}
+              label="Rango de visualización"
+            />
+          </div>
+        )}
 
         {/* Grid */}
         <div className="flex-1 overflow-auto">
@@ -317,7 +350,7 @@ export function WorkloadGrid() {
                     ? personData.reduce((sum, d) => sum + d.avgLoad, 0) / personData.length
                     : 0;
                   const activeCount = filteredProjects.filter(
-                    (p) => p.assignee === person && p.startDate && p.endDate
+                    (p) => p.assignees.includes(person) && p.startDate && p.endDate
                   ).length;
                   const personColor = PERSON_COLORS[personIdx % PERSON_COLORS.length];
 

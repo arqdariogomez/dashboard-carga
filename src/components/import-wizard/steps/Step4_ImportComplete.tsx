@@ -9,7 +9,7 @@ interface Step4Props {
 
 export function Step4_ImportComplete({ projects, fileName, onFinish }: Step4Props) {
   // Calculate stats
-  const persons = [...new Set(projects.filter(p => p.assignee).map(p => p.assignee!))];
+  const persons = [...new Set(projects.flatMap(p => p.assignees))];
   const activeDates = projects.filter(p => p.startDate && p.endDate);
   
   let minDate: Date | null = null;

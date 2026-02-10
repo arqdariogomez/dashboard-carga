@@ -4,7 +4,7 @@ export interface Project {
   branch: string;
   startDate: Date | null;
   endDate: Date | null;
-  assignee: string | null;
+  assignees: string[];
   daysRequired: number;
   priority: number;
   type: 'Proyecto' | 'Lanzamiento' | 'En radar';

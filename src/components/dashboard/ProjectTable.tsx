@@ -3,6 +3,7 @@ import { useProject } from '@/context/ProjectContext';
 import { LoadBubble } from '@/components/shared/LoadBubble';
 import { formatDateShort } from '@/lib/dateUtils';
 import { computeProjectFields } from '@/lib/workloadEngine';
+import { parseAssignees } from '@/lib/assigneeHelpers';
 import { exportToExcel, copyAsCSV } from '@/lib/exportUtils';
 import {
   ArrowUpDown, Search, ChevronDown, ChevronRight, Plus, Trash2,
@@ -225,6 +226,49 @@ function EditableSelectCell({
   );
 }
 
+function EditableAssigneesCell({
+  value,
+  onChange,
+}: {
+  value: string[];
+  onChange: (v: string[]) => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [tempVal, setTempVal] = useState(value.join(' / '));
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => { if (editing) inputRef.current?.focus(); }, [editing]);
+  useEffect(() => { setTempVal(value.join(' / ')); }, [value]);
+
+  if (!editing) {
+    return (
+      <span
+        className="cursor-pointer hover:bg-accent-blue/20 rounded px-1 py-0.5 transition-colors"
+        onClick={() => setEditing(true)}
+        title="Clic para editar"
+      >
+        {value.length > 0 ? value.join(' / ') : <span className="text-text-secondary/50 italic">—</span>}
+      </span>
+    );
+  }
+
+  return (
+    <input
+      ref={inputRef}
+      type="text"
+      value={tempVal}
+      onChange={(e) => setTempVal(e.target.value)}
+      onBlur={() => { setEditing(false); onChange(parseAssignees(tempVal)); }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { setEditing(false); onChange(parseAssignees(tempVal)); }
+        if (e.key === 'Escape') setEditing(false);
+      }}
+      placeholder="Ej: Eddy / Darío"
+      className="w-[150px] px-1 py-0.5 border border-person-1/40 rounded text-xs focus:outline-none focus:ring-2 focus:ring-person-1/30 bg-white"
+    />
+  );
+}
+
 function StarRating({ value, onChange }: { value: number; onChange: (v: number) => void }) {
   const [hover, setHover] = useState(0);
 
@@ -254,14 +298,12 @@ function SortableRow({
   project,
   onUpdate,
   onDelete,
-  allPersons,
   allBranches,
   bgClass,
 }: {
   project: Project;
   onUpdate: (id: string, updates: Partial<Project>) => void;
   onDelete: (id: string) => void;
-  allPersons: string[];
   allBranches: string[];
   bgClass?: string;
 }) {
@@ -345,11 +387,9 @@ function SortableRow({
 
       {/* Assignee */}
       <td className="px-3 py-2 border-b border-border text-xs min-w-[100px]">
-        <EditableSelectCell
-          value={project.assignee || ''}
-          onChange={(v) => onUpdate(project.id, { assignee: v || null })}
-          options={allPersons}
-          placeholder="Persona"
+        <EditableAssigneesCell
+          value={project.assignees}
+          onChange={(v) => onUpdate(project.id, { assignees: v })}
         />
       </td>
 
@@ -434,7 +474,7 @@ function SortableRow({
 // ─── Main ProjectTable ─────────────────────────────────────────────
 
 export function ProjectTable() {
-  const { state, dispatch, orderedFilteredProjects, allPersons, allBranches } = useProject();
+  const { state, dispatch, orderedFilteredProjects, allBranches } = useProject();
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [search, setSearch] = useState('');
@@ -471,7 +511,7 @@ export function ProjectTable() {
       branch: '',
       startDate: null,
       endDate: null,
-      assignee: null,
+      assignees: [],
       daysRequired: 0,
       priority: 1,
       type: 'Proyecto',
@@ -512,13 +552,6 @@ export function ProjectTable() {
 
     dispatch({ type: 'REORDER_PROJECTS', payload: currentOrder });
   }, [state.projectOrder, state.projects, dispatch]);
-
-  // Collect unique persons including from typed values
-  const personOptions = useMemo(() => {
-    const set = new Set(allPersons);
-    state.projects.forEach(p => { if (p.assignee) set.add(p.assignee); });
-    return Array.from(set).sort();
-  }, [allPersons, state.projects]);
 
   const branchOptions = useMemo(() => {
     const set = new Set(allBranches);
@@ -630,7 +663,7 @@ export function ProjectTable() {
                 <SortHeader label="Sucursal" field="branch" />
                 <SortHeader label="Inicio" field="startDate" />
                 <SortHeader label="Fin" field="endDate" />
-                <SortHeader label="Asignado" field="assignee" />
+                <SortHeader label="Asignado" field="assignees" />
                 <SortHeader label="Días req." field="daysRequired" />
                 <SortHeader label="Prior." field="priority" />
                 <SortHeader label="Tipo" field="type" />
@@ -648,7 +681,6 @@ export function ProjectTable() {
                     project={p}
                     onUpdate={handleUpdate}
                     onDelete={handleDelete}
-                    allPersons={personOptions}
                     allBranches={branchOptions}
                   />
                 ))}
@@ -676,7 +708,6 @@ export function ProjectTable() {
                           project={p}
                           onUpdate={handleUpdate}
                           onDelete={handleDelete}
-                          allPersons={personOptions}
                           allBranches={branchOptions}
                           bgClass="bg-accent-yellow/5"
                         />
@@ -708,7 +739,6 @@ export function ProjectTable() {
                           project={p}
                           onUpdate={handleUpdate}
                           onDelete={handleDelete}
-                          allPersons={personOptions}
                           allBranches={branchOptions}
                           bgClass="opacity-60"
                         />

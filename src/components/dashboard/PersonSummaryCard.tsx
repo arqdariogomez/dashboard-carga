@@ -60,7 +60,7 @@ export function PersonSummaryCards() {
 
           // Person's projects with their load
           const personProjects = filteredProjects
-            .filter(p => p.assignee === summary.person && p.startDate && p.endDate)
+            .filter(p => p.assignees.includes(summary.person) && p.startDate && p.endDate)
             .sort((a, b) => (a.startDate!.getTime() - b.startDate!.getTime()));
 
           return (

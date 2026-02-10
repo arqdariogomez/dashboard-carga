@@ -5,6 +5,7 @@
 import * as XLSX from 'xlsx';
 import type { Project, AppConfig } from '@/lib/types';
 import { computeProjectFields } from '@/lib/workloadEngine';
+import { parseAssignees } from '@/lib/assigneeHelpers';
 import type { ColumnMapping } from './columnDetector';
 
 function parseExcelDate(value: unknown): Date | null {
@@ -125,7 +126,7 @@ export function transformToProjects(
       branch: getVal(row, 'branch') ? String(getVal(row, 'branch')).trim() : '',
       startDate: parseExcelDate(getVal(row, 'startDate')),
       endDate: parseExcelDate(getVal(row, 'endDate')),
-      assignee: getVal(row, 'assignee') ? String(getVal(row, 'assignee')).trim() : null,
+      assignees: parseAssignees(getVal(row, 'assignee') ? String(getVal(row, 'assignee')) : null),
       daysRequired: Number(getVal(row, 'daysRequired')) || 0,
       priority: parsePriority(getVal(row, 'priority')),
       type: parseType(getVal(row, 'type')),
