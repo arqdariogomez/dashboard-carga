@@ -1,5 +1,6 @@
-import { useMemo, useState, useCallback, useRef, useEffect, type MouseEvent as ReactMouseEvent } from 'react';
+﻿import { useMemo, useState, useCallback, useRef, useEffect, type MouseEvent as ReactMouseEvent } from 'react';
 import { useProject } from '@/context/ProjectContext';
+import { useAuth } from '@/context/AuthContext';
 import { LoadBubble } from '@/components/shared/LoadBubble';
 import { formatDateShort, format } from '@/lib/dateUtils';
 import { computeProjectFields } from '@/lib/workloadEngine';
@@ -9,9 +10,19 @@ import { ExpandableCell, useHierarchyDisplay } from '@/components/dashboard/Expa
 import { validateNoCircles, getCollapsedMetricsSummary, getAncestors, getDescendants } from '@/lib/hierarchyEngine';
 import {
   ArrowUpDown, Search, ChevronDown, ChevronRight, Plus, Trash2,
-  Download, ClipboardCopy, Check, GripVertical, AlertTriangle, X, ArrowRight, ArrowLeft, Rows3,
+  Download, ClipboardCopy, Check, GripVertical, AlertTriangle,
 } from 'lucide-react';
 import type { Project } from '@/lib/types';
+import type { DynamicColumn, DynamicCellValue } from '@/lib/types';
+import {
+  listBoardColumns,
+  listTaskColumnValues,
+  createBoardColumn,
+  updateBoardColumn,
+  deleteBoardColumn,
+  upsertTaskColumnValue,
+  deleteTaskColumnValue,
+} from '@/lib/dynamicColumnsRepository';
 import {
   DndContext,
   closestCenter,
@@ -48,7 +59,7 @@ type ColumnKey =
   | 'balance'
   | 'actions';
 
-// ─── Inline Editable Cell Components ──────────────────────────────
+// â”€â”€â”€ Inline Editable Cell Components â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function EditableTextCell({
   value,
@@ -75,7 +86,7 @@ function EditableTextCell({
         onClick={() => setEditing(true)}
         title="Clic para editar"
       >
-        {value || <span className="text-text-secondary/50 italic">{placeholder || '—'}</span>}
+        {value || <span className="text-text-secondary/50 italic">{placeholder || 'â€”'}</span>}
       </span>
     );
   }
@@ -124,7 +135,7 @@ function EditableDateCell({
         onClick={() => setEditing(true)}
         title="Clic para editar"
       >
-        {value ? formatDateShort(value) : <span className="text-text-secondary/50 italic">—</span>}
+        {value ? formatDateShort(value) : <span className="text-text-secondary/50 italic">â€”</span>}
         {hasError && <AlertTriangle size={10} className="inline ml-1 text-[#B71C1C]" />}
       </span>
     );
@@ -223,7 +234,7 @@ function EditableSelectCell({
         onClick={() => setEditing(true)}
         title="Clic para editar"
       >
-        {value || <span className="text-text-secondary/50 italic">{placeholder || '—'}</span>}
+        {value || <span className="text-text-secondary/50 italic">{placeholder || 'â€”'}</span>}
       </span>
     );
   }
@@ -236,7 +247,7 @@ function EditableSelectCell({
       autoFocus
       className="px-1 py-0.5 border border-person-1/40 rounded text-xs focus:outline-none focus:ring-2 focus:ring-person-1/30 bg-white"
     >
-      <option value="">{placeholder || '— Ninguno —'}</option>
+      <option value="">{placeholder || 'â€” Ninguno â€”'}</option>
       {options.map((o) => (
         <option key={o} value={o}>{o}</option>
       ))}
@@ -265,7 +276,7 @@ function EditableAssigneesCell({
         onClick={() => setEditing(true)}
         title="Clic para editar"
       >
-        {value.length > 0 ? value.join(' / ') : <span className="text-text-secondary/50 italic">—</span>}
+        {value.length > 0 ? value.join(' / ') : <span className="text-text-secondary/50 italic">â€”</span>}
       </span>
     );
   }
@@ -281,7 +292,7 @@ function EditableAssigneesCell({
         if (e.key === 'Enter') { setEditing(false); onChange(parseAssignees(tempVal)); }
         if (e.key === 'Escape') setEditing(false);
       }}
-      placeholder="Ej: Eddy / Darío"
+      placeholder="Ej: Eddy / DarÃ­o"
       className="w-[150px] px-1 py-0.5 border border-person-1/40 rounded text-xs focus:outline-none focus:ring-2 focus:ring-person-1/30 bg-white"
     />
   );
@@ -303,14 +314,14 @@ function StarRating({ value, onChange }: { value: number; onChange: (v: number) 
           onClick={() => onChange(star)}
           aria-label={`${star} estrellas`}
         >
-          ★
+          â˜…
         </button>
       ))}
     </div>
   );
 }
 
-// ─── Sortable Row ──────────────────────────────────────────────────
+// â”€â”€â”€ Sortable Row â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function SortableRow({
   project,
@@ -333,6 +344,14 @@ function SortableRow({
   isDropTarget,
   dropPlacement,
   rowRef,
+  onAddAbove,
+  onAddBelow,
+  onDuplicateRow,
+  onMoveToParent,
+  dynamicColumns,
+  dynamicValues,
+  onUpdateDynamicCell,
+  remoteEditingLabel,
 }: {
   project: Project;
   onUpdate: (id: string, updates: Partial<Project>) => void;
@@ -354,10 +373,22 @@ function SortableRow({
   isDropTarget: boolean;
   dropPlacement: DropPlacement | null;
   rowRef?: (node: HTMLTableRowElement | null) => void;
+  onAddAbove: (id: string) => void;
+  onAddBelow: (id: string) => void;
+  onDuplicateRow: (id: string) => void;
+  onMoveToParent: (id: string, parentId: string | null) => void;
+  dynamicColumns: DynamicColumn[];
+  dynamicValues?: Record<string, DynamicCellValue>;
+  onUpdateDynamicCell: (taskId: string, columnId: string, value: DynamicCellValue) => void;
+  remoteEditingLabel?: string;
 }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState(project.name);
+  const [rowMenuOpen, setRowMenuOpen] = useState(false);
+  const [moveToOpen, setMoveToOpen] = useState(false);
+  const [moveToQuery, setMoveToQuery] = useState('');
+  const rowMenuRef = useRef<HTMLDivElement | null>(null);
   
   const {
     attributes,
@@ -383,10 +414,36 @@ function SortableRow({
   // Compute collapsed summary if parent is collapsed and has children
   const isCollapsed = hasChildren && !(project.isExpanded ?? true);
   const collapsedSummary = isCollapsed ? getCollapsedMetricsSummary(project.id, allProjects) : null;
+  const disallowedParentIds = useMemo(
+    () => new Set([project.id, ...getDescendants(project.id, allProjects).map((d) => d.id)]),
+    [project.id, allProjects]
+  );
+  const parentOptions = useMemo(
+    () => allProjects.filter((p) => !disallowedParentIds.has(p.id)),
+    [allProjects, disallowedParentIds]
+  );
+  const filteredParentOptions = useMemo(() => {
+    const q = moveToQuery.trim().toLowerCase();
+    if (!q) return parentOptions;
+    return parentOptions.filter((p) => (p.name || '').toLowerCase().includes(q));
+  }, [parentOptions, moveToQuery]);
 
   useEffect(() => {
     setEditNameValue(project.name);
   }, [project.name]);
+
+  useEffect(() => {
+    if (!rowMenuOpen) return;
+    const onDocClick = (e: MouseEvent) => {
+      if (rowMenuRef.current && !rowMenuRef.current.contains(e.target as Node)) {
+        setRowMenuOpen(false);
+        setMoveToOpen(false);
+        setMoveToQuery('');
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [rowMenuOpen]);
 
   return (
     <tr
@@ -428,46 +485,116 @@ function SortableRow({
             aria-label="Seleccionar fila"
           />
         ) : (
-          <button
-            {...attributes}
-            {...listeners}
-            onClick={(e) => e.stopPropagation()}
-            className={`cursor-grab active:cursor-grabbing transition-all p-0.5 rounded hover:bg-accent-blue/10 ${
-              isDragging || isSelected
-                ? 'text-accent-blue opacity-100'
-                : 'text-text-secondary/30 opacity-0 group-hover:text-text-secondary group-hover/handle:opacity-100'
-            }`}
-            aria-label="Reordenar"
-            title="Arrastra para reordenar y cambiar jerarquía"
-          >
-            <GripVertical size={16} />
-          </button>
+          <div className="relative" ref={rowMenuRef}>
+            <button
+              {...attributes}
+              {...listeners}
+              onClick={(e) => {
+                e.stopPropagation();
+                setRowMenuOpen((v) => !v);
+              }}
+              className={`cursor-grab active:cursor-grabbing transition-all p-0.5 rounded hover:bg-accent-blue/10 ${
+                isDragging || isSelected
+                  ? 'text-accent-blue opacity-100'
+                  : 'text-text-secondary/30 opacity-0 group-hover:text-text-secondary group-hover/handle:opacity-100'
+              }`}
+              aria-label="Opciones de fila"
+              title="Arrastra para mover o haz clic para acciones"
+            >
+              <GripVertical size={16} />
+            </button>
+            {rowMenuOpen && (
+              <div
+                onClick={(e) => e.stopPropagation()}
+                className="absolute left-6 top-0 z-[170] min-w-[220px] rounded-lg border border-border bg-white shadow-lg p-1"
+              >
+                <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={() => { onAddAbove(project.id); setRowMenuOpen(false); }}>Agregar fila arriba</button>
+                <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={() => { onAddBelow(project.id); setRowMenuOpen(false); }}>Agregar fila debajo</button>
+                <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={() => { onDuplicateRow(project.id); setRowMenuOpen(false); }}>Duplicar fila</button>
+                <div className="relative">
+                  <button
+                    className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary"
+                    onClick={() => {
+                      setMoveToOpen((v) => !v);
+                      setMoveToQuery('');
+                    }}
+                  >
+                    Mover a...
+                  </button>
+                  {moveToOpen && (
+                    <div className="absolute left-[calc(100%+4px)] top-0 z-[180] min-w-[230px] max-h-56 overflow-auto rounded-lg border border-border bg-white shadow-lg p-1">
+                      <input
+                        value={moveToQuery}
+                        onChange={(e) => setMoveToQuery(e.target.value)}
+                        placeholder="Buscar destino..."
+                        className="w-full h-7 rounded-md border border-border px-2 text-[11px] outline-none focus:ring-2 focus:ring-blue-100 mb-1"
+                      />
+                      <button
+                        className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary"
+                        onClick={() => { onMoveToParent(project.id, null); setMoveToOpen(false); setRowMenuOpen(false); setMoveToQuery(''); }}
+                      >
+                        Sin padre
+                      </button>
+                      <div className="my-1 border-t border-border" />
+                      {filteredParentOptions.map((option) => (
+                        <button
+                          key={option.id}
+                          className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary truncate"
+                          style={{ paddingLeft: `${10 + ((option.hierarchyLevel || 0) * 14)}px` }}
+                          onClick={() => { onMoveToParent(project.id, option.id); setMoveToOpen(false); setRowMenuOpen(false); setMoveToQuery(''); }}
+                        >
+                          {option.name || 'Sin nombre'}
+                        </button>
+                      ))}
+                      {filteredParentOptions.length === 0 && (
+                        <div className="px-2.5 py-2 text-[11px] text-text-secondary">Sin resultados</div>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="my-1 border-t border-border" />
+                <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={() => { onIndent(project.id); setRowMenuOpen(false); }}>Aumentar sangria</button>
+                <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={() => { onOutdent(project.id); setRowMenuOpen(false); }}>Reducir sangria</button>
+                <div className="my-1 border-t border-border" />
+                <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md text-red-600 hover:bg-red-50" onClick={() => { onDelete(project.id); setRowMenuOpen(false); }}>Eliminar fila</button>
+              </div>
+            )}
+          </div>
         )}
       </td>
 
       {/* Name - with hierarchy support */}
       <td className="border-b border-border text-sm text-text-primary font-medium min-w-[200px] px-0 py-2 bg-white">
-        <ExpandableCell
-          project={project}
-          hasChildren={hasChildren}
-          isLastSibling={isLastSibling}
-          childCount={childCount}
-          onToggleExpand={onToggleExpand}
-          isEditing={editingName}
-          editValue={editNameValue}
-          onEditChange={(v) => setEditNameValue(v)}
-          onStartEdit={() => setEditingName(true)}
-          onFinishEdit={(v) => {
-            onUpdate(project.id, { name: v });
-            setEditingName(false);
-          }}
-          onCancelEdit={() => {
-            setEditingName(false);
-            setEditNameValue(project.name);
-          }}
-          onIndent={onIndent}
-          onOutdent={onOutdent}
-        />
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="min-w-0 flex-1">
+            <ExpandableCell
+              project={project}
+              hasChildren={hasChildren}
+              isLastSibling={isLastSibling}
+              childCount={childCount}
+              onToggleExpand={onToggleExpand}
+              isEditing={editingName}
+              editValue={editNameValue}
+              onEditChange={(v) => setEditNameValue(v)}
+              onStartEdit={() => setEditingName(true)}
+              onFinishEdit={(v) => {
+                onUpdate(project.id, { name: v });
+                setEditingName(false);
+              }}
+              onCancelEdit={() => {
+                setEditingName(false);
+                setEditNameValue(project.name);
+              }}
+              onIndent={onIndent}
+              onOutdent={onOutdent}
+            />
+          </div>
+          {remoteEditingLabel && (
+            <span className="text-[10px] text-blue-500/80 whitespace-nowrap">
+              Editando: {remoteEditingLabel}
+            </span>
+          )}
+        </div>
       </td>
 
       {/* Branch */}
@@ -484,7 +611,7 @@ function SortableRow({
       <td className="px-2 py-2 border-b border-border text-xs bg-white">
         {isCollapsed && collapsedSummary ? (
           <div className="text-text-secondary">
-            {collapsedSummary.startDate ? format(new Date(collapsedSummary.startDate), 'dd/MM') : '—'}
+            {collapsedSummary.startDate ? format(new Date(collapsedSummary.startDate), 'dd/MM') : 'â€”'}
           </div>
         ) : (
           <EditableDateCell
@@ -499,7 +626,7 @@ function SortableRow({
       <td className="px-2 py-2 border-b border-border text-xs bg-white">
         {isCollapsed && collapsedSummary ? (
           <div className="text-text-secondary">
-            {collapsedSummary.endDate ? format(new Date(collapsedSummary.endDate), 'dd/MM') : '—'}
+            {collapsedSummary.endDate ? format(new Date(collapsedSummary.endDate), 'dd/MM') : 'â€”'}
           </div>
         ) : (
           <EditableDateCell
@@ -516,7 +643,7 @@ function SortableRow({
           <div className="text-text-secondary">
             {collapsedSummary.assignees && collapsedSummary.assignees.length > 0
               ? collapsedSummary.assignees.join(' / ')
-              : '—'}
+              : 'â€”'}
           </div>
         ) : (
           <EditableAssigneesCell
@@ -530,7 +657,7 @@ function SortableRow({
       <td className="px-2 py-2 border-b border-border text-xs text-center bg-white">
         {isCollapsed && collapsedSummary ? (
           <div className="text-text-secondary">
-            {collapsedSummary.daysRequired > 0 ? collapsedSummary.daysRequired : '—'}
+            {collapsedSummary.daysRequired > 0 ? collapsedSummary.daysRequired : 'â€”'}
           </div>
         ) : (
           <EditableNumberCell
@@ -559,12 +686,57 @@ function SortableRow({
         />
       </td>
 
+      {dynamicColumns.map((col) => {
+        const cellValue = dynamicValues?.[col.id] ?? null;
+        return (
+          <td key={col.id} className="px-2 py-2 border-b border-border text-xs bg-white min-w-[140px]">
+            {col.type === 'checkbox' ? (
+              <input
+                type="checkbox"
+                checked={Boolean(cellValue)}
+                onChange={(e) => onUpdateDynamicCell(project.id, col.id, e.target.checked)}
+                className="h-3.5 w-3.5 accent-[#3B82F6]"
+              />
+            ) : col.type === 'number' ? (
+              <EditableNumberCell
+                value={Number(cellValue || 0)}
+                onChange={(v) => onUpdateDynamicCell(project.id, col.id, v)}
+              />
+            ) : col.type === 'date' ? (
+              <EditableDateCell
+                value={typeof cellValue === 'string' && cellValue ? new Date(cellValue) : null}
+                onChange={(v) => onUpdateDynamicCell(project.id, col.id, v ? format(v, 'yyyy-MM-dd') : null)}
+              />
+            ) : col.type === 'select' ? (
+              <EditableSelectCell
+                value={typeof cellValue === 'string' ? cellValue : ''}
+                onChange={(v) => onUpdateDynamicCell(project.id, col.id, v)}
+                options={Array.isArray(col.config?.options) ? (col.config.options as string[]) : []}
+                placeholder="Seleccionar"
+              />
+            ) : col.type === 'tags' ? (
+              <EditableTextCell
+                value={Array.isArray(cellValue) ? (cellValue as string[]).join(', ') : (typeof cellValue === 'string' ? cellValue : '')}
+                onChange={(v) => onUpdateDynamicCell(project.id, col.id, v.split(',').map((x) => x.trim()).filter(Boolean))}
+                placeholder="tag1, tag2"
+              />
+            ) : (
+              <EditableTextCell
+                value={typeof cellValue === 'string' ? cellValue : ''}
+                onChange={(v) => onUpdateDynamicCell(project.id, col.id, v)}
+                placeholder="Escribir..."
+              />
+            )}
+          </td>
+        );
+      })}
+
       {/* Load */}
       <td className="px-2 py-2 border-b border-border text-center bg-white">
         {project.dailyLoad > 0 ? (
           <LoadBubble load={project.dailyLoad} size="sm" />
         ) : (
-          <span className="text-xs text-text-secondary">—</span>
+          <span className="text-xs text-text-secondary">â€”</span>
         )}
       </td>
 
@@ -574,7 +746,7 @@ function SortableRow({
           <span className={project.balanceDays >= 0 ? 'text-[#2D6A2E]' : 'text-[#B71C1C]'}>
             {project.balanceDays > 0 ? '+' : ''}{project.balanceDays}d
           </span>
-        ) : '—'}
+        ) : 'â€”'}
       </td>
 
       {/* Row actions */}
@@ -593,7 +765,7 @@ function SortableRow({
               className="p-1 rounded bg-bg-secondary text-text-secondary hover:bg-gray-200 transition-colors text-xs"
               title="Cancelar"
             >
-              ✕
+              âœ•
             </button>
           </div>
         ) : (
@@ -611,10 +783,11 @@ function SortableRow({
   );
 }
 
-// ─── Main ProjectTable ─────────────────────────────────────────────
+// â”€â”€â”€ Main ProjectTable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function ProjectTable() {
-  const { state, dispatch, allBranches } = useProject();
+  const { state, dispatch, allBranches, activeBoardId, remoteEditingByRow, announceEditingRow } = useProject();
+  const { user } = useAuth();
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
   const [search, setSearch] = useState('');
@@ -631,8 +804,12 @@ export function ProjectTable() {
   }>({ activeId: null, overId: null, placement: null });
   const [activeScrollRowId, setActiveScrollRowId] = useState<string | null>(null);
   const [stickyToolsHeight, setStickyToolsHeight] = useState(0);
-  const [contextBarHeight, setContextBarHeight] = useState(0);
   const [headerStickyHeight, setHeaderStickyHeight] = useState(40);
+  const [dynamicColumns, setDynamicColumns] = useState<DynamicColumn[]>([]);
+  const [dynamicValues, setDynamicValues] = useState<Map<string, Record<string, DynamicCellValue>>>(new Map());
+  const [columnMenuOpenFor, setColumnMenuOpenFor] = useState<string | null>(null);
+  const [dragColumnId, setDragColumnId] = useState<string | null>(null);
+  const [overColumnId, setOverColumnId] = useState<string | null>(null);
   const [columnWidths, setColumnWidths] = useState<Record<ColumnKey, number>>({
     drag: 36,
     project: 300,
@@ -649,7 +826,6 @@ export function ProjectTable() {
   });
   const contentScrollRef = useRef<HTMLDivElement>(null);
   const stickyToolsRef = useRef<HTMLDivElement>(null);
-  const contextBarRef = useRef<HTMLDivElement>(null);
   const headerStickyRef = useRef<HTMLTableSectionElement>(null);
   const rowRefs = useRef<Record<string, HTMLTableRowElement | null>>({});
   const resizingColumnRef = useRef<{ key: ColumnKey; startX: number; startWidth: number } | null>(null);
@@ -682,6 +858,35 @@ export function ProjectTable() {
     balance: 160,
     actions: 130,
   };
+
+  const refreshDynamicColumns = useCallback(async () => {
+    if (!activeBoardId) {
+      setDynamicColumns([]);
+      setDynamicValues(new Map());
+      return;
+    }
+    try {
+      const [cols, vals] = await Promise.all([
+        listBoardColumns(activeBoardId),
+        listTaskColumnValues(activeBoardId),
+      ]);
+      setDynamicColumns(cols);
+      setDynamicValues(vals);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('Dynamic columns load failed:', err);
+    }
+  }, [activeBoardId]);
+
+  useEffect(() => {
+    refreshDynamicColumns();
+  }, [refreshDynamicColumns]);
+
+  useEffect(() => {
+    const onDocClick = () => setColumnMenuOpenFor(null);
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -720,6 +925,10 @@ export function ProjectTable() {
     setSelectedRowIds(new Set());
     setMultiSelectMode(false);
   }, []);
+
+  useEffect(() => {
+    announceEditingRow(selectedRowId);
+  }, [selectedRowId, announceEditingRow]);
 
   const handleToggleExpand = useCallback((id: string) => {
     dispatch({ type: 'TOGGLE_EXPANSION', payload: id });
@@ -795,15 +1004,243 @@ export function ProjectTable() {
     dispatch({ type: 'ADD_PROJECT', payload: newProject });
   }, [state.config, dispatch]);
 
+  const createProjectDraft = useCallback((overrides?: Partial<Project>) => {
+    const { id: _ignoreId, ...safeOverrides } = overrides || {};
+    return computeProjectFields({
+      id: `proj-new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: 'Nuevo proyecto',
+      branch: '',
+      startDate: null,
+      endDate: null,
+      assignees: [],
+      daysRequired: 0,
+      priority: 1,
+      type: 'Proyecto',
+      blockedBy: null,
+      blocksTo: null,
+      reportedLoad: null,
+      ...safeOverrides,
+    }, state.config);
+  }, [state.config]);
+
+  const handleAddAbove = useCallback((referenceId: string) => {
+    const ref = state.projects.find((p) => p.id === referenceId);
+    if (!ref) return;
+    const newProject = createProjectDraft({
+      parentId: ref.parentId ?? null,
+      branch: ref.branch || '',
+      startDate: ref.startDate ?? null,
+      endDate: ref.endDate ?? null,
+      type: ref.type,
+    });
+    const currentOrder = state.projectOrder.length > 0 ? [...state.projectOrder] : state.projects.map((p) => p.id);
+    const refIdx = currentOrder.indexOf(referenceId);
+    dispatch({ type: 'ADD_PROJECT', payload: newProject });
+    const newOrder = [...currentOrder];
+    newOrder.splice(Math.max(0, refIdx), 0, newProject.id);
+    dispatch({ type: 'REORDER_PROJECTS', payload: newOrder });
+    setSelectedRowId(newProject.id);
+  }, [state.projects, state.projectOrder, createProjectDraft, dispatch]);
+
+  const handleAddBelow = useCallback((referenceId: string) => {
+    const ref = state.projects.find((p) => p.id === referenceId);
+    if (!ref) return;
+    const newProject = createProjectDraft({
+      parentId: ref.parentId ?? null,
+      branch: ref.branch || '',
+      startDate: ref.startDate ?? null,
+      endDate: ref.endDate ?? null,
+      type: ref.type,
+    });
+    const currentOrder = state.projectOrder.length > 0 ? [...state.projectOrder] : state.projects.map((p) => p.id);
+    const refIdx = currentOrder.indexOf(referenceId);
+    dispatch({ type: 'ADD_PROJECT', payload: newProject });
+    const newOrder = [...currentOrder];
+    newOrder.splice(refIdx + 1, 0, newProject.id);
+    dispatch({ type: 'REORDER_PROJECTS', payload: newOrder });
+    setSelectedRowId(newProject.id);
+  }, [state.projects, state.projectOrder, createProjectDraft, dispatch]);
+
+  const handleDuplicateRow = useCallback((id: string) => {
+    const original = state.projects.find((p) => p.id === id);
+    if (!original) return;
+    const copy = createProjectDraft({
+      ...original,
+      name: original.name ? `${original.name} (copia)` : '',
+    });
+    const currentOrder = state.projectOrder.length > 0 ? [...state.projectOrder] : state.projects.map((p) => p.id);
+    const refIdx = currentOrder.indexOf(id);
+    dispatch({ type: 'ADD_PROJECT', payload: copy });
+    const newOrder = [...currentOrder];
+    newOrder.splice(refIdx + 1, 0, copy.id);
+    dispatch({ type: 'REORDER_PROJECTS', payload: newOrder });
+    setSelectedRowId(copy.id);
+  }, [state.projects, state.projectOrder, createProjectDraft, dispatch]);
+
+  const handleUpsertDynamicCell = useCallback(async (taskId: string, columnId: string, value: DynamicCellValue) => {
+    if (!activeBoardId || !user) return;
+    setDynamicValues((prev) => {
+      const next = new Map(prev);
+      const row = { ...(next.get(taskId) || {}) };
+      row[columnId] = value;
+      next.set(taskId, row);
+      return next;
+    });
+    try {
+      if (value === null || value === '') {
+        await deleteTaskColumnValue(taskId, columnId);
+      } else {
+        await upsertTaskColumnValue({
+          boardId: activeBoardId,
+          taskId,
+          columnId,
+          value,
+          userId: user.id,
+        });
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.warn('Dynamic cell save failed:', err);
+    }
+  }, [activeBoardId, user]);
+
+  const handleCreateDynamicColumn = useCallback(async (position: number, baseName?: string) => {
+    if (!activeBoardId || !user) return;
+    const name = (baseName || window.prompt('Nombre de la columna', 'Nueva columna') || '').trim();
+    if (!name) return;
+    const key = `col_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    try {
+      for (const c of dynamicColumns.filter((c) => c.position >= position)) {
+        await updateBoardColumn(c.id, { position: c.position + 1 });
+      }
+      await createBoardColumn({
+        boardId: activeBoardId,
+        key,
+        name,
+        type: 'text',
+        position,
+        createdBy: user.id,
+        config: {},
+      });
+      await refreshDynamicColumns();
+    } catch (err) {
+      window.alert(`No se pudo crear la columna: ${String(err)}`);
+    }
+  }, [activeBoardId, user, dynamicColumns, refreshDynamicColumns]);
+
+  const handleRenameDynamicColumn = useCallback(async (columnId: string, currentName: string) => {
+    const name = (window.prompt('Nuevo nombre de columna', currentName) || '').trim();
+    if (!name) return;
+    await updateBoardColumn(columnId, { name });
+    await refreshDynamicColumns();
+  }, [refreshDynamicColumns]);
+
+  const handleDuplicateDynamicColumn = useCallback(async (columnId: string) => {
+    const col = dynamicColumns.find((c) => c.id === columnId);
+    if (!col || !activeBoardId || !user) return;
+    const dupPos = col.position + 1;
+    for (const c of dynamicColumns.filter((c) => c.position >= dupPos)) {
+      await updateBoardColumn(c.id, { position: c.position + 1 });
+    }
+    await createBoardColumn({
+      boardId: activeBoardId,
+      key: `col_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+      name: `${col.name} (copia)`,
+      type: col.type,
+      position: dupPos,
+      createdBy: user.id,
+      config: col.config,
+    });
+    await refreshDynamicColumns();
+  }, [dynamicColumns, activeBoardId, user, refreshDynamicColumns]);
+
+  const handleMoveDynamicColumn = useCallback(async (columnId: string, dir: -1 | 1) => {
+    const cols = [...dynamicColumns].sort((a, b) => a.position - b.position);
+    const idx = cols.findIndex((c) => c.id === columnId);
+    const swapIdx = idx + dir;
+    if (idx === -1 || swapIdx < 0 || swapIdx >= cols.length) return;
+    const a = cols[idx];
+    const b = cols[swapIdx];
+    await Promise.all([
+      updateBoardColumn(a.id, { position: b.position }),
+      updateBoardColumn(b.id, { position: a.position }),
+    ]);
+    await refreshDynamicColumns();
+  }, [dynamicColumns, refreshDynamicColumns]);
+
+  const handleReorderDynamicColumn = useCallback(async (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    const cols = [...dynamicColumns].sort((a, b) => a.position - b.position);
+    const fromIdx = cols.findIndex((c) => c.id === fromId);
+    const toIdx = cols.findIndex((c) => c.id === toId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const reordered = [...cols];
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, moved);
+
+    const updates = reordered
+      .map((c, idx) => ({ id: c.id, nextPos: idx }))
+      .filter((u) => cols.find((c) => c.id === u.id)?.position !== u.nextPos);
+
+    for (const u of updates) {
+      await updateBoardColumn(u.id, { position: u.nextPos });
+    }
+    await refreshDynamicColumns();
+  }, [dynamicColumns, refreshDynamicColumns]);
+
+  const handleDeleteDynamicColumn = useCallback(async (columnId: string) => {
+    const ok = window.confirm('¿Eliminar esta columna?');
+    if (!ok) return;
+    await deleteBoardColumn(columnId);
+    await refreshDynamicColumns();
+  }, [refreshDynamicColumns]);
+
+  const handleMoveToParent = useCallback((projectId: string, parentId: string | null) => {
+    if (!validateNoCircles(projectId, parentId, state.projects)) return;
+    const currentOrder = state.projectOrder.length > 0 ? [...state.projectOrder] : state.projects.map((p) => p.id);
+    const blockDesc = new Set(getDescendants(projectId, state.projects).map((p) => p.id));
+    const blockIds = currentOrder.filter((id) => id === projectId || blockDesc.has(id));
+    const blockSet = new Set(blockIds);
+    const remaining = currentOrder.filter((id) => !blockSet.has(id));
+
+    dispatch({ type: 'UPDATE_HIERARCHY', payload: { projectId, newParentId: parentId } });
+
+    let insertIndex = remaining.length;
+    if (parentId) {
+      const parentDesc = new Set(getDescendants(parentId, state.projects).map((p) => p.id));
+      const parentBlock = remaining.filter((id) => id === parentId || parentDesc.has(id));
+      const lastParentId = parentBlock[parentBlock.length - 1] || parentId;
+      const lastParentIdx = remaining.indexOf(lastParentId);
+      insertIndex = lastParentIdx === -1 ? remaining.length : lastParentIdx + 1;
+    } else {
+      const roots = state.projects
+        .filter((p) => !p.parentId && p.id !== projectId && !blockDesc.has(p.id))
+        .map((p) => p.id);
+      if (roots.length > 0) {
+        const lastRoot = roots[roots.length - 1];
+        const lastRootIdx = remaining.indexOf(lastRoot);
+        insertIndex = lastRootIdx === -1 ? remaining.length : lastRootIdx + 1;
+      }
+    }
+
+    const newOrder = [
+      ...remaining.slice(0, insertIndex),
+      ...blockIds,
+      ...remaining.slice(insertIndex),
+    ];
+    dispatch({ type: 'REORDER_PROJECTS', payload: newOrder });
+  }, [state.projects, state.projectOrder, dispatch]);
+
   const handleExportExcel = useCallback(() => {
     exportToExcel(state.projects, state.fileName || undefined);
-    setExportToast('✓ Archivo Excel exportado');
+    setExportToast('âœ“ Archivo Excel exportado');
     setTimeout(() => setExportToast(null), 3000);
   }, [state.projects, state.fileName]);
 
   const handleCopyCSV = useCallback(() => {
     copyAsCSV(state.projects);
-    setExportToast('✓ Datos copiados al portapapeles');
+    setExportToast('âœ“ Datos copiados al portapapeles');
     setTimeout(() => setExportToast(null), 3000);
   }, [state.projects]);
 
@@ -991,19 +1428,6 @@ export function ProjectTable() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedRowId, multiSelectMode, handleIndent, handleOutdent]);
 
-  const selectedProject = useMemo(
-    () => state.projects.find((p) => p.id === selectedRowId) ?? null,
-    [selectedRowId, state.projects]
-  );
-  const canIndentSelected = useMemo(
-    () => !!selectedProject && (indexById.get(selectedProject.id) ?? -1) > 0,
-    [selectedProject, indexById]
-  );
-  const canOutdentSelected = useMemo(
-    () => !!selectedProject?.parentId,
-    [selectedProject]
-  );
-
   const sorted = useMemo(() => {
     // First apply hierarchy visibility (respect expansion state)
     const hierarchyFiltered = state.projects.filter(p => {
@@ -1019,14 +1443,17 @@ export function ProjectTable() {
       return true;
     });
 
-    // Then apply search and type filtering
+    // Then apply search filtering and keep deterministic visual order.
     const filtered = hierarchyFiltered.filter((p) =>
       p.name.toLowerCase().includes(search.toLowerCase())
     );
+    const orderedFiltered = [...filtered].sort((a, b) =>
+      (indexById.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (indexById.get(b.id) ?? Number.MAX_SAFE_INTEGER)
+    );
 
-    const scheduled = filtered.filter((p) => p.startDate && p.endDate && p.type !== 'En radar');
-    const unscheduled = filtered.filter((p) => (!p.startDate || !p.endDate) && p.type !== 'En radar');
-    const radar = filtered.filter((p) => p.type === 'En radar');
+    const scheduled = orderedFiltered.filter((p) => p.startDate && p.endDate && p.type !== 'En radar');
+    const unscheduled = orderedFiltered.filter((p) => (!p.startDate || !p.endDate) && p.type !== 'En radar');
+    const radar = orderedFiltered.filter((p) => p.type === 'En radar');
 
     if (sortKey) {
       const sortFn = (a: Project, b: Project) => {
@@ -1049,7 +1476,7 @@ export function ProjectTable() {
     }
 
     return { scheduled, unscheduled, radar };
-  }, [state.projects, sortKey, sortDir, search]);
+  }, [state.projects, sortKey, sortDir, search, indexById]);
 
   const renderedProjectIds = useMemo(() => {
     const ids = [...sorted.scheduled.map((p) => p.id)];
@@ -1073,21 +1500,10 @@ export function ProjectTable() {
   }, []);
 
   const tableWidthPx = useMemo(
-    () => Object.values(columnWidths).reduce((sum, w) => sum + w, 0),
-    [columnWidths]
+    () => Object.values(columnWidths).reduce((sum, w) => sum + w, 0) + (dynamicColumns.length * 160),
+    [columnWidths, dynamicColumns.length]
   );
-
-  useEffect(() => {
-    if (!contextBarRef.current) {
-      setContextBarHeight(0);
-      return;
-    }
-    const update = () => setContextBarHeight(contextBarRef.current?.offsetHeight ?? 0);
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(contextBarRef.current);
-    return () => ro.disconnect();
-  }, [selectedProject, multiSelectMode, selectedRowIds.size]);
+  const totalTableColumns = 12 + dynamicColumns.length;
 
   useEffect(() => {
     if (!headerStickyRef.current) return;
@@ -1107,7 +1523,7 @@ export function ProjectTable() {
         setActiveScrollRowId(null);
         return;
       }
-      const anchorY = container.getBoundingClientRect().top + stickyToolsHeight + contextBarHeight + headerStickyHeight + 6;
+      const anchorY = container.getBoundingClientRect().top + stickyToolsHeight  + headerStickyHeight + 6;
       let candidate: string | null = renderedProjectIds[0] ?? null;
       for (const id of renderedProjectIds) {
         const rowEl = rowRefs.current[id];
@@ -1126,7 +1542,7 @@ export function ProjectTable() {
       container.removeEventListener('scroll', updateActiveRow);
       window.removeEventListener('resize', updateActiveRow);
     };
-  }, [renderedProjectIds, stickyToolsHeight, contextBarHeight, headerStickyHeight]);
+  }, [renderedProjectIds, stickyToolsHeight, headerStickyHeight]);
 
   useEffect(() => {
     const onMouseMove = (e: MouseEvent) => {
@@ -1264,77 +1680,17 @@ export function ProjectTable() {
           <ClipboardCopy size={14} />
           CSV
         </button>
+
+        <button
+          onClick={() => handleCreateDynamicColumn(dynamicColumns.length)}
+          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary bg-bg-secondary hover:bg-white border border-border rounded-md transition-all"
+          title="Agregar columna"
+        >
+          <Plus size={14} />
+          Columna
+        </button>
       </div>
       </div>
-
-      <div
-        data-selection-safe
-        ref={contextBarRef}
-        className="sticky z-35 bg-bg-secondary"
-        style={{ top: stickyToolsHeight }}
-      >
-      {!multiSelectMode && selectedProject && (
-        <div className="mb-2 mt-2 flex items-center gap-2 rounded-lg border border-[#DBEAFE] bg-[#F8FAFF] px-3 py-2">
-          <button
-            onClick={() => handleIndent(selectedProject.id)}
-            disabled={!canIndentSelected}
-            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-[#BFDBFE] bg-white text-[#1E40AF] hover:bg-[#EAF2FF] hover:border-[#93C5FD] transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
-            title={canIndentSelected ? 'Agregar sangria' : 'No se puede agregar sangria en esta posicion'}
-          >
-            <ArrowRight size={12} />
-            Agregar sangria
-          </button>
-          <button
-            onClick={() => handleOutdent(selectedProject.id)}
-            disabled={!canOutdentSelected}
-            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-[#BFDBFE] bg-white text-[#1E40AF] hover:bg-[#EAF2FF] hover:border-[#93C5FD] transition-colors disabled:opacity-45 disabled:cursor-not-allowed"
-            title={canOutdentSelected ? 'Reducir sangria' : 'Este elemento ya esta al nivel raiz'}
-          >
-            <ArrowLeft size={12} />
-            Reducir sangria
-          </button>
-          <button
-            onClick={() => handleToggleChecked(selectedProject.id, true)}
-            className="inline-flex items-center gap-1.5 text-xs font-medium px-3 py-1.5 rounded-lg border border-[#BFDBFE] bg-white text-[#1E40AF] hover:bg-[#EAF2FF] hover:border-[#93C5FD] transition-colors"
-          >
-            <Rows3 size={12} />
-            Seleccionar varios
-          </button>
-        </div>
-      )}
-
-      {multiSelectMode && (
-        <div className="mb-2 mt-2 flex items-center gap-2 rounded-md border border-[#BFDBFE] bg-[#EFF6FF] px-3 py-2">
-          <span className="text-xs font-medium text-[#1E40AF]">
-            {selectedRowIds.size} elemento{selectedRowIds.size === 1 ? '' : 's'} seleccionado{selectedRowIds.size === 1 ? '' : 's'}
-          </span>
-          <button
-            onClick={() => setSelectedRowIds(new Set(state.projects.map((p) => p.id)))}
-            className="text-xs px-2 py-1 rounded border border-[#BFDBFE] bg-white text-[#1E40AF] hover:bg-[#DBEAFE]"
-          >
-            Seleccionar todo
-          </button>
-          <button
-            onClick={() => setSelectedRowIds(new Set())}
-            className="text-xs px-2 py-1 rounded border border-[#BFDBFE] bg-white text-[#1E40AF] hover:bg-[#DBEAFE]"
-          >
-            Cancelar seleccion
-          </button>
-          <div className="flex-1" />
-          <button
-            onClick={() => {
-              setMultiSelectMode(false);
-              setSelectedRowIds(new Set());
-            }}
-            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded border border-[#BFDBFE] bg-white text-[#1E40AF] hover:bg-[#DBEAFE]"
-          >
-            <X size={12} />
-            Salir
-          </button>
-        </div>
-      )}
-      </div>
-
       {!multiSelectMode && stickyAncestorRows.length > 0 && (
         <>
           {stickyAncestorRows.map((row, idx) => (
@@ -1342,7 +1698,7 @@ export function ProjectTable() {
               key={row.id}
               data-selection-safe
               className="sticky z-30 border-x border-border border-b border-border bg-white"
-              style={{ top: stickyToolsHeight + contextBarHeight + headerStickyHeight + idx * 28 - 1 }}
+              style={{ top: stickyToolsHeight  + headerStickyHeight + idx * 28 - 1 }}
             >
               <div
                 className="flex items-center gap-1 px-2 py-1.5 text-xs font-medium text-text-primary"
@@ -1398,14 +1754,17 @@ export function ProjectTable() {
               <col style={{ width: columnWidths.days }} />
               <col style={{ width: columnWidths.priority }} />
               <col style={{ width: columnWidths.type }} />
+              {dynamicColumns.map((col) => (
+                <col key={col.id} style={{ width: 160 }} />
+              ))}
               <col style={{ width: columnWidths.load }} />
               <col style={{ width: columnWidths.balance }} />
               <col style={{ width: columnWidths.actions }} />
             </colgroup>
-            <thead ref={headerStickyRef} style={{ top: stickyToolsHeight + contextBarHeight }} className="sticky z-20">
+            <thead ref={headerStickyRef} style={{ top: stickyToolsHeight  }} className="sticky z-20">
               <tr className="h-11 bg-white">
                 <th
-                  style={{ top: stickyToolsHeight + contextBarHeight }}
+                  style={{ top: stickyToolsHeight  }}
                   className="sticky z-20 bg-white w-7 px-1 py-2.5 border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)] rounded-tl-lg"
                 /> {/* Drag handle */}
                 <SortHeader label="Proyecto" field="name" colKey="project" />
@@ -1413,11 +1772,76 @@ export function ProjectTable() {
                 <SortHeader label="Inicio" field="startDate" colKey="start" />
                 <SortHeader label="Fin" field="endDate" colKey="end" />
                 <SortHeader label="Asignado" field="assignees" colKey="assignees" />
-                <SortHeader label="Días req." field="daysRequired" colKey="days" />
+                <SortHeader label="DÃ­as req." field="daysRequired" colKey="days" />
                 <SortHeader label="Prior." field="priority" colKey="priority" />
                 <SortHeader label="Tipo" field="type" colKey="type" />
+                {dynamicColumns.map((col) => {
+                  const idx = dynamicColumns.findIndex((c) => c.id === col.id);
+                  return (
+                    <th
+                      key={col.id}
+                      className={`group relative sticky z-20 bg-white px-2 py-2.5 text-left text-xs font-semibold text-text-secondary border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)] ${
+                        overColumnId === col.id ? 'shadow-[inset_2px_0_0_0_rgba(59,130,246,0.9)]' : ''
+                      }`}
+                      style={{ top: stickyToolsHeight }}
+                      onDragOver={(e) => {
+                        if (!dragColumnId) return;
+                        e.preventDefault();
+                        setOverColumnId(col.id);
+                      }}
+                      onDrop={async (e) => {
+                        e.preventDefault();
+                        if (!dragColumnId) return;
+                        const fromId = dragColumnId;
+                        setDragColumnId(null);
+                        setOverColumnId(null);
+                        await handleReorderDynamicColumn(fromId, col.id);
+                      }}
+                      onDragLeave={() => {
+                        if (overColumnId === col.id) setOverColumnId(null);
+                      }}
+                    >
+                      <span className="pr-6">{col.name}</span>
+                      <button
+                        draggable
+                        onDragStart={() => {
+                          setDragColumnId(col.id);
+                          setColumnMenuOpenFor(null);
+                        }}
+                        onDragEnd={() => {
+                          setDragColumnId(null);
+                          setOverColumnId(null);
+                        }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setColumnMenuOpenFor((v) => (v === col.id ? null : col.id));
+                        }}
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 inline-flex items-center justify-center rounded opacity-0 group-hover:opacity-100 hover:bg-bg-secondary cursor-grab active:cursor-grabbing"
+                        title="Arrastra para reordenar o clic para opciones"
+                      >
+                        <GripVertical size={12} />
+                      </button>
+                      {columnMenuOpenFor === col.id && (
+                        <div
+                          onClick={(e) => e.stopPropagation()}
+                          className="absolute right-0 top-[calc(100%+4px)] z-[180] min-w-[210px] rounded-lg border border-border bg-white shadow-lg p-1"
+                        >
+                          <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={async () => { await handleCreateDynamicColumn(col.position); setColumnMenuOpenFor(null); }}>Agregar antes</button>
+                          <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={async () => { await handleCreateDynamicColumn(col.position + 1); setColumnMenuOpenFor(null); }}>Agregar despues</button>
+                          <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={async () => { await handleRenameDynamicColumn(col.id, col.name); setColumnMenuOpenFor(null); }}>Renombrar</button>
+                          <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={async () => { await handleDuplicateDynamicColumn(col.id); setColumnMenuOpenFor(null); }}>Duplicar</button>
+                          <div className="my-1 border-t border-border" />
+                          <button disabled={idx <= 0} className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary disabled:opacity-40" onClick={async () => { await handleMoveDynamicColumn(col.id, -1); setColumnMenuOpenFor(null); }}>Mover izquierda</button>
+                          <button disabled={idx >= dynamicColumns.length - 1} className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary disabled:opacity-40" onClick={async () => { await handleMoveDynamicColumn(col.id, 1); setColumnMenuOpenFor(null); }}>Mover derecha</button>
+                          <div className="my-1 border-t border-border" />
+                          <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md text-red-600 hover:bg-red-50" onClick={async () => { await handleDeleteDynamicColumn(col.id); setColumnMenuOpenFor(null); }}>Eliminar</button>
+                        </div>
+                      )}
+                    </th>
+                  );
+                })}
                 <th
-                  style={{ top: stickyToolsHeight + contextBarHeight }}
+                  style={{ top: stickyToolsHeight  }}
                   className="group relative sticky z-20 bg-white px-2 py-2.5 text-center text-xs font-semibold text-text-secondary border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)]"
                 >
                   Carga
@@ -1430,7 +1854,7 @@ export function ProjectTable() {
                   </div>
                 </th>
                 <th
-                  style={{ top: stickyToolsHeight + contextBarHeight }}
+                  style={{ top: stickyToolsHeight  }}
                   className="group relative sticky z-20 bg-white px-2 py-2.5 text-center text-xs font-semibold text-text-secondary border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)]"
                 >
                   Balance
@@ -1443,7 +1867,7 @@ export function ProjectTable() {
                   </div>
                 </th>
                 <th
-                  style={{ top: stickyToolsHeight + contextBarHeight }}
+                  style={{ top: stickyToolsHeight  }}
                   className="sticky z-20 bg-white w-20 px-2 py-2.5 border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)]"
                 /> {/* Actions */}
               </tr>
@@ -1465,6 +1889,14 @@ export function ProjectTable() {
                     childCount={childrenMap.get(p.id)?.length ?? 0}
                     onIndent={(id) => handleIndent(id)}
                     onOutdent={(id) => handleOutdent(id)}
+                    onAddAbove={handleAddAbove}
+                    onAddBelow={handleAddBelow}
+                    onDuplicateRow={handleDuplicateRow}
+                    onMoveToParent={handleMoveToParent}
+                    dynamicColumns={dynamicColumns}
+                    dynamicValues={dynamicValues.get(p.id)}
+                    onUpdateDynamicCell={handleUpsertDynamicCell}
+                    remoteEditingLabel={remoteEditingByRow[p.id]?.label}
                     isSelected={multiSelectMode ? selectedRowIds.has(p.id) : selectedRowId === p.id}
                     onSelectRow={(id) => {
                       if (multiSelectMode) {
@@ -1492,7 +1924,7 @@ export function ProjectTable() {
               {sorted.unscheduled.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={12} className="px-3 py-2 bg-accent-yellow/30 border-b border-border">
+                    <td colSpan={totalTableColumns} className="px-3 py-2 bg-accent-yellow/30 border-b border-border">
                       <button
                         onClick={() => setShowUnscheduled(!showUnscheduled)}
                         className="flex items-center gap-1.5 text-xs font-semibold text-text-primary"
@@ -1519,6 +1951,14 @@ export function ProjectTable() {
                           childCount={childrenMap.get(p.id)?.length ?? 0}
                           onIndent={(id) => handleIndent(id)}
                           onOutdent={(id) => handleOutdent(id)}
+                          onAddAbove={handleAddAbove}
+                          onAddBelow={handleAddBelow}
+                          onDuplicateRow={handleDuplicateRow}
+                          onMoveToParent={handleMoveToParent}
+                          dynamicColumns={dynamicColumns}
+                          dynamicValues={dynamicValues.get(p.id)}
+                          onUpdateDynamicCell={handleUpsertDynamicCell}
+                          remoteEditingLabel={remoteEditingByRow[p.id]?.label}
                           isSelected={multiSelectMode ? selectedRowIds.has(p.id) : selectedRowId === p.id}
                           onSelectRow={(id) => {
                             if (multiSelectMode) {
@@ -1549,7 +1989,7 @@ export function ProjectTable() {
               {sorted.radar.length > 0 && (
                 <>
                   <tr>
-                    <td colSpan={12} className="px-3 py-2 bg-bg-secondary border-b border-border">
+                    <td colSpan={totalTableColumns} className="px-3 py-2 bg-bg-secondary border-b border-border">
                       <button
                         onClick={() => setShowRadar(!showRadar)}
                         className="flex items-center gap-1.5 text-xs font-semibold text-text-secondary"
@@ -1576,6 +2016,14 @@ export function ProjectTable() {
                           childCount={childrenMap.get(p.id)?.length ?? 0}
                           onIndent={(id) => handleIndent(id)}
                           onOutdent={(id) => handleOutdent(id)}
+                          onAddAbove={handleAddAbove}
+                          onAddBelow={handleAddBelow}
+                          onDuplicateRow={handleDuplicateRow}
+                          onMoveToParent={handleMoveToParent}
+                          dynamicColumns={dynamicColumns}
+                          dynamicValues={dynamicValues.get(p.id)}
+                          onUpdateDynamicCell={handleUpsertDynamicCell}
+                          remoteEditingLabel={remoteEditingByRow[p.id]?.label}
                           isSelected={multiSelectMode ? selectedRowIds.has(p.id) : selectedRowId === p.id}
                           onSelectRow={(id) => {
                             if (multiSelectMode) {
@@ -1637,12 +2085,15 @@ export function ProjectTable() {
         <div className="rounded-md bg-red-50 border border-red-200 p-4 text-sm text-red-800">
           <strong>Error al renderizar la vista Tabla:</strong>
           <div className="mt-2">{String(err)}</div>
-          <div className="mt-2 text-xs text-text-secondary">Revisa la consola del navegador para más detalles.</div>
+          <div className="mt-2 text-xs text-text-secondary">Revisa la consola del navegador para mÃ¡s detalles.</div>
         </div>
       </div>
     );
   }
 }
+
+
+
 
 
 

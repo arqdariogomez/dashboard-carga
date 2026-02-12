@@ -72,6 +72,20 @@ export interface AppState {
   projectOrder: string[]; // ordered project IDs for drag-and-drop reordering
 }
 
+export type DynamicColumnType = 'text' | 'number' | 'date' | 'select' | 'tags' | 'checkbox';
+
+export interface DynamicColumn {
+  id: string;
+  boardId: string;
+  key: string;
+  name: string;
+  type: DynamicColumnType;
+  position: number;
+  config: Record<string, unknown>;
+}
+
+export type DynamicCellValue = string | number | boolean | string[] | null;
+
 export type AppAction =
   | { type: 'SET_PROJECTS'; payload: { projects: Project[]; fileName: string } }
   | { type: 'SET_CONFIG'; payload: Partial<AppConfig> }

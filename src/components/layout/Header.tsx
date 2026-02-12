@@ -69,6 +69,7 @@ export function Header({ onReload, fileInputRef, onImport }: HeaderProps) {
   const [rowMenuBoardId, setRowMenuBoardId] = useState<string | null>(null);
   const [accountMenuOpen, setAccountMenuOpen] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
+  const [, setTimeTick] = useState(0);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const rowMenuRef = useRef<HTMLDivElement | null>(null);
   const accountMenuRef = useRef<HTMLDivElement | null>(null);
@@ -102,6 +103,12 @@ export function Header({ onReload, fileInputRef, onImport }: HeaderProps) {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [hasActiveBoard, saveActiveBoardNow]);
+
+  // Re-render periodically so "hace X..." updates even without user actions.
+  useEffect(() => {
+    const id = window.setInterval(() => setTimeTick((v) => v + 1), 30000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const activeBoard = boards.find((b) => b.id === activeBoardId);
   const filteredBoards = useMemo(() => {
@@ -146,7 +153,7 @@ export function Header({ onReload, fileInputRef, onImport }: HeaderProps) {
               ) : saveStatus === 'error' ? (
                 <span className="text-[11px] text-red-600">Error al guardar</span>
               ) : state.hasUnsavedChanges ? (
-                <span className="text-[11px] text-orange-600">Editando</span>
+                <span className="text-[11px] text-slate-500">Editando</span>
               ) : (
                 <span className="text-[11px] text-text-secondary">
                   Guardado{state.lastUpdated ? ` ${formatDistanceToNow(state.lastUpdated, { addSuffix: true, locale: es })}` : ''}

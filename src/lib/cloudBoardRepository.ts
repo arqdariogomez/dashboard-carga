@@ -1,4 +1,4 @@
-import type { Project } from '@/lib/types';
+﻿import type { Project } from '@/lib/types';
 import { computeProjectFields } from '@/lib/workloadEngine';
 import type { AppConfig } from '@/lib/types';
 import { supabase } from '@/lib/supabaseClient';
@@ -82,7 +82,7 @@ export function mapProjectToRow(
 }
 
 export async function loadBoardProjects(boardId: string, config: AppConfig) {
-  if (!supabase) throw new Error('Supabase no está configurado');
+  if (!supabase) throw new Error('Supabase no esta configurado');
 
   const { data, error } = await supabase
     .from('tasks')
@@ -101,14 +101,36 @@ export async function loadBoardProjects(boardId: string, config: AppConfig) {
 }
 
 export async function saveBoardProjects(boardId: string, projects: Project[], projectOrder: string[]) {
-  if (!supabase) throw new Error('Supabase no está configurado');
+  if (!supabase) throw new Error('Supabase no esta configurado');
 
   const indexById = new Map(projectOrder.map((id, idx) => [id, idx]));
   const rows = projects
     .map((p) => mapProjectToRow(p, boardId, indexById.get(p.id) ?? Number.MAX_SAFE_INTEGER))
     .sort((a, b) => a.sort_order - b.sort_order);
 
-  // Current phase: idempotent full upsert. Good enough for first cloud sync.
-  const { error } = await supabase.from('tasks').upsert(rows, { onConflict: 'id' });
-  if (error) throw error;
+  // Keep cloud state in sync with local state, including deletions.
+  const { data: existing, error: existingError } = await supabase
+    .from('tasks')
+    .select('id')
+    .eq('board_id', boardId);
+  if (existingError) throw existingError;
+
+  const localIds = new Set(rows.map((r) => r.id));
+  const idsToDelete = (existing || [])
+    .map((r) => r.id as string)
+    .filter((id) => !localIds.has(id));
+
+  if (idsToDelete.length > 0) {
+    const { error: deleteError } = await supabase
+      .from('tasks')
+      .delete()
+      .eq('board_id', boardId)
+      .in('id', idsToDelete);
+    if (deleteError) throw deleteError;
+  }
+
+  if (rows.length > 0) {
+    const { error: upsertError } = await supabase.from('tasks').upsert(rows, { onConflict: 'id' });
+    if (upsertError) throw upsertError;
+  }
 }

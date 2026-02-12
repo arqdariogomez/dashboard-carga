@@ -267,6 +267,8 @@ interface ProjectContextValue {
   saveActiveBoardNow: () => Promise<void>;
   copyBoardLink: () => Promise<void>;
   inviteMemberByEmail: (email: string, role: 'editor' | 'viewer') => Promise<void>;
+  remoteEditingByRow: Record<string, { userId: string; label: string; ts: number }>;
+  announceEditingRow: (rowId: string | null) => void;
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -289,6 +291,9 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const hasLoadedCloudRef = useRef(false);
   const [boards, setBoards] = useState<{ id: string; name: string }[]>([]);
   const saveTimerRef = useRef<number | null>(null);
+  const ignoreRealtimeUntilRef = useRef<number>(0);
+  const realtimeChannelRef = useRef<any>(null);
+  const [remoteEditingByRow, setRemoteEditingByRow] = useState<Record<string, { userId: string; label: string; ts: number }>>({});
 
   const state = historyState.present;
   const canUndo = historyState.past.length > 0;
@@ -414,6 +419,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 
     saveTimerRef.current = window.setTimeout(async () => {
       try {
+        ignoreRealtimeUntilRef.current = Date.now() + 2000;
         await saveBoardProjects(activeBoardId, state.projects, state.projectOrder);
         dispatch({ type: 'MARK_SAVED' });
       } catch (err) {
@@ -434,6 +440,24 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 
     const channel = sb
       .channel(`tasks-board-${activeBoardId}`)
+      .on('broadcast', { event: 'row-editing' }, ({ payload }) => {
+        const p = payload as { rowId?: string | null; userId?: string; label?: string; ts?: number } | null;
+        if (!p?.userId || p.userId === user.id) return;
+        setRemoteEditingByRow((prev) => {
+          const next = { ...prev };
+          Object.keys(next).forEach((k) => {
+            if (next[k]?.userId === p.userId) delete next[k];
+          });
+          if (p.rowId) {
+            next[p.rowId] = {
+              userId: p.userId,
+              label: p.label || 'Usuario',
+              ts: p.ts || Date.now(),
+            };
+          }
+          return next;
+        });
+      })
       .on(
         'postgres_changes',
         {
@@ -443,6 +467,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
           filter: `board_id=eq.${activeBoardId}`,
         },
         async () => {
+          if (Date.now() < ignoreRealtimeUntilRef.current) return;
           try {
             const cloud = await loadBoardProjects(activeBoardId, state.config);
             dispatch({
@@ -458,11 +483,29 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
         }
       )
       .subscribe();
+    realtimeChannelRef.current = channel;
 
     return () => {
+      if (realtimeChannelRef.current === channel) realtimeChannelRef.current = null;
       sb.removeChannel(channel);
     };
   }, [activeBoardId, user, state.config]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      const now = Date.now();
+      setRemoteEditingByRow((prev) => {
+        let changed = false;
+        const next: Record<string, { userId: string; label: string; ts: number }> = {};
+        Object.entries(prev).forEach(([rowId, data]) => {
+          if (now - data.ts < 12000) next[rowId] = data;
+          else changed = true;
+        });
+        return changed ? next : prev;
+      });
+    }, 3000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const selectBoard = useMemo(
     () => (boardId: string) => {
@@ -520,6 +563,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       const created = { id: boardId, name: trimmed };
       setBoards((prev) => [...prev, created]);
       // New boards start with a copy of current local state so shared links open meaningful content immediately.
+      ignoreRealtimeUntilRef.current = Date.now() + 2000;
       await saveBoardProjects(boardId, state.projects, state.projectOrder);
       hasLoadedCloudRef.current = false;
       setActiveBoardId(created.id);
@@ -541,6 +585,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const saveActiveBoardNow = useMemo(
     () => async () => {
       if (!supabase || !user || !activeBoardId) return;
+      ignoreRealtimeUntilRef.current = Date.now() + 2000;
       await saveBoardProjects(activeBoardId, state.projects, state.projectOrder);
       dispatch({ type: 'MARK_SAVED' });
     },
@@ -602,6 +647,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       });
       if (createErr) throw createErr;
 
+      ignoreRealtimeUntilRef.current = Date.now() + 2000;
       await saveBoardProjects(newBoardId, state.projects, state.projectOrder);
       await refreshBoards(workspaceId);
       hasLoadedCloudRef.current = false;
@@ -637,6 +683,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       const cloud = boardId === activeBoardId
         ? { projects: state.projects, projectOrder: state.projectOrder }
         : await loadBoardProjects(boardId, state.config);
+      ignoreRealtimeUntilRef.current = Date.now() + 2000;
       await saveBoardProjects(newBoardId, cloud.projects, cloud.projectOrder);
 
       await refreshBoards(workspaceId);
@@ -756,6 +803,25 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     [activeBoardId, user]
   );
 
+  const announceEditingRow = useMemo(
+    () => (rowId: string | null) => {
+      const channel = realtimeChannelRef.current;
+      if (!channel || !user) return;
+      const label = (user.user_metadata?.full_name as string | undefined) || user.email || 'Usuario';
+      channel.send({
+        type: 'broadcast',
+        event: 'row-editing',
+        payload: {
+          rowId,
+          userId: user.id,
+          label,
+          ts: Date.now(),
+        },
+      });
+    },
+    [user]
+  );
+
   // Persist state
   useEffect(() => {
     try {
@@ -858,6 +924,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     saveActiveBoardNow,
     copyBoardLink,
     inviteMemberByEmail,
+    remoteEditingByRow,
+    announceEditingRow,
   }), [
     state,
     dispatch,
@@ -883,6 +951,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     saveActiveBoardNow,
     copyBoardLink,
     inviteMemberByEmail,
+    remoteEditingByRow,
+    announceEditingRow,
   ]);
 
   return (
