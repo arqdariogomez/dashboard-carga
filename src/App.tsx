@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { ProjectProvider, useProject } from '@/context/ProjectContext';
+import { AuthProvider } from '@/context/AuthContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { FilterBar } from '@/components/layout/FilterBar';
@@ -142,18 +143,17 @@ function DashboardContent() {
     return () => window.removeEventListener('keydown', handler);
   }, [handleReload, state.projects.length]);
 
-  // Show Import Wizard if no projects loaded
-  if (state.projects.length === 0 && !showImportWizard) {
-    return (
-      <ImportWizard
-        onComplete={(file) => {
-          if (file) handleFileLoaded(file);
-        }}
-      />
-    );
-  }
-
   const renderView = () => {
+    if (state.projects.length === 0 && !showImportWizard) {
+      return (
+        <ImportWizard
+          onComplete={(file) => {
+            if (file) handleFileLoaded(file);
+          }}
+        />
+      );
+    }
+
     switch (state.activeView) {
       case 'grid': return <WorkloadGrid />;
       case 'chart': return <WorkloadLineChart />;
@@ -174,7 +174,7 @@ function DashboardContent() {
           onImport={() => setShowImportWizard(true)}
         />
         <FilterBar />
-        <div className="flex-1 flex flex-col overflow-hidden bg-bg-secondary/30">
+        <div className="flex-1 flex flex-col overflow-hidden bg-bg-secondary">
           {renderView()}
         </div>
       </div>
@@ -220,8 +220,10 @@ function DashboardContent() {
 
 export function App() {
   return (
-    <ProjectProvider>
-      <DashboardContent />
-    </ProjectProvider>
+    <AuthProvider>
+      <ProjectProvider>
+        <DashboardContent />
+      </ProjectProvider>
+    </AuthProvider>
   );
 }

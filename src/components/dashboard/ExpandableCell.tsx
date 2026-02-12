@@ -1,16 +1,18 @@
 /**
  * ExpandableCell - Renders project name with hierarchical indentation and toggle
- * Shows chevron icon if project has children
+ * Improved UX following Notion-style hierarchy visualization with tree lines and clear visual hierarchy
  */
 
+import { useLayoutEffect, useRef } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import type { Project } from '@/lib/types';
 
 interface ExpandableCellProps {
   project: Project;
   hasChildren: boolean;
+  isLastSibling?: boolean;
+  childCount?: number; // Number of direct children
   onToggleExpand: (projectId: string) => void;
-  onUpdateName: (value: string) => void;
   isEditing?: boolean;
   editValue?: string;
   onStartEdit?: () => void;
@@ -24,8 +26,9 @@ interface ExpandableCellProps {
 export function ExpandableCell({
   project,
   hasChildren,
+  isLastSibling = false,
+  childCount = 0,
   onToggleExpand,
-  onUpdateName,
   isEditing = false,
   editValue = '',
   onStartEdit,
@@ -37,24 +40,31 @@ export function ExpandableCell({
 }: ExpandableCellProps) {
   const hierarchyLevel = project.hierarchyLevel ?? 0;
   const isExpanded = project.isExpanded ?? true;
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   
-  // Indentación: 20px por nivel de jerarquía más 24px para el icono
-  const indentPx = hierarchyLevel * 20;
+  // Increased indent for better visual hierarchy (40px per level, like Notion)
+  const indentPx = hierarchyLevel * 40;
+  const chevronSize = hasChildren ? 19 : 16;
+
+  useLayoutEffect(() => {
+    if (!isEditing || !textareaRef.current) return;
+    const el = textareaRef.current;
+    el.style.height = 'auto';
+    el.style.height = `${Math.max(24, el.scrollHeight)}px`;
+  }, [isEditing, editValue]);
 
   if (isEditing) {
     return (
-      <div
-        className="flex items-center gap-1 px-3 py-2"
-        style={{ paddingLeft: `calc(${indentPx}px + 1.5rem + 0.75rem)` }}
-      >
-        <input
-          type="text"
+      <div className="flex items-start gap-1 px-2 py-2" style={{ paddingLeft: `${indentPx}px` }}>
+        <div className="flex-shrink-0 w-[24px] h-[24px]" />
+        <textarea
+          ref={textareaRef}
           autoFocus
+          rows={1}
           value={editValue}
           onChange={(e) => onEditChange?.(e.target.value)}
           onBlur={() => onFinishEdit?.(editValue)}
           onKeyDown={(e) => {
-            if (e.key === 'Enter') onFinishEdit?.(editValue);
             if (e.key === 'Escape') onCancelEdit?.();
             if (e.key === 'Tab') {
               e.preventDefault();
@@ -64,8 +74,12 @@ export function ExpandableCell({
                 onIndent?.(project.id);
               }
             }
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') onFinishEdit?.(editValue);
           }}
-          className="flex-1 px-1.5 py-0.5 border border-person-1/40 rounded text-sm focus:outline-none focus:ring-2 focus:ring-person-1/30 bg-white"
+          className={`flex-1 resize-none overflow-hidden rounded px-1 py-0.5 text-sm leading-5 whitespace-pre-wrap break-words focus:outline-none focus:ring-2 focus:ring-person-1/25 ${
+            hasChildren ? 'font-semibold text-text-primary' : 'font-medium text-text-primary'
+          }`}
+          style={{ minHeight: '24px' }}
         />
       </div>
     );
@@ -73,10 +87,36 @@ export function ExpandableCell({
 
   return (
     <div
-      className="flex items-center gap-1 px-3 py-2 group"
+      className={`flex items-center gap-1 px-2 py-2 group relative transition-all duration-150 rounded-sm ${
+        hasChildren ? 'bg-accent-blue/8 hover:bg-accent-blue/15' : 'hover:bg-accent-blue/8'
+      }`}
       style={{ paddingLeft: `${indentPx}px` }}
     >
-      {/* Expansion toggle - only show if has children */}
+      {/* Visual tree lines for hierarchy - connects nested items (Notion-style) */}
+      {hierarchyLevel > 0 && (
+        <>
+          {/* Vertical line extending from parent */}
+          <div
+            className="absolute border-l-2 border-[#5B7FAF]/55 group-hover:border-[#4C6E9C]/65 transition-colors"
+            style={{
+              left: `${hierarchyLevel * 40 - 20}px`,
+              top: 0,
+              bottom: isLastSibling ? '50%' : 0,
+            }}
+          />
+          {/* Horizontal connector from vertical line to chevron/bullet */}
+          <div
+            className="absolute top-1/2 border-t-2 border-[#5B7FAF]/55 group-hover:border-[#4C6E9C]/65 transition-colors"
+            style={{
+              left: `${hierarchyLevel * 40 - 20}px`,
+              width: '15px',
+              transform: 'translateY(-50%)',
+            }}
+          />
+        </>
+      )}
+
+      {/* Expansion toggle - redesigned for clarity */}
       {hasChildren ? (
         <button
           type="button"
@@ -84,38 +124,48 @@ export function ExpandableCell({
             e.stopPropagation();
             onToggleExpand(project.id);
           }}
-          className="flex-shrink-0 p-0.5 hover:bg-accent-blue/20 rounded transition-colors text-text-secondary/60 hover:text-text-primary"
+          className={`flex-shrink-0 p-0.5 rounded transition-all duration-200 ${
+            isExpanded
+              ? 'hover:bg-accent-blue/30 text-[#245EA8]'
+              : 'hover:bg-accent-blue/20 text-[#57779E]'
+          }`}
           aria-label={isExpanded ? 'Contraer' : 'Expandir'}
           title={isExpanded ? 'Contraer grupo' : 'Expandir grupo'}
         >
           {isExpanded ? (
-            <ChevronDown size={16} className="text-accent-blue" />
+            <ChevronDown size={chevronSize} strokeWidth={2.6} className="transition-transform" />
           ) : (
-            <ChevronRight size={16} />
+            <ChevronRight size={chevronSize} strokeWidth={2.6} />
           )}
         </button>
       ) : (
-        // Empty space for alignment when no children
-        <div className="w-6 flex-shrink-0" />
+        // Empty space for alignment (but slightly visible for hierarchy understanding)
+        <div className="flex-shrink-0 w-[24px] h-[24px] opacity-0 group-hover:opacity-20 transition-opacity" />
       )}
 
-      {/* Project name - clickable to edit */}
+      {/* Project name - with improved styling for parent projects */}
       <span
-        className="cursor-pointer hover:bg-accent-blue/20 rounded px-1 py-0.5 transition-colors flex-1 font-medium text-sm text-text-primary"
-        onClick={() => onStartEdit?.()}
-        title="Clic para editar nombre"
+        className={`cursor-pointer rounded px-1 py-0.5 transition-colors flex-1 text-sm ${
+          hasChildren
+            ? 'font-semibold text-text-primary hover:bg-accent-blue/30'
+            : 'font-medium text-text-primary hover:bg-accent-blue/20'
+        }`}
+        onDoubleClick={() => onStartEdit?.()}
+        title="Doble clic para editar nombre"
+        style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
       >
         {project.name || <span className="text-text-secondary/50 italic">—</span>}
       </span>
 
-      {/* Indicator if this is a parent project (read-only) */}
+      {/* Visual indicator badges - improved design */}
       {hasChildren && (
-        <div
-          className="flex-shrink-0 text-[10px] px-1.5 py-0.5 rounded bg-accent-blue/10 text-accent-blue font-medium ml-2"
-          title="Este es un grupo - editar sus hijos"
-        >
-          {/* Count children */}
-          {project.assignees?.length === 0 && 'GRUPO'}
+        <div className="flex items-center gap-2 flex-shrink-0 ml-1">
+          <div
+            className="text-[11px] px-2.5 py-0.5 rounded-full bg-accent-blue/25 text-[#2D5F99] font-semibold border border-accent-blue/30"
+            title={`${Math.max(0, childCount - 1)} ${Math.max(0, childCount - 1) === 1 ? 'hijo directo' : 'hijos directos'}`}
+          >
+            {Math.max(0, childCount - 1)}
+          </div>
         </div>
       )}
     </div>
@@ -139,16 +189,26 @@ export function useHierarchyDisplay(projects: Project[]) {
     }
   }
 
+  // Helper to count all descendants recursively
+  const countDescendants = (projectId: string): number => {
+    const children = childrenMap.get(projectId) || [];
+    let count = children.length;
+    for (const child of children) {
+      count += countDescendants(child.id);
+    }
+    return count;
+  };
+
   // Get filtered projects (only show if parent is expanded)
   const visibleProjects = projects.filter(project => {
     if (!project.parentId) return true; // Root projects always visible
     
     // Check if any ancestor is collapsed
-    let current = project.parentId;
+    let current: string | null = project.parentId;
     while (current) {
       if (!expandedSet.has(current)) return false;
       const parent = projects.find(p => p.id === current);
-      current = parent?.parentId;
+      current = parent?.parentId ?? null;
     }
     return true;
   });
@@ -157,5 +217,7 @@ export function useHierarchyDisplay(projects: Project[]) {
     childrenMap,
     visibleProjects,
     hasChildren: (projectId: string) => (childrenMap.get(projectId)?.length ?? 0) > 0,
+    getDirectChildren: (projectId: string) => childrenMap.get(projectId)?.length ?? 0,
+    getDescendantCount: (projectId: string) => countDescendants(projectId),
   };
 }

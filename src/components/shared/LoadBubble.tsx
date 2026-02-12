@@ -10,13 +10,13 @@ interface LoadBubbleProps {
   onClick?: () => void;
 }
 
-function getLoadColorEnhanced(load: number): { bg: string; text: string; border: string; gradient: string } {
-  if (load === 0) return { bg: '#F3F3F3', text: '#9B9B9B', border: '#E0E0E0', gradient: 'linear-gradient(135deg, #F8F8F8, #ECECEC)' };
-  if (load <= 0.5) return { bg: '#DBEDDB', text: '#2D6A2E', border: '#B8D8B8', gradient: 'linear-gradient(135deg, #E8F5E8, #C3E6CB)' };
-  if (load <= 0.7) return { bg: '#D3E5EF', text: '#1A5276', border: '#A8CBE0', gradient: 'linear-gradient(135deg, #E0EFF7, #B8DAFF)' };
-  if (load <= 0.9) return { bg: '#FFF3D1', text: '#7D6608', border: '#F0D88A', gradient: 'linear-gradient(135deg, #FFF8E1, #FFEEBA)' };
-  if (load <= 1.0) return { bg: '#FADEC9', text: '#8B4513', border: '#E8C4A0', gradient: 'linear-gradient(135deg, #FDE8D5, #FFCBA4)' };
-  return { bg: '#FFE2DD', text: '#B71C1C', border: '#F0A8A0', gradient: 'linear-gradient(135deg, #FFEBE8, #F5C6CB)' };
+function getLoadColorEnhanced(load: number): { bg: string; text: string } {
+  if (load === 0) return { bg: '#F3F3F3', text: '#9B9B9B' };
+  if (load <= 0.5) return { bg: '#DBEDDB', text: '#2D6A2E' };
+  if (load <= 0.7) return { bg: '#D3E5EF', text: '#1A5276' };
+  if (load <= 0.9) return { bg: '#FFF3D1', text: '#7D6608' };
+  if (load <= 1.0) return { bg: '#FADEC9', text: '#8B4513' };
+  return { bg: '#FFE2DD', text: '#B71C1C' };
 }
 
 export function LoadBubble({ load, size = 'md', showLabel = true, projects, dateLabel, onClick }: LoadBubbleProps) {
@@ -53,8 +53,7 @@ export function LoadBubble({ load, size = 'md', showLabel = true, projects, date
         style={{
           width: `${diameter}px`,
           height: `${diameter}px`,
-          background: color.gradient,
-          border: `1.5px solid ${color.border}`,
+          background: color.bg,
           color: color.text,
           boxShadow: isCritical ? `0 0 8px ${color.bg}` : 'none',
         }}

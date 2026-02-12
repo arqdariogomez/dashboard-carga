@@ -105,6 +105,28 @@ function parsePercentage(value: unknown): number | null {
   return null;
 }
 
+function extractCellText(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value instanceof Date) return value.toISOString();
+  if (Array.isArray(value)) return value.map((v) => extractCellText(v)).filter(Boolean).join(' ');
+  if (typeof value === 'object') {
+    const anyVal = value as Record<string, any>;
+    if (Array.isArray(anyVal.richText)) {
+      return anyVal.richText.map((seg: any) => seg.text ?? seg.t ?? String(seg)).join('');
+    }
+    if (typeof anyVal.t === 'string') return anyVal.t;
+    if (typeof anyVal.text === 'string') return anyVal.text;
+    if ('v' in anyVal && (typeof anyVal.v === 'string' || typeof anyVal.v === 'number')) return String(anyVal.v);
+    try {
+      return JSON.stringify(anyVal);
+    } catch {
+      return String(anyVal);
+    }
+  }
+  return null;
+}
+
 export function parseExcelFile(buffer: ArrayBuffer, config: AppConfig): Project[] {
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
@@ -127,7 +149,10 @@ export function parseExcelFile(buffer: ArrayBuffer, config: AppConfig): Project[
     const mapped: Record<string, unknown> = {};
     Object.entries(row).forEach(([key, value]) => {
       const field = columnMapping[key];
-      if (field) mapped[field] = value;
+      if (field) {
+        const cleaned = extractCellText(value);
+        mapped[field] = cleaned ?? value;
+      }
     });
 
     const rawProject = {

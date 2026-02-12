@@ -1,5 +1,6 @@
 import { useProject } from '@/context/ProjectContext';
-import { RefreshCw, Clock, Undo2, Redo2, Upload } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { RefreshCw, Clock, Undo2, Redo2, LogIn, LogOut } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -10,7 +11,8 @@ interface HeaderProps {
 }
 
 export function Header({ onReload, fileInputRef, onImport }: HeaderProps) {
-  const { state, dispatch, canUndo, canRedo, undoCount } = useProject();
+  const { state, dispatch, canUndo, canRedo, undoCount, boards, activeBoardId, selectBoard, createBoard } = useProject();
+  const { user, isConfigured, signInWithGoogle, signOut } = useAuth();
 
   const viewLabels: Record<string, string> = {
     grid: 'Vista de Carga',
@@ -90,6 +92,73 @@ export function Header({ onReload, fileInputRef, onImport }: HeaderProps) {
           >
             <RefreshCw size={14} />
             Recargar
+          </button>
+        )}
+        {onImport && (
+          <button
+            onClick={onImport}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary bg-bg-secondary hover:bg-white border border-border rounded-md transition-all"
+            title="Importar archivo"
+          >
+            Importar
+          </button>
+        )}
+        {isConfigured && user && boards.length > 0 && (
+          <>
+            <select
+              value={activeBoardId ?? ''}
+              onChange={(e) => selectBoard(e.target.value)}
+              className="px-2.5 py-1.5 text-xs font-medium text-text-secondary bg-bg-secondary border border-border rounded-md hover:bg-white"
+              title="Seleccionar tablero"
+            >
+              {boards.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.name}
+                </option>
+              ))}
+            </select>
+            <button
+              onClick={async () => {
+                const name = window.prompt('Nombre del nuevo tablero');
+                if (!name) return;
+                await createBoard(name);
+              }}
+              className="px-2.5 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary bg-bg-secondary hover:bg-white border border-border rounded-md transition-all"
+              title="Crear tablero"
+            >
+              + Tablero
+            </button>
+          </>
+        )}
+        {user && (
+          <span className="text-xs text-text-secondary bg-bg-secondary px-2 py-1 rounded border border-border max-w-[220px] truncate">
+            {user.user_metadata?.full_name || user.email || 'Usuario'}
+          </span>
+        )}
+        {!isConfigured ? (
+          <span
+            className="px-2.5 py-1.5 text-xs font-medium text-text-secondary/70 bg-bg-secondary border border-border rounded-md"
+            title="Falta configurar VITE_SUPABASE_URL y VITE_SUPABASE_ANON_KEY en .env.local"
+          >
+            Auth no configurado
+          </span>
+        ) : user ? (
+          <button
+            onClick={signOut}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary bg-bg-secondary hover:bg-white border border-border rounded-md transition-all"
+            title={`Salir (${user.email || 'usuario'})`}
+          >
+            <LogOut size={14} />
+            Cerrar sesión
+          </button>
+        ) : (
+          <button
+            onClick={signInWithGoogle}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-text-primary text-white rounded-md hover:bg-[#2c2a25] transition-colors"
+            title="Entrar con Google"
+          >
+            <LogIn size={14} />
+            Iniciar sesión
           </button>
         )}
       </div>

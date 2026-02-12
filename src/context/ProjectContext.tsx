@@ -1,9 +1,13 @@
-import React, { createContext, useContext, useReducer, useEffect, useMemo } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useMemo, useRef, useState } from 'react';
 import type { AppState, AppAction, Project } from '@/lib/types';
 import { DEFAULT_STATE, DEFAULT_FILTERS } from '@/lib/constants';
 import { calculateDailyWorkload, applyFilters, getPersons, getBranches, getActiveProjects, computeProjectFields } from '@/lib/workloadEngine';
 import { getDateRange } from '@/lib/dateUtils';
-import { validateNoCircles, aggregateFromChildren } from '@/lib/hierarchyEngine';
+import { validateNoCircles, aggregateFromChildren, calculateHierarchyLevel } from '@/lib/hierarchyEngine';
+import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
+import { loadBoardProjects, saveBoardProjects } from '@/lib/cloudBoardRepository';
+import { ensureDefaultWorkspaceBoard } from '@/lib/cloudBootstrap';
+import { useAuth } from '@/context/AuthContext';
 
 const MAX_HISTORY = 50;
 
@@ -21,7 +25,7 @@ function isUndoableAction(action: AppAction): boolean {
 function appReducer(state: AppState, action: AppAction): AppState {
   switch (action.type) {
     case 'SET_PROJECTS':
-      // Recompute calculated fields with hierarchy awareness and set levels
+      // Recompute calculated fields with hierarchy awareness and set accurate hierarchy levels
       {
         const incoming = action.payload.projects || [];
         const projects = incoming.map(p => ({ ...p }));
@@ -29,7 +33,6 @@ function appReducer(state: AppState, action: AppAction): AppState {
         // Compute fields with knowledge of all projects
         const computed = projects.map(p => computeProjectFields(p, state.config, projects));
 
-        // Calculate hierarchy levels and default isExpanded
         // Try to restore persisted expansion map from localStorage
         let persistedExpansion: Record<string, boolean> | null = null;
         try {
@@ -39,9 +42,10 @@ function appReducer(state: AppState, action: AppAction): AppState {
           persistedExpansion = null;
         }
 
+        // Calculate proper hierarchyLevel for each project
         const withLevels = computed.map(p => ({
           ...p,
-          hierarchyLevel: p.parentId ? (p.hierarchyLevel ?? 0) : 0,
+          hierarchyLevel: calculateHierarchyLevel(p.id, computed),
           isExpanded: (persistedExpansion && typeof persistedExpansion[p.id] === 'boolean')
             ? persistedExpansion[p.id]
             : (typeof p.isExpanded === 'boolean' ? p.isExpanded : true),
@@ -91,16 +95,21 @@ function appReducer(state: AppState, action: AppAction): AppState {
         }
       }
       
+      // Recalculate hierarchy levels after updates
+      projects = projects.map(p => ({ ...p, hierarchyLevel: calculateHierarchyLevel(p.id, projects) }));
+
       return { ...state, projects, hasUnsavedChanges: true };
     }
     case 'ADD_PROJECT': {
-      const projects = [...state.projects, action.payload];
+      let projects = [...state.projects, action.payload];
       const projectOrder = [...state.projectOrder, action.payload.id];
+      projects = projects.map(p => ({ ...p, hierarchyLevel: calculateHierarchyLevel(p.id, projects) }));
       return { ...state, projects, projectOrder, hasUnsavedChanges: true };
     }
     case 'DELETE_PROJECT': {
-      const projects = state.projects.filter(p => p.id !== action.payload);
+      let projects = state.projects.filter(p => p.id !== action.payload);
       const projectOrder = state.projectOrder.filter(id => id !== action.payload);
+      projects = projects.map(p => ({ ...p, hierarchyLevel: calculateHierarchyLevel(p.id, projects) }));
       return { ...state, projects, projectOrder, hasUnsavedChanges: true };
     }
     case 'REORDER_PROJECTS': {
@@ -115,7 +124,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
         return state;
       }
 
-      const projects = state.projects.map(p => {
+      let projects = state.projects.map(p => {
         if (p.id !== projectId) return p;
         return { ...p, parentId: newParentId };
       });
@@ -131,6 +140,9 @@ function appReducer(state: AppState, action: AppAction): AppState {
           );
         }
       }
+
+      // Recalculate hierarchy levels after change
+      projects = projects.map(p => ({ ...p, hierarchyLevel: calculateHierarchyLevel(p.id, projects) }));
 
       return { ...state, projects, hasUnsavedChanges: true };
     }
@@ -242,24 +254,201 @@ interface ProjectContextValue {
   canUndo: boolean;
   canRedo: boolean;
   undoCount: number;
+  boards: { id: string; name: string }[];
+  activeBoardId: string | null;
+  selectBoard: (boardId: string) => void;
+  createBoard: (name: string) => Promise<void>;
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
 
 export function ProjectProvider({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   const persisted = loadPersistedState();
   const initialState: AppState = { ...DEFAULT_STATE, ...persisted };
+  const envBoardId = import.meta.env.VITE_SUPABASE_BOARD_ID;
 
   const [historyState, dispatch] = useReducer(historyReducer, {
     past: [],
     present: initialState,
     future: [],
   });
+  const [activeBoardId, setActiveBoardId] = useState<string | null>(envBoardId ?? null);
+  const hasLoadedCloudRef = useRef(false);
+  const [boards, setBoards] = useState<{ id: string; name: string }[]>([]);
+  const saveTimerRef = useRef<number | null>(null);
 
   const state = historyState.present;
   const canUndo = historyState.past.length > 0;
   const canRedo = historyState.future.length > 0;
   const undoCount = historyState.past.length;
+
+  const refreshBoards = useMemo(
+    () => async (workspaceIdHint?: string) => {
+      if (!supabase || !user) return;
+
+      let workspaceIds: string[] = [];
+      if (workspaceIdHint) {
+        workspaceIds = [workspaceIdHint];
+      } else {
+        const { data: memberships, error: membershipsError } = await supabase
+          .from('workspace_members')
+          .select('workspace_id')
+          .eq('user_id', user.id);
+        if (membershipsError) throw membershipsError;
+        workspaceIds = (memberships || []).map((m) => m.workspace_id as string);
+      }
+
+      if (workspaceIds.length === 0) {
+        setBoards([]);
+        return;
+      }
+
+      const { data: boardRows, error: boardsError } = await supabase
+        .from('boards')
+        .select('id,name')
+        .in('workspace_id', workspaceIds)
+        .order('created_at', { ascending: true });
+
+      if (boardsError) throw boardsError;
+      setBoards((boardRows || []).map((b) => ({ id: b.id as string, name: (b.name as string) || 'Sin nombre' })));
+    },
+    [user]
+  );
+
+  // Initial cloud load (optional): only when Supabase is configured, board id exists, and user is authenticated.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !user || !activeBoardId) return;
+
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const cloud = await loadBoardProjects(activeBoardId, state.config);
+        if (cancelled) return;
+        dispatch({
+          type: 'SET_PROJECTS',
+          payload: { projects: cloud.projects, fileName: 'Supabase' },
+        });
+        dispatch({ type: 'REORDER_PROJECTS', payload: cloud.projectOrder });
+        dispatch({ type: 'MARK_SAVED' });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('Cloud load skipped/failed:', err);
+      } finally {
+        hasLoadedCloudRef.current = true;
+      }
+    };
+
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBoardId, user, state.config]);
+
+  // Resolve default board and refresh board list after login.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !user) return;
+    const sb = supabase;
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const resolved = await ensureDefaultWorkspaceBoard(user);
+        if (cancelled) return;
+        if (!activeBoardId) setActiveBoardId(resolved);
+
+        const { data: board } = await sb
+          .from('boards')
+          .select('workspace_id')
+          .eq('id', resolved)
+          .maybeSingle();
+        const workspaceId = board?.workspace_id as string | undefined;
+        await refreshBoards(workspaceId);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('Board bootstrap failed:', err);
+      }
+    };
+    run();
+    return () => {
+      cancelled = true;
+    };
+  }, [user, activeBoardId, refreshBoards]);
+
+  // Autosave to cloud when project data changes.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !activeBoardId || !user) return;
+    if (!hasLoadedCloudRef.current || !state.hasUnsavedChanges) return;
+
+    if (saveTimerRef.current) {
+      window.clearTimeout(saveTimerRef.current);
+    }
+
+    saveTimerRef.current = window.setTimeout(async () => {
+      try {
+        await saveBoardProjects(activeBoardId, state.projects, state.projectOrder);
+        dispatch({ type: 'MARK_SAVED' });
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('Cloud save failed:', err);
+      }
+    }, 900);
+
+    return () => {
+      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
+    };
+  }, [activeBoardId, user, state.projects, state.projectOrder, state.hasUnsavedChanges]);
+
+  const selectBoard = useMemo(
+    () => (boardId: string) => {
+      if (!boardId || boardId === activeBoardId) return;
+      hasLoadedCloudRef.current = false;
+      setActiveBoardId(boardId);
+    },
+    [activeBoardId]
+  );
+
+  const createBoard = useMemo(
+    () => async (name: string) => {
+      if (!supabase || !user) return;
+      const sb = supabase;
+      const trimmed = name.trim();
+      if (!trimmed) return;
+
+      let workspaceId: string | null = null;
+      const currentBoard = boards.find((b) => b.id === activeBoardId);
+      if (currentBoard) {
+        const { data: boardRow } = await sb
+          .from('boards')
+          .select('workspace_id')
+          .eq('id', currentBoard.id)
+          .maybeSingle();
+        workspaceId = (boardRow?.workspace_id as string | undefined) ?? null;
+      }
+      if (!workspaceId) {
+        const { data: memberships } = await sb
+          .from('workspace_members')
+          .select('workspace_id')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: true })
+          .limit(1);
+        workspaceId = (memberships?.[0]?.workspace_id as string | undefined) ?? null;
+      }
+      if (!workspaceId) return;
+
+      const { data: inserted, error } = await sb
+        .from('boards')
+        .insert({ workspace_id: workspaceId, name: trimmed, created_by: user.id })
+        .select('id,name')
+        .single();
+      if (error) throw error;
+
+      const created = { id: inserted.id as string, name: inserted.name as string };
+      setBoards((prev) => [...prev, created]);
+      hasLoadedCloudRef.current = false;
+      setActiveBoardId(created.id);
+    },
+    [activeBoardId, boards, user]
+  );
 
   // Persist state
   useEffect(() => {
@@ -350,7 +539,27 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     canUndo,
     canRedo,
     undoCount,
-  }), [state, dispatch, filteredProjects, orderedFilteredProjects, allPersons, allBranches, dateRange, workloadData, canUndo, canRedo, undoCount]);
+    boards,
+    activeBoardId,
+    selectBoard,
+    createBoard,
+  }), [
+    state,
+    dispatch,
+    filteredProjects,
+    orderedFilteredProjects,
+    allPersons,
+    allBranches,
+    dateRange,
+    workloadData,
+    canUndo,
+    canRedo,
+    undoCount,
+    boards,
+    activeBoardId,
+    selectBoard,
+    createBoard,
+  ]);
 
   return (
     <ProjectContext.Provider value={value}>
