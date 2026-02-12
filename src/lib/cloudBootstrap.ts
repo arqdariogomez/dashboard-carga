@@ -27,17 +27,16 @@ export async function ensureDefaultWorkspaceBoard(user: User): Promise<string> {
   let workspaceId = memberships?.[0]?.workspace_id as string | undefined;
 
   if (!workspaceId) {
-    const { data: workspace, error: workspaceError } = await supabase
+    workspaceId = crypto.randomUUID();
+    const { error: workspaceError } = await supabase
       .from('workspaces')
       .insert({
+        id: workspaceId,
         name: 'Mi workspace',
         created_by: user.id,
-      })
-      .select('id')
-      .single();
+      });
 
     if (workspaceError) throw workspaceError;
-    workspaceId = workspace.id;
 
     const { error: memberError } = await supabase.from('workspace_members').insert({
       workspace_id: workspaceId,
@@ -58,17 +57,16 @@ export async function ensureDefaultWorkspaceBoard(user: User): Promise<string> {
   if (boardLookupError) throw boardLookupError;
   if (existingBoard?.id) return existingBoard.id;
 
-  const { data: board, error: boardError } = await supabase
+  const boardId = crypto.randomUUID();
+  const { error: boardError } = await supabase
     .from('boards')
     .insert({
+      id: boardId,
       workspace_id: workspaceId,
       name: 'Tablero principal',
       created_by: user.id,
-    })
-    .select('id')
-    .single();
+    });
 
   if (boardError) throw boardError;
-  return board.id;
+  return boardId;
 }
-

@@ -9,6 +9,7 @@ interface AuthContextValue {
   isConfigured: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  updateAvatar: (file: File) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -58,6 +59,35 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!supabase) return;
         await supabase.auth.signOut();
       },
+      updateAvatar: async (file: File) => {
+        if (!supabase || !session?.user) return;
+
+        const ext = file.name.split('.').pop()?.toLowerCase() || 'jpg';
+        const path = `${session.user.id}/avatar-${Date.now()}.${ext}`;
+        const bucket = 'avatars';
+
+        const { error: uploadError } = await supabase.storage
+          .from(bucket)
+          .upload(path, file, { upsert: true, contentType: file.type || 'image/jpeg' });
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = supabase.storage.from(bucket).getPublicUrl(path);
+        const avatarUrl = publicUrlData.publicUrl;
+
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .update({ avatar_url: avatarUrl, updated_at: new Date().toISOString() })
+          .eq('id', session.user.id);
+        if (profileError) throw profileError;
+
+        const { error: authError } = await supabase.auth.updateUser({
+          data: { avatar_url: avatarUrl },
+        });
+        if (authError) throw authError;
+
+        const { data } = await supabase.auth.getSession();
+        setSession(data.session ?? null);
+      },
     }),
     [session, loading]
   );
@@ -70,4 +100,3 @@ export function useAuth() {
   if (!ctx) throw new Error('useAuth must be used within AuthProvider');
   return ctx;
 }
-

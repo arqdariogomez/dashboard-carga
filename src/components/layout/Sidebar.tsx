@@ -60,19 +60,6 @@ export function Sidebar() {
           ))}
         </nav>
 
-        {/* Unsaved changes indicator */}
-        {state.hasUnsavedChanges && !collapsed && (
-          <div className="px-3 py-2 border-t border-border">
-            <div className="flex items-center gap-2 px-2.5 py-2 bg-accent-orange/30 rounded-md">
-              <span className="relative flex h-2 w-2 flex-shrink-0">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-orange-500" />
-              </span>
-              <span className="text-[11px] text-[#8B4513] font-medium">Cambios sin guardar</span>
-            </div>
-          </div>
-        )}
-
         {/* Footer */}
         <div className="px-2 py-3 border-t border-border">
           <button

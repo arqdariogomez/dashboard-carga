@@ -258,6 +258,15 @@ interface ProjectContextValue {
   activeBoardId: string | null;
   selectBoard: (boardId: string) => void;
   createBoard: (name: string) => Promise<void>;
+  renameBoardById: (boardId: string, name: string) => Promise<void>;
+  duplicateBoardById: (boardId: string, name?: string) => Promise<void>;
+  deleteBoardById: (boardId: string) => Promise<void>;
+  renameActiveBoard: (name: string) => Promise<void>;
+  duplicateActiveBoard: (name?: string) => Promise<void>;
+  deleteActiveBoard: () => Promise<void>;
+  saveActiveBoardNow: () => Promise<void>;
+  copyBoardLink: () => Promise<void>;
+  inviteMemberByEmail: (email: string, role: 'editor' | 'viewer') => Promise<void>;
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -267,13 +276,16 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const persisted = loadPersistedState();
   const initialState: AppState = { ...DEFAULT_STATE, ...persisted };
   const envBoardId = import.meta.env.VITE_SUPABASE_BOARD_ID;
+  const urlBoardId = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('board')
+    : null;
 
   const [historyState, dispatch] = useReducer(historyReducer, {
     past: [],
     present: initialState,
     future: [],
   });
-  const [activeBoardId, setActiveBoardId] = useState<string | null>(envBoardId ?? null);
+  const [activeBoardId, setActiveBoardId] = useState<string | null>(urlBoardId || envBoardId || null);
   const hasLoadedCloudRef = useRef(false);
   const [boards, setBoards] = useState<{ id: string; name: string }[]>([]);
   const saveTimerRef = useRef<number | null>(null);
@@ -282,6 +294,14 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const canUndo = historyState.past.length > 0;
   const canRedo = historyState.future.length > 0;
   const undoCount = historyState.past.length;
+
+  useEffect(() => {
+    if (!activeBoardId || typeof window === 'undefined') return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('board') === activeBoardId) return;
+    url.searchParams.set('board', activeBoardId);
+    window.history.replaceState({}, '', url.toString());
+  }, [activeBoardId]);
 
   const refreshBoards = useMemo(
     () => async (workspaceIdHint?: string) => {
@@ -374,6 +394,15 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     };
   }, [user, activeBoardId, refreshBoards]);
 
+  // Keep an active board selected whenever board list is available.
+  useEffect(() => {
+    if (boards.length === 0) return;
+    if (!activeBoardId || !boards.some((b) => b.id === activeBoardId)) {
+      hasLoadedCloudRef.current = false;
+      setActiveBoardId(boards[0].id);
+    }
+  }, [boards, activeBoardId]);
+
   // Autosave to cloud when project data changes.
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase || !activeBoardId || !user) return;
@@ -397,6 +426,43 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     };
   }, [activeBoardId, user, state.projects, state.projectOrder, state.hasUnsavedChanges]);
+
+  // Realtime sync: refresh board when tasks change from other tabs/users.
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !activeBoardId || !user) return;
+    const sb = supabase;
+
+    const channel = sb
+      .channel(`tasks-board-${activeBoardId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'tasks',
+          filter: `board_id=eq.${activeBoardId}`,
+        },
+        async () => {
+          try {
+            const cloud = await loadBoardProjects(activeBoardId, state.config);
+            dispatch({
+              type: 'SET_PROJECTS',
+              payload: { projects: cloud.projects, fileName: 'Supabase' },
+            });
+            dispatch({ type: 'REORDER_PROJECTS', payload: cloud.projectOrder });
+            dispatch({ type: 'MARK_SAVED' });
+          } catch (err) {
+            // eslint-disable-next-line no-console
+            console.warn('Realtime sync failed:', err);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      sb.removeChannel(channel);
+    };
+  }, [activeBoardId, user, state.config]);
 
   const selectBoard = useMemo(
     () => (boardId: string) => {
@@ -433,21 +499,261 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
           .limit(1);
         workspaceId = (memberships?.[0]?.workspace_id as string | undefined) ?? null;
       }
-      if (!workspaceId) return;
+      if (!workspaceId) {
+        const fallbackBoardId = await ensureDefaultWorkspaceBoard(user);
+        const { data: fallbackBoard, error: fallbackBoardErr } = await sb
+          .from('boards')
+          .select('workspace_id')
+          .eq('id', fallbackBoardId)
+          .maybeSingle();
+        if (fallbackBoardErr) throw fallbackBoardErr;
+        workspaceId = (fallbackBoard?.workspace_id as string | undefined) ?? null;
+      }
+      if (!workspaceId) throw new Error('No se pudo resolver el workspace para crear tablero.');
 
-      const { data: inserted, error } = await sb
+      const boardId = crypto.randomUUID();
+      const { error } = await sb
         .from('boards')
-        .insert({ workspace_id: workspaceId, name: trimmed, created_by: user.id })
-        .select('id,name')
-        .single();
+        .insert({ id: boardId, workspace_id: workspaceId, name: trimmed, created_by: user.id });
       if (error) throw error;
 
-      const created = { id: inserted.id as string, name: inserted.name as string };
+      const created = { id: boardId, name: trimmed };
       setBoards((prev) => [...prev, created]);
+      // New boards start with a copy of current local state so shared links open meaningful content immediately.
+      await saveBoardProjects(boardId, state.projects, state.projectOrder);
       hasLoadedCloudRef.current = false;
       setActiveBoardId(created.id);
+      await refreshBoards(workspaceId);
     },
-    [activeBoardId, boards, user]
+    [activeBoardId, boards, user, refreshBoards, state.projects, state.projectOrder]
+  );
+
+  const copyBoardLink = useMemo(
+    () => async () => {
+      if (!activeBoardId || typeof window === 'undefined') return;
+      const url = new URL(window.location.href);
+      url.searchParams.set('board', activeBoardId);
+      await navigator.clipboard.writeText(url.toString());
+    },
+    [activeBoardId]
+  );
+
+  const saveActiveBoardNow = useMemo(
+    () => async () => {
+      if (!supabase || !user || !activeBoardId) return;
+      await saveBoardProjects(activeBoardId, state.projects, state.projectOrder);
+      dispatch({ type: 'MARK_SAVED' });
+    },
+    [activeBoardId, user, state.projects, state.projectOrder]
+  );
+
+  const renameActiveBoard = useMemo(
+    () => async (name: string) => {
+      if (!supabase || !user || !activeBoardId) return;
+      const sb = supabase;
+      const trimmed = name.trim();
+      if (!trimmed) return;
+
+      const { error } = await sb.from('boards').update({ name: trimmed }).eq('id', activeBoardId);
+      if (error) throw error;
+
+      setBoards((prev) => prev.map((b) => (b.id === activeBoardId ? { ...b, name: trimmed } : b)));
+    },
+    [activeBoardId, user]
+  );
+
+  const renameBoardById = useMemo(
+    () => async (boardId: string, name: string) => {
+      if (!supabase || !user || !boardId) return;
+      const sb = supabase;
+      const trimmed = name.trim();
+      if (!trimmed) return;
+
+      const { error } = await sb.from('boards').update({ name: trimmed }).eq('id', boardId);
+      if (error) throw error;
+      setBoards((prev) => prev.map((b) => (b.id === boardId ? { ...b, name: trimmed } : b)));
+    },
+    [user]
+  );
+
+  const duplicateActiveBoard = useMemo(
+    () => async (name?: string) => {
+      if (!supabase || !user || !activeBoardId) return;
+      const sb = supabase;
+      const source = boards.find((b) => b.id === activeBoardId);
+
+      const { data: sourceBoard, error: sourceErr } = await sb
+        .from('boards')
+        .select('workspace_id,name')
+        .eq('id', activeBoardId)
+        .maybeSingle();
+      if (sourceErr) throw sourceErr;
+
+      const workspaceId = sourceBoard?.workspace_id as string | undefined;
+      if (!workspaceId) throw new Error('No se encontró workspace del tablero actual.');
+
+      const newBoardId = crypto.randomUUID();
+      const duplicateName = (name?.trim() || `${source?.name || sourceBoard?.name || 'Tablero'} (copia)`).trim();
+      const { error: createErr } = await sb.from('boards').insert({
+        id: newBoardId,
+        workspace_id: workspaceId,
+        name: duplicateName,
+        created_by: user.id,
+      });
+      if (createErr) throw createErr;
+
+      await saveBoardProjects(newBoardId, state.projects, state.projectOrder);
+      await refreshBoards(workspaceId);
+      hasLoadedCloudRef.current = false;
+      setActiveBoardId(newBoardId);
+    },
+    [activeBoardId, boards, user, state.projects, state.projectOrder, refreshBoards]
+  );
+
+  const duplicateBoardById = useMemo(
+    () => async (boardId: string, name?: string) => {
+      if (!supabase || !user || !boardId) return;
+      const sb = supabase;
+
+      const { data: sourceBoard, error: sourceErr } = await sb
+        .from('boards')
+        .select('workspace_id,name')
+        .eq('id', boardId)
+        .maybeSingle();
+      if (sourceErr) throw sourceErr;
+      const workspaceId = sourceBoard?.workspace_id as string | undefined;
+      if (!workspaceId) throw new Error('No se encontró workspace del tablero origen.');
+
+      const newBoardId = crypto.randomUUID();
+      const duplicateName = (name?.trim() || `${(sourceBoard?.name as string | undefined) || 'Tablero'} (copia)`).trim();
+      const { error: createErr } = await sb.from('boards').insert({
+        id: newBoardId,
+        workspace_id: workspaceId,
+        name: duplicateName,
+        created_by: user.id,
+      });
+      if (createErr) throw createErr;
+
+      const cloud = boardId === activeBoardId
+        ? { projects: state.projects, projectOrder: state.projectOrder }
+        : await loadBoardProjects(boardId, state.config);
+      await saveBoardProjects(newBoardId, cloud.projects, cloud.projectOrder);
+
+      await refreshBoards(workspaceId);
+      hasLoadedCloudRef.current = false;
+      setActiveBoardId(newBoardId);
+    },
+    [activeBoardId, user, state.projects, state.projectOrder, state.config, refreshBoards]
+  );
+
+  const deleteActiveBoard = useMemo(
+    () => async () => {
+      if (!supabase || !user || !activeBoardId) return;
+      const sb = supabase;
+      const currentId = activeBoardId;
+
+      const { data: boardRow, error: boardErr } = await sb
+        .from('boards')
+        .select('workspace_id')
+        .eq('id', currentId)
+        .maybeSingle();
+      if (boardErr) throw boardErr;
+
+      const workspaceId = boardRow?.workspace_id as string | undefined;
+      if (!workspaceId) throw new Error('No se encontró workspace del tablero a eliminar.');
+
+      const { data: boardRows, error: listErr } = await sb
+        .from('boards')
+        .select('id')
+        .eq('workspace_id', workspaceId)
+        .order('created_at', { ascending: true });
+      if (listErr) throw listErr;
+      if ((boardRows || []).length <= 1) {
+        throw new Error('Debes conservar al menos un tablero.');
+      }
+
+      const nextId = (boardRows || []).map((r) => r.id as string).find((id) => id !== currentId) || null;
+      const { error: deleteErr } = await sb.from('boards').delete().eq('id', currentId);
+      if (deleteErr) throw deleteErr;
+
+      await refreshBoards(workspaceId);
+      hasLoadedCloudRef.current = false;
+      if (nextId) setActiveBoardId(nextId);
+    },
+    [activeBoardId, user, refreshBoards]
+  );
+
+  const deleteBoardById = useMemo(
+    () => async (boardId: string) => {
+      if (!supabase || !user || !boardId) return;
+      const sb = supabase;
+
+      const { data: boardRow, error: boardErr } = await sb
+        .from('boards')
+        .select('workspace_id')
+        .eq('id', boardId)
+        .maybeSingle();
+      if (boardErr) throw boardErr;
+
+      const workspaceId = boardRow?.workspace_id as string | undefined;
+      if (!workspaceId) throw new Error('No se encontró workspace del tablero a eliminar.');
+
+      const { data: boardRows, error: listErr } = await sb
+        .from('boards')
+        .select('id')
+        .eq('workspace_id', workspaceId)
+        .order('created_at', { ascending: true });
+      if (listErr) throw listErr;
+      if ((boardRows || []).length <= 1) {
+        throw new Error('Debes conservar al menos un tablero.');
+      }
+
+      const nextId = (boardRows || []).map((r) => r.id as string).find((id) => id !== boardId) || null;
+      const { error: deleteErr } = await sb.from('boards').delete().eq('id', boardId);
+      if (deleteErr) throw deleteErr;
+
+      await refreshBoards(workspaceId);
+      hasLoadedCloudRef.current = false;
+      if (activeBoardId === boardId && nextId) setActiveBoardId(nextId);
+    },
+    [activeBoardId, user, refreshBoards]
+  );
+
+  const inviteMemberByEmail = useMemo(
+    () => async (email: string, role: 'editor' | 'viewer') => {
+      if (!supabase || !user || !activeBoardId) return;
+      const sb = supabase;
+      const trimmed = email.trim().toLowerCase();
+      if (!trimmed) return;
+
+      const { data: boardRow, error: boardErr } = await sb
+        .from('boards')
+        .select('workspace_id')
+        .eq('id', activeBoardId)
+        .maybeSingle();
+      if (boardErr) throw boardErr;
+      const workspaceId = boardRow?.workspace_id as string | undefined;
+      if (!workspaceId) throw new Error('No se encontró el workspace del tablero.');
+
+      const { data: profile, error: profileErr } = await sb
+        .from('profiles')
+        .select('id,email')
+        .ilike('email', trimmed)
+        .maybeSingle();
+      if (profileErr) throw profileErr;
+      if (!profile?.id) throw new Error('No se encontró usuario con ese correo.');
+
+      const { error: memberErr } = await sb.from('workspace_members').upsert(
+        {
+          workspace_id: workspaceId,
+          user_id: profile.id as string,
+          role,
+        },
+        { onConflict: 'workspace_id,user_id' }
+      );
+      if (memberErr) throw memberErr;
+    },
+    [activeBoardId, user]
   );
 
   // Persist state
@@ -543,6 +849,15 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     activeBoardId,
     selectBoard,
     createBoard,
+    renameBoardById,
+    duplicateBoardById,
+    deleteBoardById,
+    renameActiveBoard,
+    duplicateActiveBoard,
+    deleteActiveBoard,
+    saveActiveBoardNow,
+    copyBoardLink,
+    inviteMemberByEmail,
   }), [
     state,
     dispatch,
@@ -559,6 +874,15 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     activeBoardId,
     selectBoard,
     createBoard,
+    renameBoardById,
+    duplicateBoardById,
+    deleteBoardById,
+    renameActiveBoard,
+    duplicateActiveBoard,
+    deleteActiveBoard,
+    saveActiveBoardNow,
+    copyBoardLink,
+    inviteMemberByEmail,
   ]);
 
   return (
