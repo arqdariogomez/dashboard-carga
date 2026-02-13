@@ -23,6 +23,8 @@ import {
   upsertTaskColumnValue,
   deleteTaskColumnValue,
 } from '@/lib/dynamicColumnsRepository';
+import { supabase } from '@/lib/supabaseClient';
+import { addTaskComment, deleteTaskComment, listTaskComments, type TaskComment } from '@/lib/taskCommentsRepository';
 import {
   DndContext,
   closestCenter,
@@ -352,6 +354,8 @@ function SortableRow({
   dynamicValues,
   onUpdateDynamicCell,
   remoteEditingLabel,
+  onPresenceChange,
+  onOpenComments,
 }: {
   project: Project;
   onUpdate: (id: string, updates: Partial<Project>) => void;
@@ -381,6 +385,8 @@ function SortableRow({
   dynamicValues?: Record<string, DynamicCellValue>;
   onUpdateDynamicCell: (taskId: string, columnId: string, value: DynamicCellValue) => void;
   remoteEditingLabel?: string;
+  onPresenceChange: (rowId: string | null) => void;
+  onOpenComments: (taskId: string) => void;
 }) {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -472,6 +478,12 @@ function SortableRow({
           : ''
       }`}
       onClick={() => onSelectRow(project.id)}
+      onFocusCapture={() => onPresenceChange(project.id)}
+      onBlurCapture={(e) => {
+        const next = e.relatedTarget as Node | null;
+        const current = e.currentTarget as HTMLTableRowElement;
+        if (!next || !current.contains(next)) onPresenceChange(null);
+      }}
     >
             {/* Drag handle */}
       <td className="w-7 px-1 py-2 border-b border-border text-center group/handle bg-white">
@@ -511,6 +523,15 @@ function SortableRow({
                 <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={() => { onAddAbove(project.id); setRowMenuOpen(false); }}>Agregar fila arriba</button>
                 <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={() => { onAddBelow(project.id); setRowMenuOpen(false); }}>Agregar fila debajo</button>
                 <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={() => { onDuplicateRow(project.id); setRowMenuOpen(false); }}>Duplicar fila</button>
+                <button
+                  className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary"
+                  onClick={() => {
+                    onOpenComments(project.id);
+                    setRowMenuOpen(false);
+                  }}
+                >
+                  Comentarios...
+                </button>
                 <div className="relative">
                   <button
                     className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary"
@@ -689,7 +710,16 @@ function SortableRow({
       {dynamicColumns.map((col) => {
         const cellValue = dynamicValues?.[col.id] ?? null;
         return (
-          <td key={col.id} className="px-2 py-2 border-b border-border text-xs bg-white min-w-[140px]">
+          <td
+            key={col.id}
+            className="px-2 py-2 border-b border-border text-xs bg-white min-w-[140px]"
+            onFocusCapture={() => setLocalPresence({ rowId: project.id, columnId: col.id })}
+            onBlurCapture={(e) => {
+              const next = e.relatedTarget as Node | null;
+              const current = e.currentTarget as HTMLTableCellElement;
+              if (!next || !current.contains(next)) setLocalPresence({ rowId: project.id, columnId: null });
+            }}
+          >
             {col.type === 'checkbox' ? (
               <input
                 type="checkbox"
@@ -751,8 +781,9 @@ function SortableRow({
 
       {/* Row actions */}
       <td className="px-2 py-2 border-b border-border text-center w-20 bg-white">
+        <div className="flex items-center gap-1 justify-center">
         {showDeleteConfirm ? (
-          <div className="flex items-center gap-1">
+          <>
             <button
               onClick={() => onDelete(project.id)}
               className="p-1 rounded bg-accent-red text-[#B71C1C] hover:bg-red-200 transition-colors"
@@ -767,7 +798,7 @@ function SortableRow({
             >
               âœ•
             </button>
-          </div>
+          </>
         ) : (
           <button
             onClick={() => setShowDeleteConfirm(true)}
@@ -777,7 +808,7 @@ function SortableRow({
             <Trash2 size={14} />
           </button>
         )}
-
+        </div>
       </td>
     </tr>
   );
@@ -786,7 +817,7 @@ function SortableRow({
 // â”€â”€â”€ Main ProjectTable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function ProjectTable() {
-  const { state, dispatch, allBranches, activeBoardId, remoteEditingByRow, announceEditingRow } = useProject();
+  const { state, dispatch, allBranches, activeBoardId, remoteEditingByRow, remoteEditingByColumn, announceEditingPresence } = useProject();
   const { user } = useAuth();
   const [sortKey, setSortKey] = useState<SortKey | null>(null);
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -810,6 +841,13 @@ export function ProjectTable() {
   const [columnMenuOpenFor, setColumnMenuOpenFor] = useState<string | null>(null);
   const [dragColumnId, setDragColumnId] = useState<string | null>(null);
   const [overColumnId, setOverColumnId] = useState<string | null>(null);
+  const [columnTypePickerFor, setColumnTypePickerFor] = useState<string | null>(null);
+  const [columnOptionsEditorFor, setColumnOptionsEditorFor] = useState<string | null>(null);
+  const [columnOptionsDraft, setColumnOptionsDraft] = useState('');
+  const [commentsTaskId, setCommentsTaskId] = useState<string | null>(null);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [comments, setComments] = useState<TaskComment[]>([]);
+  const [commentDraft, setCommentDraft] = useState('');
   const [columnWidths, setColumnWidths] = useState<Record<ColumnKey, number>>({
     drag: 36,
     project: 300,
@@ -883,7 +921,11 @@ export function ProjectTable() {
   }, [refreshDynamicColumns]);
 
   useEffect(() => {
-    const onDocClick = () => setColumnMenuOpenFor(null);
+    const onDocClick = () => {
+      setColumnMenuOpenFor(null);
+      setColumnTypePickerFor(null);
+      setColumnOptionsEditorFor(null);
+    };
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
   }, []);
@@ -926,9 +968,10 @@ export function ProjectTable() {
     setMultiSelectMode(false);
   }, []);
 
+  const [localPresence, setLocalPresence] = useState<{ rowId: string | null; columnId: string | null }>({ rowId: null, columnId: null });
   useEffect(() => {
-    announceEditingRow(selectedRowId);
-  }, [selectedRowId, announceEditingRow]);
+    announceEditingPresence(localPresence.rowId, localPresence.columnId);
+  }, [localPresence, announceEditingPresence]);
 
   const handleToggleExpand = useCallback((id: string) => {
     dispatch({ type: 'TOGGLE_EXPANSION', payload: id });
@@ -1135,6 +1178,23 @@ export function ProjectTable() {
     await refreshDynamicColumns();
   }, [refreshDynamicColumns]);
 
+  const handleChangeDynamicColumnType = useCallback(async (columnId: string, next: DynamicColumn['type']) => {
+    if (!['text', 'number', 'date', 'select', 'tags', 'checkbox'].includes(next)) return;
+    if (!supabase) return;
+    const { error } = await supabase.from('board_columns').update({ type: next }).eq('id', columnId);
+    if (error) throw error;
+    await refreshDynamicColumns();
+  }, [refreshDynamicColumns]);
+
+  const handleSaveDynamicColumnOptions = useCallback(async (columnId: string, raw: string) => {
+    const options = raw
+      .split(',')
+      .map((x) => x.trim())
+      .filter(Boolean);
+    await updateBoardColumn(columnId, { config: { options } });
+    await refreshDynamicColumns();
+  }, [refreshDynamicColumns]);
+
   const handleDuplicateDynamicColumn = useCallback(async (columnId: string) => {
     const col = dynamicColumns.find((c) => c.id === columnId);
     if (!col || !activeBoardId || !user) return;
@@ -1195,6 +1255,53 @@ export function ProjectTable() {
     await deleteBoardColumn(columnId);
     await refreshDynamicColumns();
   }, [refreshDynamicColumns]);
+
+  const openCommentsForTask = useCallback(async (taskId: string) => {
+    if (!activeBoardId) return;
+    try {
+      const rows = await listTaskComments(activeBoardId, taskId);
+      setComments(rows);
+      setCommentsTaskId(taskId);
+      setCommentsOpen(true);
+    } catch (err) {
+      window.alert(`No se pudieron cargar comentarios: ${String(err)}`);
+    }
+  }, [activeBoardId]);
+
+  const submitComment = useCallback(async () => {
+    if (!activeBoardId || !user || !commentsTaskId || !commentDraft.trim()) return;
+    try {
+      await addTaskComment({
+        boardId: activeBoardId,
+        taskId: commentsTaskId,
+        userId: user.id,
+        body: commentDraft,
+      });
+      setCommentDraft('');
+      const rows = await listTaskComments(activeBoardId, commentsTaskId);
+      setComments(rows);
+    } catch (err) {
+      window.alert(`No se pudo guardar comentario: ${String(err)}`);
+    }
+  }, [activeBoardId, user, commentsTaskId, commentDraft]);
+
+  const handleDeleteComment = useCallback(async (commentId: string) => {
+    if (!activeBoardId || !commentsTaskId) return;
+    const ok = window.confirm('¿Seguro que deseas eliminar este comentario?');
+    if (!ok) return;
+    try {
+      await deleteTaskComment(commentId);
+      const rows = await listTaskComments(activeBoardId, commentsTaskId);
+      setComments(rows);
+    } catch (err) {
+      window.alert(`No se pudo eliminar comentario: ${String(err)}`);
+    }
+  }, [activeBoardId, commentsTaskId]);
+
+  const commentsTargetProject = useMemo(
+    () => state.projects.find((p) => p.id === commentsTaskId) ?? null,
+    [state.projects, commentsTaskId]
+  );
 
   const handleMoveToParent = useCallback((projectId: string, parentId: string | null) => {
     if (!validateNoCircles(projectId, parentId, state.projects)) return;
@@ -1802,6 +1909,11 @@ export function ProjectTable() {
                       }}
                     >
                       <span className="pr-6">{col.name}</span>
+                      {remoteEditingByColumn[col.id]?.label && (
+                        <span className="ml-1 text-[10px] text-blue-500/80">
+                          Editando: {remoteEditingByColumn[col.id].label}
+                        </span>
+                      )}
                       <button
                         draggable
                         onDragStart={() => {
@@ -1815,6 +1927,8 @@ export function ProjectTable() {
                         onClick={(e) => {
                           e.stopPropagation();
                           setColumnMenuOpenFor((v) => (v === col.id ? null : col.id));
+                          setColumnTypePickerFor(null);
+                          setColumnOptionsEditorFor(null);
                         }}
                         className="absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 inline-flex items-center justify-center rounded opacity-0 group-hover:opacity-100 hover:bg-bg-secondary cursor-grab active:cursor-grabbing"
                         title="Arrastra para reordenar o clic para opciones"
@@ -1829,6 +1943,77 @@ export function ProjectTable() {
                           <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={async () => { await handleCreateDynamicColumn(col.position); setColumnMenuOpenFor(null); }}>Agregar antes</button>
                           <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={async () => { await handleCreateDynamicColumn(col.position + 1); setColumnMenuOpenFor(null); }}>Agregar despues</button>
                           <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={async () => { await handleRenameDynamicColumn(col.id, col.name); setColumnMenuOpenFor(null); }}>Renombrar</button>
+                          <button
+                            className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary"
+                            onClick={() => {
+                              setColumnTypePickerFor((v) => (v === col.id ? null : col.id));
+                              setColumnOptionsEditorFor(null);
+                            }}
+                          >
+                            Cambiar tipo
+                          </button>
+                          {columnTypePickerFor === col.id && (
+                            <div className="mx-1 mb-1 rounded-md border border-border bg-bg-secondary/50 p-1">
+                              {(['text', 'number', 'date', 'select', 'tags', 'checkbox'] as DynamicColumn['type'][]).map((t) => (
+                                <button
+                                  key={t}
+                                  className={`mr-1 mb-1 px-2 py-1 text-[11px] rounded border ${
+                                    col.type === t ? 'bg-white border-border text-text-primary' : 'border-transparent hover:bg-white'
+                                  }`}
+                                  onClick={async () => {
+                                    await handleChangeDynamicColumnType(col.id, t);
+                                    setColumnTypePickerFor(null);
+                                    setColumnMenuOpenFor(null);
+                                  }}
+                                >
+                                  {t}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          {(col.type === 'select' || col.type === 'tags') && (
+                            <>
+                              <button
+                                className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary"
+                                onClick={() => {
+                                  const current = Array.isArray(col.config?.options) ? (col.config.options as string[]) : [];
+                                  setColumnOptionsDraft(current.join(', '));
+                                  setColumnOptionsEditorFor((v) => (v === col.id ? null : col.id));
+                                  setColumnTypePickerFor(null);
+                                }}
+                              >
+                                Editar opciones
+                              </button>
+                              {columnOptionsEditorFor === col.id && (
+                                <div className="mx-1 mb-1 rounded-md border border-border bg-bg-secondary/50 p-2">
+                                  <textarea
+                                    value={columnOptionsDraft}
+                                    onChange={(e) => setColumnOptionsDraft(e.target.value)}
+                                    className="w-full h-16 rounded border border-border px-2 py-1 text-[11px] outline-none focus:ring-2 focus:ring-blue-100"
+                                    placeholder="Opcion 1, Opcion 2, Opcion 3"
+                                  />
+                                  <div className="mt-1 flex justify-end gap-1">
+                                    <button
+                                      className="px-2 py-1 text-[11px] rounded border border-border hover:bg-white"
+                                      onClick={() => setColumnOptionsEditorFor(null)}
+                                    >
+                                      Cancelar
+                                    </button>
+                                    <button
+                                      className="px-2 py-1 text-[11px] rounded border border-border bg-white hover:bg-bg-secondary"
+                                      onClick={async () => {
+                                        await handleSaveDynamicColumnOptions(col.id, columnOptionsDraft);
+                                        setColumnOptionsEditorFor(null);
+                                        setColumnMenuOpenFor(null);
+                                      }}
+                                    >
+                                      Guardar
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          )}
                           <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={async () => { await handleDuplicateDynamicColumn(col.id); setColumnMenuOpenFor(null); }}>Duplicar</button>
                           <div className="my-1 border-t border-border" />
                           <button disabled={idx <= 0} className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary disabled:opacity-40" onClick={async () => { await handleMoveDynamicColumn(col.id, -1); setColumnMenuOpenFor(null); }}>Mover izquierda</button>
@@ -1897,6 +2082,8 @@ export function ProjectTable() {
                     dynamicValues={dynamicValues.get(p.id)}
                     onUpdateDynamicCell={handleUpsertDynamicCell}
                     remoteEditingLabel={remoteEditingByRow[p.id]?.label}
+                    onPresenceChange={(rowId) => setLocalPresence({ rowId, columnId: null })}
+                    onOpenComments={openCommentsForTask}
                     isSelected={multiSelectMode ? selectedRowIds.has(p.id) : selectedRowId === p.id}
                     onSelectRow={(id) => {
                       if (multiSelectMode) {
@@ -1959,6 +2146,8 @@ export function ProjectTable() {
                           dynamicValues={dynamicValues.get(p.id)}
                           onUpdateDynamicCell={handleUpsertDynamicCell}
                           remoteEditingLabel={remoteEditingByRow[p.id]?.label}
+                          onPresenceChange={(rowId) => setLocalPresence({ rowId, columnId: null })}
+                          onOpenComments={openCommentsForTask}
                           isSelected={multiSelectMode ? selectedRowIds.has(p.id) : selectedRowId === p.id}
                           onSelectRow={(id) => {
                             if (multiSelectMode) {
@@ -2024,6 +2213,8 @@ export function ProjectTable() {
                           dynamicValues={dynamicValues.get(p.id)}
                           onUpdateDynamicCell={handleUpsertDynamicCell}
                           remoteEditingLabel={remoteEditingByRow[p.id]?.label}
+                          onPresenceChange={(rowId) => setLocalPresence({ rowId, columnId: null })}
+                          onOpenComments={openCommentsForTask}
                           isSelected={multiSelectMode ? selectedRowIds.has(p.id) : selectedRowId === p.id}
                           onSelectRow={(id) => {
                             if (multiSelectMode) {
@@ -2071,6 +2262,87 @@ export function ProjectTable() {
         <div className="fixed bottom-4 right-4 z-50 px-4 py-3 rounded-lg text-sm shadow-lg bg-accent-green text-[#2D6A2E] flex items-center gap-2 fade-in">
           <Check size={16} />
           {exportToast}
+        </div>
+      )}
+
+      {/* Comments side panel */}
+      {commentsOpen && (
+        <div className="fixed inset-0 z-[210] pointer-events-none">
+          <div
+            className="absolute inset-0 bg-black/15 pointer-events-auto"
+            onClick={() => setCommentsOpen(false)}
+          />
+          <aside className="absolute right-0 top-0 h-full w-full max-w-md bg-white border-l border-border shadow-xl pointer-events-auto flex flex-col">
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-xs text-text-secondary">Comentarios</p>
+                <p className="text-sm font-medium truncate">{commentsTargetProject?.name || 'Elemento'}</p>
+              </div>
+              <button
+                onClick={() => setCommentsOpen(false)}
+                className="h-7 w-7 rounded-md border border-border text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
+                aria-label="Cerrar panel de comentarios"
+                title="Cerrar"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto px-4 py-3 space-y-2">
+              {comments.length === 0 ? (
+                <p className="text-xs text-text-secondary">Aún no hay comentarios.</p>
+              ) : (
+                comments.map((comment) => {
+                  const isMine = user?.id && comment.user_id === user.id;
+                  return (
+                    <div key={comment.id} className="group relative rounded-lg border border-border bg-bg-secondary/40 px-3 py-2">
+                      <button
+                        onClick={() => handleDeleteComment(comment.id)}
+                        className="absolute right-2 top-2 h-6 w-6 inline-flex items-center justify-center rounded-md text-text-secondary/50 hover:text-red-600 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="Eliminar comentario"
+                        aria-label="Eliminar comentario"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="text-[11px] font-medium text-text-primary truncate">
+                          {isMine ? 'Tú' : `Usuario ${comment.user_id.slice(0, 6)}`}
+                        </span>
+                        <span className="text-[10px] text-text-secondary whitespace-nowrap">
+                          {formatDateShort(comment.created_at)}
+                        </span>
+                      </div>
+                      <p className="text-xs text-text-primary whitespace-pre-wrap break-words">{comment.body}</p>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="px-4 py-3 border-t border-border">
+              <textarea
+                value={commentDraft}
+                onChange={(e) => setCommentDraft(e.target.value)}
+                placeholder="Escribe un comentario..."
+                className="w-full h-24 resize-none rounded-md border border-border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-100"
+              />
+              <div className="mt-2 flex items-center justify-end gap-2">
+                <button
+                  onClick={() => setCommentsOpen(false)}
+                  className="px-3 py-1.5 text-xs rounded-md border border-border text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
+                >
+                  Cerrar
+                </button>
+                <button
+                  onClick={submitComment}
+                  disabled={!commentDraft.trim()}
+                  className="px-3 py-1.5 text-xs rounded-md bg-text-primary text-white hover:bg-[#2c2a25] disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Comentar
+                </button>
+              </div>
+            </div>
+          </aside>
         </div>
       )}
       </div>

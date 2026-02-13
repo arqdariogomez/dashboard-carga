@@ -46,6 +46,28 @@ export function ExpandableCell({
   const indentPx = hierarchyLevel * 40;
   const chevronSize = hasChildren ? 19 : 16;
 
+  const applyInlineFormat = (marker: '**' | '*') => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const start = el.selectionStart ?? 0;
+    const end = el.selectionEnd ?? 0;
+    const source = editValue || '';
+    const hasSelection = end > start;
+    const selected = hasSelection ? source.slice(start, end) : source;
+    const wrapped = `${marker}${selected}${marker}`;
+    const nextValue = hasSelection
+      ? `${source.slice(0, start)}${wrapped}${source.slice(end)}`
+      : wrapped;
+    onEditChange?.(nextValue);
+
+    requestAnimationFrame(() => {
+      el.focus();
+      const cursorStart = hasSelection ? start + marker.length : marker.length;
+      const cursorEnd = hasSelection ? end + marker.length : marker.length + selected.length;
+      el.setSelectionRange(cursorStart, cursorEnd);
+    });
+  };
+
   useLayoutEffect(() => {
     if (!isEditing || !textareaRef.current) return;
     const el = textareaRef.current;
@@ -57,30 +79,62 @@ export function ExpandableCell({
     return (
       <div className="flex items-start gap-1 px-2 py-2" style={{ paddingLeft: `${indentPx}px` }}>
         <div className="flex-shrink-0 w-[24px] h-[24px]" />
-        <textarea
-          ref={textareaRef}
-          autoFocus
-          rows={1}
-          value={editValue}
-          onChange={(e) => onEditChange?.(e.target.value)}
-          onBlur={() => onFinishEdit?.(editValue)}
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') onCancelEdit?.();
-            if (e.key === 'Tab') {
-              e.preventDefault();
-              if (e.shiftKey) {
-                onOutdent?.(project.id);
-              } else {
-                onIndent?.(project.id);
+        <div className="relative flex-1">
+          <div className="absolute -top-7 left-0 z-20 flex items-center gap-1 rounded-md border border-border bg-white shadow-sm px-1 py-0.5">
+            <button
+              type="button"
+              className="h-6 w-6 inline-flex items-center justify-center rounded text-[11px] font-semibold text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
+              title="Negrita (Ctrl/Cmd+B)"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => applyInlineFormat('**')}
+            >
+              B
+            </button>
+            <button
+              type="button"
+              className="h-6 w-6 inline-flex items-center justify-center rounded text-[11px] italic font-medium text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
+              title="Cursiva (Ctrl/Cmd+I)"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => applyInlineFormat('*')}
+            >
+              I
+            </button>
+          </div>
+          <textarea
+            ref={textareaRef}
+            autoFocus
+            rows={1}
+            value={editValue}
+            onChange={(e) => onEditChange?.(e.target.value)}
+            onBlur={() => onFinishEdit?.(editValue)}
+            onKeyDown={(e) => {
+              if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+                e.preventDefault();
+                applyInlineFormat('**');
+                return;
               }
-            }
-            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') onFinishEdit?.(editValue);
-          }}
-          className={`flex-1 resize-none overflow-hidden rounded px-1 py-0.5 text-sm leading-5 whitespace-pre-wrap break-words focus:outline-none focus:ring-2 focus:ring-person-1/25 ${
-            hasChildren ? 'font-semibold text-text-primary' : 'font-medium text-text-primary'
-          }`}
-          style={{ minHeight: '24px' }}
-        />
+              if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'i') {
+                e.preventDefault();
+                applyInlineFormat('*');
+                return;
+              }
+              if (e.key === 'Escape') onCancelEdit?.();
+              if (e.key === 'Tab') {
+                e.preventDefault();
+                if (e.shiftKey) {
+                  onOutdent?.(project.id);
+                } else {
+                  onIndent?.(project.id);
+                }
+              }
+              if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') onFinishEdit?.(editValue);
+            }}
+            className={`flex-1 w-full resize-none overflow-hidden rounded px-1 py-0.5 text-sm leading-5 whitespace-pre-wrap break-words focus:outline-none focus:ring-2 focus:ring-person-1/25 ${
+              hasChildren ? 'font-semibold text-text-primary' : 'font-medium text-text-primary'
+            }`}
+            style={{ minHeight: '24px' }}
+          />
+        </div>
       </div>
     );
   }

@@ -268,7 +268,8 @@ interface ProjectContextValue {
   copyBoardLink: () => Promise<void>;
   inviteMemberByEmail: (email: string, role: 'editor' | 'viewer') => Promise<void>;
   remoteEditingByRow: Record<string, { userId: string; label: string; ts: number }>;
-  announceEditingRow: (rowId: string | null) => void;
+  remoteEditingByColumn: Record<string, { userId: string; label: string; ts: number }>;
+  announceEditingPresence: (rowId: string | null, columnId?: string | null) => void;
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -294,6 +295,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const ignoreRealtimeUntilRef = useRef<number>(0);
   const realtimeChannelRef = useRef<any>(null);
   const [remoteEditingByRow, setRemoteEditingByRow] = useState<Record<string, { userId: string; label: string; ts: number }>>({});
+  const [remoteEditingByColumn, setRemoteEditingByColumn] = useState<Record<string, { userId: string; label: string; ts: number }>>({});
 
   const state = historyState.present;
   const canUndo = historyState.past.length > 0;
@@ -441,7 +443,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     const channel = sb
       .channel(`tasks-board-${activeBoardId}`)
       .on('broadcast', { event: 'row-editing' }, ({ payload }) => {
-        const p = payload as { rowId?: string | null; userId?: string; label?: string; ts?: number } | null;
+        const p = payload as { rowId?: string | null; columnId?: string | null; userId?: string; label?: string; ts?: number } | null;
         if (!p?.userId || p.userId === user.id) return;
         setRemoteEditingByRow((prev) => {
           const next = { ...prev };
@@ -450,6 +452,20 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
           });
           if (p.rowId) {
             next[p.rowId] = {
+              userId: p.userId,
+              label: p.label || 'Usuario',
+              ts: p.ts || Date.now(),
+            };
+          }
+          return next;
+        });
+        setRemoteEditingByColumn((prev) => {
+          const next = { ...prev };
+          Object.keys(next).forEach((k) => {
+            if (next[k]?.userId === p.userId) delete next[k];
+          });
+          if (p.columnId) {
+            next[p.columnId] = {
               userId: p.userId,
               label: p.label || 'Usuario',
               ts: p.ts || Date.now(),
@@ -499,6 +515,15 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
         const next: Record<string, { userId: string; label: string; ts: number }> = {};
         Object.entries(prev).forEach(([rowId, data]) => {
           if (now - data.ts < 12000) next[rowId] = data;
+          else changed = true;
+        });
+        return changed ? next : prev;
+      });
+      setRemoteEditingByColumn((prev) => {
+        let changed = false;
+        const next: Record<string, { userId: string; label: string; ts: number }> = {};
+        Object.entries(prev).forEach(([colId, data]) => {
+          if (now - data.ts < 12000) next[colId] = data;
           else changed = true;
         });
         return changed ? next : prev;
@@ -803,8 +828,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     [activeBoardId, user]
   );
 
-  const announceEditingRow = useMemo(
-    () => (rowId: string | null) => {
+  const announceEditingPresence = useMemo(
+    () => (rowId: string | null, columnId?: string | null) => {
       const channel = realtimeChannelRef.current;
       if (!channel || !user) return;
       const label = (user.user_metadata?.full_name as string | undefined) || user.email || 'Usuario';
@@ -813,6 +838,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
         event: 'row-editing',
         payload: {
           rowId,
+          columnId: columnId || null,
           userId: user.id,
           label,
           ts: Date.now(),
@@ -925,7 +951,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     copyBoardLink,
     inviteMemberByEmail,
     remoteEditingByRow,
-    announceEditingRow,
+    remoteEditingByColumn,
+    announceEditingPresence,
   }), [
     state,
     dispatch,
@@ -952,7 +979,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     copyBoardLink,
     inviteMemberByEmail,
     remoteEditingByRow,
-    announceEditingRow,
+    remoteEditingByColumn,
+    announceEditingPresence,
   ]);
 
   return (
