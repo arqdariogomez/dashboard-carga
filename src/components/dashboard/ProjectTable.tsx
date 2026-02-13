@@ -9,7 +9,7 @@ import { exportToExcel, copyAsCSV } from '@/lib/exportUtils';
 import { ExpandableCell, useHierarchyDisplay } from '@/components/dashboard/ExpandableCell';
 import { validateNoCircles, getCollapsedMetricsSummary, getAncestors, getDescendants } from '@/lib/hierarchyEngine';
 import {
-  ArrowUpDown, Search, ChevronDown, ChevronRight, Plus, Trash2,
+  Search, ChevronDown, ChevronRight, Plus, Trash2,
   Download, ClipboardCopy, Check, GripVertical, AlertTriangle,
 } from 'lucide-react';
 import type { Project } from '@/lib/types';
@@ -839,6 +839,13 @@ export function ProjectTable() {
   const [dynamicColumns, setDynamicColumns] = useState<DynamicColumn[]>([]);
   const [dynamicValues, setDynamicValues] = useState<Map<string, Record<string, DynamicCellValue>>>(new Map());
   const [columnMenuOpenFor, setColumnMenuOpenFor] = useState<string | null>(null);
+  const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
+  const [editingColumnName, setEditingColumnName] = useState('');
+  const [fixedHeaderMenuOpenFor, setFixedHeaderMenuOpenFor] = useState<ColumnKey | null>(null);
+  const [fixedHeaderNameTooltipFor, setFixedHeaderNameTooltipFor] = useState<ColumnKey | null>(null);
+  const [moveCopyColumnId, setMoveCopyColumnId] = useState<string | null>(null);
+  const [moveCopyTargetId, setMoveCopyTargetId] = useState<string>('__end__');
+  const [moveCopyAsCopy, setMoveCopyAsCopy] = useState(false);
   const [dragColumnId, setDragColumnId] = useState<string | null>(null);
   const [overColumnId, setOverColumnId] = useState<string | null>(null);
   const [columnTypePickerFor, setColumnTypePickerFor] = useState<string | null>(null);
@@ -921,10 +928,14 @@ export function ProjectTable() {
   }, [refreshDynamicColumns]);
 
   useEffect(() => {
-    const onDocClick = () => {
+    const onDocClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target?.closest('[data-column-menu-safe]')) return;
       setColumnMenuOpenFor(null);
+      setFixedHeaderMenuOpenFor(null);
       setColumnTypePickerFor(null);
       setColumnOptionsEditorFor(null);
+      setFixedHeaderNameTooltipFor(null);
     };
     document.addEventListener('mousedown', onDocClick);
     return () => document.removeEventListener('mousedown', onDocClick);
@@ -935,14 +946,10 @@ export function ProjectTable() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const handleSort = useCallback((key: SortKey) => {
-    if (sortKey === key) {
-      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortKey(key);
-      setSortDir('asc');
-    }
-  }, [sortKey]);
+  const setSortForKey = useCallback((key: SortKey, dir: SortDir) => {
+    setSortKey(key);
+    setSortDir(dir);
+  }, []);
 
   const handleUpdate = useCallback((id: string, updates: Partial<Project>) => {
     dispatch({ type: 'UPDATE_PROJECT', payload: { id, updates } });
@@ -1171,12 +1178,27 @@ export function ProjectTable() {
     }
   }, [activeBoardId, user, dynamicColumns, refreshDynamicColumns]);
 
-  const handleRenameDynamicColumn = useCallback(async (columnId: string, currentName: string) => {
-    const name = (window.prompt('Nuevo nombre de columna', currentName) || '').trim();
-    if (!name) return;
-    await updateBoardColumn(columnId, { name });
-    await refreshDynamicColumns();
-  }, [refreshDynamicColumns]);
+  const beginEditDynamicColumnName = useCallback((columnId: string, currentName: string) => {
+    setEditingColumnId(columnId);
+    setEditingColumnName(currentName);
+  }, []);
+
+  const commitEditDynamicColumnName = useCallback(async () => {
+    if (!editingColumnId) return;
+    const name = editingColumnName.trim();
+    const original = dynamicColumns.find((c) => c.id === editingColumnId)?.name ?? '';
+    setEditingColumnId(null);
+    if (!name || name === original) {
+      setEditingColumnName('');
+      return;
+    }
+    try {
+      await updateBoardColumn(editingColumnId, { name });
+      await refreshDynamicColumns();
+    } finally {
+      setEditingColumnName('');
+    }
+  }, [editingColumnId, editingColumnName, dynamicColumns, refreshDynamicColumns]);
 
   const handleChangeDynamicColumnType = useCallback(async (columnId: string, next: DynamicColumn['type']) => {
     if (!['text', 'number', 'date', 'select', 'tags', 'checkbox'].includes(next)) return;
@@ -1214,20 +1236,6 @@ export function ProjectTable() {
     await refreshDynamicColumns();
   }, [dynamicColumns, activeBoardId, user, refreshDynamicColumns]);
 
-  const handleMoveDynamicColumn = useCallback(async (columnId: string, dir: -1 | 1) => {
-    const cols = [...dynamicColumns].sort((a, b) => a.position - b.position);
-    const idx = cols.findIndex((c) => c.id === columnId);
-    const swapIdx = idx + dir;
-    if (idx === -1 || swapIdx < 0 || swapIdx >= cols.length) return;
-    const a = cols[idx];
-    const b = cols[swapIdx];
-    await Promise.all([
-      updateBoardColumn(a.id, { position: b.position }),
-      updateBoardColumn(b.id, { position: a.position }),
-    ]);
-    await refreshDynamicColumns();
-  }, [dynamicColumns, refreshDynamicColumns]);
-
   const handleReorderDynamicColumn = useCallback(async (fromId: string, toId: string) => {
     if (fromId === toId) return;
     const cols = [...dynamicColumns].sort((a, b) => a.position - b.position);
@@ -1255,6 +1263,50 @@ export function ProjectTable() {
     await deleteBoardColumn(columnId);
     await refreshDynamicColumns();
   }, [refreshDynamicColumns]);
+
+  const handleMoveOrCopyDynamicColumn = useCallback(async () => {
+    if (!moveCopyColumnId) return;
+    const sorted = [...dynamicColumns].sort((a, b) => a.position - b.position);
+    const source = sorted.find((c) => c.id === moveCopyColumnId);
+    if (!source) return;
+
+    if (moveCopyAsCopy) {
+      let insertPos = sorted.length;
+      if (moveCopyTargetId !== '__end__') {
+        const target = sorted.find((c) => c.id === moveCopyTargetId);
+        if (target) insertPos = target.position;
+      }
+      for (const c of sorted.filter((c) => c.position >= insertPos)) {
+        await updateBoardColumn(c.id, { position: c.position + 1 });
+      }
+      await createBoardColumn({
+        boardId: activeBoardId || '',
+        key: `col_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        name: `${source.name} (copia)`,
+        type: source.type,
+        position: insertPos,
+        createdBy: user?.id || '',
+        config: source.config,
+      });
+    } else {
+      if (moveCopyTargetId === '__end__') {
+        const others = sorted.filter((c) => c.id !== source.id);
+        const reordered = [...others, source];
+        for (let i = 0; i < reordered.length; i += 1) {
+          const col = reordered[i];
+          if (col.position !== i) await updateBoardColumn(col.id, { position: i });
+        }
+      } else if (moveCopyTargetId !== source.id) {
+        await handleReorderDynamicColumn(source.id, moveCopyTargetId);
+      }
+    }
+
+    setMoveCopyColumnId(null);
+    setMoveCopyTargetId('__end__');
+    setMoveCopyAsCopy(false);
+    setColumnMenuOpenFor(null);
+    await refreshDynamicColumns();
+  }, [moveCopyColumnId, moveCopyTargetId, moveCopyAsCopy, dynamicColumns, activeBoardId, user, handleReorderDynamicColumn, refreshDynamicColumns]);
 
   const openCommentsForTask = useCallback(async (taskId: string) => {
     if (!activeBoardId) return;
@@ -1699,17 +1751,108 @@ export function ProjectTable() {
     className?: string;
     roundedLeft?: boolean;
     roundedRight?: boolean;
-  }) => (
+  }) => {
+    const isDateField = field === 'startDate' || field === 'endDate';
+    const sortAscLabel = isDateField ? 'De mas antiguo a mas reciente' : 'Orden alfabetico A-Z';
+    const sortDescLabel = isDateField ? 'De mas reciente a mas antiguo' : 'Inverso de orden alfabetico Z-A';
+    return (
     <th
-      className={`group relative bg-white px-2 py-2.5 text-left text-xs font-semibold text-text-secondary cursor-pointer hover:text-text-primary transition-colors select-none border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)] ${
+      className={`group relative bg-white px-2 py-2.5 text-left text-xs font-semibold text-text-secondary select-none border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)] ${
         roundedLeft ? 'rounded-tl-lg' : ''
       } ${roundedRight ? 'rounded-tr-lg' : ''} ${className || ''}`}
-      onClick={() => handleSort(field)}
     >
-      <span className="flex items-center gap-1">
+      <span
+        data-column-menu-safe
+        className="flex items-center gap-1 pr-5"
+        onDoubleClick={(e) => {
+          e.stopPropagation();
+          setFixedHeaderNameTooltipFor(colKey);
+          window.setTimeout(() => setFixedHeaderNameTooltipFor((v) => (v === colKey ? null : v)), 1200);
+        }}
+      >
         {label}
-        <ArrowUpDown size={12} className={sortKey === field ? 'text-text-primary' : 'opacity-30'} />
       </span>
+      {fixedHeaderNameTooltipFor === colKey && (
+        <div data-column-menu-safe className="absolute left-2 top-[calc(100%+4px)] z-[185] rounded-md border border-border bg-white px-2 py-1 text-[11px] text-text-secondary shadow-sm whitespace-nowrap">
+          Nombre no editable en columnas esenciales
+        </div>
+      )}
+      <button
+        data-column-menu-safe
+        onClick={(e) => {
+          e.stopPropagation();
+          setFixedHeaderMenuOpenFor((prev) => (prev === colKey ? null : colKey));
+          setColumnMenuOpenFor(null);
+          setColumnTypePickerFor(null);
+          setColumnOptionsEditorFor(null);
+        }}
+        className="absolute right-2 top-1/2 -translate-y-1/2 h-5 w-5 inline-flex items-center justify-center rounded opacity-0 group-hover:opacity-100 hover:bg-bg-secondary text-text-secondary"
+        title="Opciones de columna"
+      >
+        <GripVertical size={12} />
+      </button>
+      {fixedHeaderMenuOpenFor === colKey && (
+        <div
+          data-column-menu-safe
+          onClick={(e) => e.stopPropagation()}
+          className="absolute right-0 top-[calc(100%+4px)] z-[180] min-w-[210px] rounded-lg border border-border bg-white shadow-lg p-1"
+        >
+          <button
+            className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary"
+            onClick={async () => {
+              await handleCreateDynamicColumn(0);
+              setFixedHeaderMenuOpenFor(null);
+            }}
+          >
+            Agregar antes
+          </button>
+          <button
+            className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary"
+            onClick={async () => {
+              await handleCreateDynamicColumn(dynamicColumns.length);
+              setFixedHeaderMenuOpenFor(null);
+            }}
+          >
+            Agregar despues
+          </button>
+          <div className="my-1 border-t border-border" />
+          <div className="px-2.5 pt-1.5 pb-1 text-[11px] font-medium text-text-secondary">
+            Ordenar por...
+          </div>
+          <button
+            className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary"
+            onClick={() => {
+              setSortForKey(field, 'asc');
+              setFixedHeaderMenuOpenFor(null);
+            }}
+          >
+            {sortAscLabel}
+          </button>
+          <button
+            className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary"
+            onClick={() => {
+              setSortForKey(field, 'desc');
+              setFixedHeaderMenuOpenFor(null);
+            }}
+          >
+            {sortDescLabel}
+          </button>
+          <button
+            disabled={sortKey !== field}
+            className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary disabled:opacity-40"
+            onClick={() => {
+              setSortKey(null);
+              setFixedHeaderMenuOpenFor(null);
+            }}
+          >
+            Quitar orden
+          </button>
+          <div className="my-1 border-t border-border" />
+          <div className="px-2.5 py-1.5 text-[11px] text-text-secondary">
+            Columna esencial
+          </div>
+        </div>
+      )}
       <div
         onMouseDown={(e) => startColumnResize(colKey, e)}
         className="absolute right-0 top-0 h-full w-2 cursor-col-resize opacity-0 group-hover:opacity-100 transition-opacity"
@@ -1719,6 +1862,7 @@ export function ProjectTable() {
       </div>
     </th>
   );
+  };
 
   try {
     return (
@@ -1883,7 +2027,6 @@ export function ProjectTable() {
                 <SortHeader label="Prior." field="priority" colKey="priority" />
                 <SortHeader label="Tipo" field="type" colKey="type" />
                 {dynamicColumns.map((col) => {
-                  const idx = dynamicColumns.findIndex((c) => c.id === col.id);
                   return (
                     <th
                       key={col.id}
@@ -1908,13 +2051,40 @@ export function ProjectTable() {
                         if (overColumnId === col.id) setOverColumnId(null);
                       }}
                     >
-                      <span className="pr-6">{col.name}</span>
+                      <div className="pr-6">
+                        {editingColumnId === col.id ? (
+                          <input
+                            autoFocus
+                            value={editingColumnName}
+                            onChange={(e) => setEditingColumnName(e.target.value)}
+                            onClick={(e) => e.stopPropagation()}
+                            onBlur={() => { void commitEditDynamicColumnName(); }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                void commitEditDynamicColumnName();
+                              }
+                              if (e.key === 'Escape') {
+                                e.preventDefault();
+                                setEditingColumnId(null);
+                                setEditingColumnName('');
+                              }
+                            }}
+                            className="w-full bg-transparent p-0 m-0 border-0 outline-none text-xs font-semibold text-text-secondary"
+                          />
+                        ) : (
+                          <span onDoubleClick={() => beginEditDynamicColumnName(col.id, col.name)}>
+                            {col.name}
+                          </span>
+                        )}
+                      </div>
                       {remoteEditingByColumn[col.id]?.label && (
                         <span className="ml-1 text-[10px] text-blue-500/80">
                           Editando: {remoteEditingByColumn[col.id].label}
                         </span>
                       )}
                       <button
+                        data-column-menu-safe
                         draggable
                         onDragStart={() => {
                           setDragColumnId(col.id);
@@ -1927,22 +2097,23 @@ export function ProjectTable() {
                         onClick={(e) => {
                           e.stopPropagation();
                           setColumnMenuOpenFor((v) => (v === col.id ? null : col.id));
+                          setFixedHeaderMenuOpenFor(null);
                           setColumnTypePickerFor(null);
                           setColumnOptionsEditorFor(null);
                         }}
-                        className="absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 inline-flex items-center justify-center rounded opacity-0 group-hover:opacity-100 hover:bg-bg-secondary cursor-grab active:cursor-grabbing"
+                        className="absolute right-1 top-1/2 -translate-y-1/2 h-5 w-5 inline-flex items-center justify-center rounded opacity-60 group-hover:opacity-100 hover:bg-bg-secondary cursor-grab active:cursor-grabbing"
                         title="Arrastra para reordenar o clic para opciones"
                       >
                         <GripVertical size={12} />
                       </button>
                       {columnMenuOpenFor === col.id && (
                         <div
+                          data-column-menu-safe
                           onClick={(e) => e.stopPropagation()}
                           className="absolute right-0 top-[calc(100%+4px)] z-[180] min-w-[210px] rounded-lg border border-border bg-white shadow-lg p-1"
                         >
                           <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={async () => { await handleCreateDynamicColumn(col.position); setColumnMenuOpenFor(null); }}>Agregar antes</button>
                           <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={async () => { await handleCreateDynamicColumn(col.position + 1); setColumnMenuOpenFor(null); }}>Agregar despues</button>
-                          <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={async () => { await handleRenameDynamicColumn(col.id, col.name); setColumnMenuOpenFor(null); }}>Renombrar</button>
                           <button
                             className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary"
                             onClick={() => {
@@ -2015,9 +2186,17 @@ export function ProjectTable() {
                             </>
                           )}
                           <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary" onClick={async () => { await handleDuplicateDynamicColumn(col.id); setColumnMenuOpenFor(null); }}>Duplicar</button>
-                          <div className="my-1 border-t border-border" />
-                          <button disabled={idx <= 0} className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary disabled:opacity-40" onClick={async () => { await handleMoveDynamicColumn(col.id, -1); setColumnMenuOpenFor(null); }}>Mover izquierda</button>
-                          <button disabled={idx >= dynamicColumns.length - 1} className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary disabled:opacity-40" onClick={async () => { await handleMoveDynamicColumn(col.id, 1); setColumnMenuOpenFor(null); }}>Mover derecha</button>
+                          <button
+                            className="w-full text-left px-2.5 py-1.5 text-xs rounded-md hover:bg-bg-secondary"
+                            onClick={() => {
+                              setMoveCopyColumnId(col.id);
+                              setMoveCopyTargetId('__end__');
+                              setMoveCopyAsCopy(false);
+                              setColumnMenuOpenFor(null);
+                            }}
+                          >
+                            Mover / Copiar a...
+                          </button>
                           <div className="my-1 border-t border-border" />
                           <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-md text-red-600 hover:bg-red-50" onClick={async () => { await handleDeleteDynamicColumn(col.id); setColumnMenuOpenFor(null); }}>Eliminar</button>
                         </div>
@@ -2343,6 +2522,54 @@ export function ProjectTable() {
               </div>
             </div>
           </aside>
+        </div>
+      )}
+
+      {moveCopyColumnId && (
+        <div data-column-menu-safe className="fixed inset-0 z-[220] flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/20" onClick={() => setMoveCopyColumnId(null)} />
+          <div data-column-menu-safe className="relative w-full max-w-md rounded-xl border border-border bg-white shadow-xl p-4">
+            <div className="text-sm font-semibold text-text-primary mb-2">Mover / Copiar columna</div>
+            <div className="text-xs text-text-secondary mb-2">Antes de la columna:</div>
+            <select
+              value={moveCopyTargetId}
+              onChange={(e) => setMoveCopyTargetId(e.target.value)}
+              className="w-full h-9 rounded-md border border-border px-2 text-sm outline-none focus:ring-2 focus:ring-blue-100"
+            >
+              {dynamicColumns
+                .slice()
+                .sort((a, b) => a.position - b.position)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              <option value="__end__">(mover al final)</option>
+            </select>
+            <label className="mt-3 inline-flex items-center gap-2 text-sm text-text-primary">
+              <input
+                type="checkbox"
+                checked={moveCopyAsCopy}
+                onChange={(e) => setMoveCopyAsCopy(e.target.checked)}
+                className="h-4 w-4 accent-[#3B82F6]"
+              />
+              Crear una copia
+            </label>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setMoveCopyColumnId(null)}
+                className="px-3 py-1.5 text-xs rounded-md border border-border text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={async () => { await handleMoveOrCopyDynamicColumn(); }}
+                className="px-3 py-1.5 text-xs rounded-md bg-text-primary text-white hover:bg-[#2c2a25]"
+              >
+                OK
+              </button>
+            </div>
+          </div>
         </div>
       )}
       </div>
