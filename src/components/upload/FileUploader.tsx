@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from 'react';
 import { useProject } from '@/context/ProjectContext';
-import { parseExcelFile, createProjectsFromSample } from '@/lib/parseExcel';
+import { parseExcelFileWithDiagnostics, createProjectsFromSample } from '@/lib/parseExcel';
 import { SAMPLE_DATA } from '@/lib/constants';
 import { Upload, FileSpreadsheet, Loader2, CheckCircle, Sparkles } from 'lucide-react';
 import { getPersons } from '@/lib/workloadEngine';
@@ -20,14 +20,17 @@ export function FileUploader({ onFileLoaded }: FileUploaderProps) {
     setLoading(true);
     try {
       const buffer = await file.arrayBuffer();
-      const projects = parseExcelFile(buffer, state.config);
+      const { projects, diagnostics } = parseExcelFileWithDiagnostics(buffer, state.config);
       const persons = getPersons(projects);
       dispatch({ type: 'SET_PROJECTS', payload: { projects, fileName: file.name } });
-      setToast(`✓ ${projects.length} proyectos cargados, ${persons.length} personas detectadas`);
+      const invalidDatesMsg = diagnostics.invalidDateCells.length > 0
+        ? `, ${diagnostics.invalidDateCells.length} fechas invalidas descartadas`
+        : '';
+      setToast(`OK ${projects.length} proyectos cargados, ${persons.length} personas detectadas${invalidDatesMsg}`);
       if (onFileLoaded) onFileLoaded(file);
       setTimeout(() => setToast(null), 4000);
-    } catch (err) {
-      setToast('❌ Error al leer el archivo. Verifica que sea un .xlsx válido.');
+    } catch {
+      setToast('Error al leer el archivo. Verifica que sea un .xlsx valido.');
       setTimeout(() => setToast(null), 4000);
     }
     setLoading(false);
@@ -52,7 +55,7 @@ export function FileUploader({ onFileLoaded }: FileUploaderProps) {
     const projects = createProjectsFromSample(SAMPLE_DATA, state.config);
     const persons = getPersons(projects);
     dispatch({ type: 'SET_PROJECTS', payload: { projects, fileName: 'datos-ejemplo.xlsx' } });
-    setToast(`✓ ${projects.length} proyectos de ejemplo cargados, ${persons.length} personas`);
+    setToast(`OK ${projects.length} proyectos de ejemplo cargados, ${persons.length} personas`);
     setTimeout(() => setToast(null), 4000);
     setLoading(false);
   }, [state.config, dispatch]);
@@ -60,7 +63,6 @@ export function FileUploader({ onFileLoaded }: FileUploaderProps) {
   return (
     <div className="min-h-screen bg-bg-secondary flex items-center justify-center p-6">
       <div className="w-full max-w-lg">
-        {/* Logo */}
         <div className="text-center mb-8">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-text-primary text-white mb-4">
             <FileSpreadsheet size={28} />
@@ -69,7 +71,6 @@ export function FileUploader({ onFileLoaded }: FileUploaderProps) {
           <p className="text-sm text-text-secondary">Visualiza y balancea cargas de trabajo</p>
         </div>
 
-        {/* Drop zone */}
         <div
           onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
@@ -98,7 +99,7 @@ export function FileUploader({ onFileLoaded }: FileUploaderProps) {
               <Upload size={32} className="text-text-secondary" />
               <div>
                 <p className="text-sm font-medium text-text-primary">
-                  Arrastra tu archivo Excel aquí
+                  Arrastra tu archivo Excel aqui
                 </p>
                 <p className="text-xs text-text-secondary mt-1">
                   o haz clic para seleccionar (.xlsx)
@@ -108,14 +109,12 @@ export function FileUploader({ onFileLoaded }: FileUploaderProps) {
           )}
         </div>
 
-        {/* Divider */}
         <div className="flex items-center gap-3 my-5">
           <div className="flex-1 h-px bg-border" />
           <span className="text-xs text-text-secondary">o</span>
           <div className="flex-1 h-px bg-border" />
         </div>
 
-        {/* Sample data button */}
         <button
           onClick={loadSample}
           className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-border bg-white hover:bg-bg-secondary text-sm font-medium text-text-primary transition-all hover:shadow-sm"
@@ -124,14 +123,13 @@ export function FileUploader({ onFileLoaded }: FileUploaderProps) {
           Cargar datos de ejemplo
         </button>
 
-        {/* Toast */}
         {toast && (
           <div className={`mt-4 px-4 py-3 rounded-lg text-sm flex items-center gap-2 ${
-            toast.startsWith('✓')
+            toast.startsWith('OK')
               ? 'bg-accent-green text-[#2D6A2E]'
               : 'bg-accent-red text-[#B71C1C]'
           }`}>
-            {toast.startsWith('✓') && <CheckCircle size={16} />}
+            {toast.startsWith('OK') && <CheckCircle size={16} />}
             {toast}
           </div>
         )}

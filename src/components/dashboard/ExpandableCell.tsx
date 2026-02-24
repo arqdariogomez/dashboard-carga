@@ -118,7 +118,10 @@ export function ExpandableCell({
                 applyInlineFormat('*');
                 return;
               }
-              if (e.key === 'Escape') onCancelEdit?.();
+              if (e.key === 'Escape') {
+                e.preventDefault();
+                onFinishEdit?.(editValue);
+              }
               if (e.key === 'Tab') {
                 e.preventDefault();
                 if (e.shiftKey) {
@@ -141,9 +144,7 @@ export function ExpandableCell({
 
   return (
     <div
-      className={`flex items-center gap-1 px-2 py-2 group relative transition-all duration-150 rounded-sm ${
-        hasChildren ? 'bg-accent-blue/8 hover:bg-accent-blue/15' : 'hover:bg-accent-blue/8'
-      }`}
+      className="flex items-center gap-1 px-2 py-2 group relative transition-all duration-150 rounded-sm"
       style={{ paddingLeft: `${indentPx}px` }}
     >
       {/* Visual tree lines for hierarchy - connects nested items (Notion-style) */}
@@ -201,8 +202,8 @@ export function ExpandableCell({
       <span
         className={`cursor-pointer rounded px-1 py-0.5 transition-colors flex-1 text-sm ${
           hasChildren
-            ? 'font-semibold text-text-primary hover:bg-accent-blue/30'
-            : 'font-medium text-text-primary hover:bg-accent-blue/20'
+            ? 'font-semibold text-text-primary'
+            : 'font-medium text-text-primary'
         }`}
         onDoubleClick={() => onStartEdit?.()}
         title="Doble clic para editar nombre"
@@ -216,9 +217,9 @@ export function ExpandableCell({
         <div className="flex items-center gap-2 flex-shrink-0 ml-1">
           <div
             className="text-[11px] px-2.5 py-0.5 rounded-full bg-accent-blue/25 text-[#2D5F99] font-semibold border border-accent-blue/30"
-            title={`${Math.max(0, childCount - 1)} ${Math.max(0, childCount - 1) === 1 ? 'hijo directo' : 'hijos directos'}`}
+            title={`${Math.max(0, childCount)} ${Math.max(0, childCount) === 1 ? 'hijo directo' : 'hijos directos'}`}
           >
-            {Math.max(0, childCount - 1)}
+            {Math.max(0, childCount)}
           </div>
         </div>
       )}

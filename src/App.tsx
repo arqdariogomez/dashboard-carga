@@ -12,6 +12,9 @@ import { GanttTimeline } from '@/components/dashboard/GanttTimeline';
 import { PersonSummaryCards } from '@/components/dashboard/PersonSummaryCard';
 import { parseExcelFile } from '@/lib/parseExcel';
 import { getPersons } from '@/lib/workloadEngine';
+import { useAuth } from '@/context/AuthContext';
+import { UiFeedbackProvider } from '@/context/UiFeedbackContext';
+import React from 'react';
 
 // File System Access API types
 interface FileSystemFileHandle {
@@ -19,8 +22,49 @@ interface FileSystemFileHandle {
   name: string;
 }
 
+class AppErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; errorText: string }
+> {
+  constructor(props: { children: React.ReactNode }) {
+    super(props);
+    this.state = { hasError: false, errorText: '' };
+  }
+
+  static getDerivedStateFromError(error: unknown) {
+    return { hasError: true, errorText: String(error) };
+  }
+
+  componentDidCatch(error: unknown, info: React.ErrorInfo) {
+    // eslint-disable-next-line no-console
+    console.error('AppErrorBoundary:', error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="h-screen w-screen flex items-center justify-center bg-bg-secondary p-4">
+          <div className="w-full max-w-2xl rounded-xl border border-red-200 bg-red-50 p-4 text-red-800">
+            <div className="text-sm font-semibold">Error en la aplicacion</div>
+            <div className="mt-2 text-xs break-words">{this.state.errorText}</div>
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="mt-3 px-3 py-1.5 text-xs rounded-md border border-red-300 bg-white hover:bg-red-100"
+            >
+              Recargar
+            </button>
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
 function DashboardContent() {
-  const { state, dispatch } = useProject();
+  const { state, dispatch, isBoardLoading } = useProject();
+  const { loading: authLoading, isConfigured } = useAuth();
   const [lastFile, setLastFile] = useState<File | null>(null);
   const [fileHandle, setFileHandle] = useState<FileSystemFileHandle | null>(null);
   const [reloadToast, setReloadToast] = useState<string | null>(null);
@@ -143,8 +187,26 @@ function DashboardContent() {
     return () => window.removeEventListener('keydown', handler);
   }, [handleReload, state.projects.length]);
 
+  const hasBoardParam = typeof window !== 'undefined' && !!new URLSearchParams(window.location.search).get('board');
+
   const renderView = () => {
-    if (state.projects.length === 0 && !showImportWizard) {
+    if (isConfigured && authLoading && hasBoardParam) {
+      return (
+        <div className="flex-1 flex items-center justify-center bg-bg-secondary">
+          <div className="text-sm text-text-secondary">Cargando tablero...</div>
+        </div>
+      );
+    }
+
+    if (isBoardLoading) {
+      return (
+        <div className="flex-1 flex items-center justify-center bg-bg-secondary">
+          <div className="text-sm text-text-secondary">Cargando tablero...</div>
+        </div>
+      );
+    }
+
+    if (state.projects.length === 0 && !showImportWizard && !hasBoardParam) {
       return (
         <ImportWizard
           onComplete={(file) => {
@@ -221,9 +283,13 @@ function DashboardContent() {
 export function App() {
   return (
     <AuthProvider>
-      <ProjectProvider>
-        <DashboardContent />
-      </ProjectProvider>
+      <UiFeedbackProvider>
+        <AppErrorBoundary>
+          <ProjectProvider>
+            <DashboardContent />
+          </ProjectProvider>
+        </AppErrorBoundary>
+      </UiFeedbackProvider>
     </AuthProvider>
   );
 }

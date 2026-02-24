@@ -2,6 +2,7 @@
 import { computeProjectFields } from '@/lib/workloadEngine';
 import type { AppConfig } from '@/lib/types';
 import { supabase } from '@/lib/supabaseClient';
+import { normalizeBranchList } from '@/lib/branchUtils';
 
 export interface CloudTaskRow {
   id: string;
@@ -23,7 +24,9 @@ export interface CloudTaskRow {
 }
 
 function toDate(value: string | null): Date | null {
-  return value ? new Date(value) : null;
+  if (!value) return null;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 function toISODate(value: Date | null): string | null {
@@ -34,12 +37,33 @@ function toISODate(value: Date | null): string | null {
   return `${year}-${month}-${day}`;
 }
 
+function parseStoredBranch(value: string): string | string[] {
+  const clean = (value || '').trim();
+  if (!clean) return [];
+  if (clean.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(clean);
+      return normalizeBranchList(parsed);
+    } catch {
+      return [clean];
+    }
+  }
+  return [clean];
+}
+
+function encodeStoredBranch(value: Project['branch']): string {
+  const list = normalizeBranchList(value);
+  if (list.length === 0) return '';
+  if (list.length === 1) return list[0];
+  return JSON.stringify(list);
+}
+
 export function mapRowToProject(row: CloudTaskRow, config: AppConfig): Project {
   return computeProjectFields(
     {
       id: row.id,
       name: row.name,
-      branch: row.branch,
+      branch: parseStoredBranch(row.branch),
       startDate: toDate(row.start_date),
       endDate: toDate(row.end_date),
       assignees: row.assignees || [],
@@ -68,7 +92,7 @@ export function mapProjectToRow(
     parent_id: project.parentId ?? null,
     is_expanded: project.isExpanded ?? true,
     name: project.name,
-    branch: project.branch || '',
+    branch: encodeStoredBranch(project.branch),
     start_date: toISODate(project.startDate),
     end_date: toISODate(project.endDate),
     assignees: project.assignees || [],
@@ -130,7 +154,16 @@ export async function saveBoardProjects(boardId: string, projects: Project[], pr
   }
 
   if (rows.length > 0) {
-    const { error: upsertError } = await supabase.from('tasks').upsert(rows, { onConflict: 'id' });
-    if (upsertError) throw upsertError;
+    // Phase 1: upsert all rows without hierarchy links to avoid transient FK failures.
+    const rowsWithoutParent = rows.map((row) => ({ ...row, parent_id: null }));
+    const { error: upsertBaseError } = await supabase.from('tasks').upsert(rowsWithoutParent, { onConflict: 'id' });
+    if (upsertBaseError) throw upsertBaseError;
+
+    // Phase 2: apply hierarchy links once every referenced parent row exists.
+    const rowsWithParent = rows.filter((row) => !!row.parent_id);
+    if (rowsWithParent.length > 0) {
+      const { error: upsertHierarchyError } = await supabase.from('tasks').upsert(rowsWithParent, { onConflict: 'id' });
+      if (upsertHierarchyError) throw upsertHierarchyError;
+    }
   }
 }

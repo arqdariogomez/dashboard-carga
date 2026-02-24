@@ -15,6 +15,7 @@ export const DEFAULT_CONFIG: AppConfig = {
   weekendDays: [0, 6],
   holidays: MEXICO_HOLIDAYS,
   loadMode: 'calculated',
+  dateFormat: 'dd/MM/yy',
 };
 
 export const DEFAULT_FILTERS: FilterState = {
@@ -29,7 +30,7 @@ export const DEFAULT_STATE: AppState = {
   projects: [],
   config: DEFAULT_CONFIG,
   filters: DEFAULT_FILTERS,
-  activeView: 'grid',
+  activeView: 'table',
   granularity: 'week',
   sidebarCollapsed: false,
   fileName: null,

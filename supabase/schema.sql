@@ -60,17 +60,32 @@ create table if not exists public.tasks (
     on delete set null
 );
 
+create table if not exists public.board_versions (
+  id uuid primary key default gen_random_uuid(),
+  board_id uuid not null references public.boards(id) on delete cascade,
+  created_by uuid null references auth.users(id) on delete set null,
+  created_by_label text not null default 'Usuario',
+  reason text not null default 'Snapshot',
+  project_count int not null default 0,
+  changed_projects int not null default 0,
+  fingerprint text not null default '',
+  payload jsonb not null,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists idx_workspace_members_user on public.workspace_members(user_id);
 create index if not exists idx_boards_workspace on public.boards(workspace_id);
 create index if not exists idx_tasks_board on public.tasks(board_id);
 create index if not exists idx_tasks_parent on public.tasks(parent_id);
 create index if not exists idx_tasks_board_sort on public.tasks(board_id, sort_order);
+create index if not exists idx_board_versions_board_created on public.board_versions(board_id, created_at desc);
 
 alter table public.profiles enable row level security;
 alter table public.workspaces enable row level security;
 alter table public.workspace_members enable row level security;
 alter table public.boards enable row level security;
 alter table public.tasks enable row level security;
+alter table public.board_versions enable row level security;
 
 drop policy if exists "profiles_select_own" on public.profiles;
 create policy "profiles_select_own" on public.profiles
@@ -287,5 +302,29 @@ using (
     from public.boards b
     join public.workspace_members wm on wm.workspace_id = b.workspace_id
     where b.id = tasks.board_id and wm.user_id = auth.uid() and wm.role in ('owner', 'editor')
+  )
+);
+
+drop policy if exists "board_versions_select_member" on public.board_versions;
+create policy "board_versions_select_member" on public.board_versions
+for select to authenticated
+using (
+  exists (
+    select 1
+    from public.boards b
+    join public.workspace_members wm on wm.workspace_id = b.workspace_id
+    where b.id = board_versions.board_id and wm.user_id = auth.uid()
+  )
+);
+
+drop policy if exists "board_versions_insert_owner_editor" on public.board_versions;
+create policy "board_versions_insert_owner_editor" on public.board_versions
+for insert to authenticated
+with check (
+  exists (
+    select 1
+    from public.boards b
+    join public.workspace_members wm on wm.workspace_id = b.workspace_id
+    where b.id = board_versions.board_id and wm.user_id = auth.uid() and wm.role in ('owner', 'editor')
   )
 );

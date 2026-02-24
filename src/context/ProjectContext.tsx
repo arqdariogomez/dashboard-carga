@@ -1,15 +1,39 @@
-import React, { createContext, useContext, useReducer, useEffect, useMemo, useRef, useState } from 'react';
+import React, { createContext, useContext, useReducer, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import type { AppState, AppAction, Project } from '@/lib/types';
 import { DEFAULT_STATE, DEFAULT_FILTERS } from '@/lib/constants';
 import { calculateDailyWorkload, applyFilters, getPersons, getBranches, getActiveProjects, computeProjectFields } from '@/lib/workloadEngine';
 import { getDateRange } from '@/lib/dateUtils';
+import { setDateDisplayFormat } from '@/lib/dateUtils';
 import { validateNoCircles, aggregateFromChildren, calculateHierarchyLevel } from '@/lib/hierarchyEngine';
 import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 import { loadBoardProjects, saveBoardProjects } from '@/lib/cloudBoardRepository';
 import { ensureDefaultWorkspaceBoard } from '@/lib/cloudBootstrap';
+import { insertBoardVersionRow, loadBoardVersionRows } from '@/lib/versionHistoryRepository';
 import { useAuth } from '@/context/AuthContext';
 
 const MAX_HISTORY = 50;
+const LAST_BOARD_ID_KEY = 'workload-dashboard-last-board-id';
+const VERSION_HISTORY_PREFIX = 'workload-dashboard-version-history-v1';
+const MAX_VERSION_HISTORY = 60;
+
+type VersionSnapshotStored = {
+  id: string;
+  createdAt: string;
+  createdById: string | null;
+  createdByLabel: string;
+  reason: string;
+  projectCount: number;
+  changedProjects: number;
+  fingerprint: string;
+  projects: Project[];
+  projectOrder: string[];
+};
+
+function safeDate(value: unknown): Date | null {
+  if (!value) return null;
+  const d = new Date(String(value));
+  return Number.isNaN(d.getTime()) ? null : d;
+}
 
 interface HistoryState {
   past: AppState[];
@@ -214,24 +238,27 @@ function loadPersistedState(): Partial<AppState> {
     const saved = localStorage.getItem('workload-dashboard-state');
     if (saved) {
       const parsed = JSON.parse(saved);
+      const parsedRangeStart = safeDate(parsed?.filters?.dateRange?.start);
+      const parsedRangeEnd = safeDate(parsed?.filters?.dateRange?.end);
+      const parsedDateRange =
+        parsedRangeStart && parsedRangeEnd && parsedRangeStart <= parsedRangeEnd
+          ? { start: parsedRangeStart, end: parsedRangeEnd }
+          : null;
       return {
-        activeView: parsed.activeView || 'grid',
+        activeView: parsed.activeView === 'grid' ? 'table' : (parsed.activeView || 'table'),
         granularity: parsed.granularity || 'week',
         sidebarCollapsed: parsed.sidebarCollapsed || false,
         filters: parsed.filters ? {
           ...DEFAULT_FILTERS,
           ...parsed.filters,
-          dateRange: parsed.filters.dateRange ? {
-            start: new Date(parsed.filters.dateRange.start),
-            end: new Date(parsed.filters.dateRange.end),
-          } : null,
+          dateRange: parsedDateRange,
         } : DEFAULT_FILTERS,
         config: parsed.config ? {
           ...DEFAULT_STATE.config,
           ...parsed.config,
           holidays: parsed.config.holidays?.map((h: { date: string; reason: string; recurring: boolean }) => ({
             ...h,
-            date: new Date(h.date),
+            date: safeDate(h.date) || new Date(),
           })) || DEFAULT_STATE.config.holidays,
         } : DEFAULT_STATE.config,
       };
@@ -240,6 +267,112 @@ function loadPersistedState(): Partial<AppState> {
     // ignore
   }
   return {};
+}
+
+function loadLastBoardId(): string | null {
+  try {
+    const saved = localStorage.getItem(LAST_BOARD_ID_KEY);
+    if (saved && typeof saved === 'string') return saved;
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+function persistLastBoardId(boardId: string | null): void {
+  if (!boardId) return;
+  try {
+    localStorage.setItem(LAST_BOARD_ID_KEY, boardId);
+  } catch {
+    // ignore
+  }
+}
+
+function serializeProjectForFingerprint(project: Project): string {
+  const startDate = project.startDate instanceof Date && !Number.isNaN(project.startDate.getTime())
+    ? project.startDate.toISOString().slice(0, 10)
+    : null;
+  const endDate = project.endDate instanceof Date && !Number.isNaN(project.endDate.getTime())
+    ? project.endDate.toISOString().slice(0, 10)
+    : null;
+  return JSON.stringify({
+    id: project.id,
+    name: project.name,
+    branch: project.branch,
+    startDate,
+    endDate,
+    assignees: project.assignees,
+    daysRequired: project.daysRequired,
+    priority: project.priority,
+    type: project.type,
+    blockedBy: project.blockedBy,
+    blocksTo: project.blocksTo,
+    reportedLoad: project.reportedLoad,
+    parentId: project.parentId || null,
+    isExpanded: !!project.isExpanded,
+  });
+}
+
+function buildSnapshotFingerprint(projects: Project[], projectOrder: string[]): string {
+  const byId = new Map(projects.map((p) => [p.id, serializeProjectForFingerprint(p)]));
+  return projectOrder.map((id) => `${id}:${byId.get(id) || ''}`).join('|');
+}
+
+function estimateChangedProjects(
+  previous: VersionSnapshotStored | null,
+  currentProjects: Project[],
+  currentOrder: string[]
+): number {
+  if (!previous) return currentProjects.length;
+  const prevById = new Map(previous.projects.map((p) => [p.id, serializeProjectForFingerprint(p)]));
+  const currById = new Map(currentProjects.map((p) => [p.id, serializeProjectForFingerprint(p)]));
+  const allIds = new Set([...prevById.keys(), ...currById.keys()]);
+  let changed = 0;
+  allIds.forEach((id) => {
+    if ((prevById.get(id) || '') !== (currById.get(id) || '')) changed += 1;
+  });
+  if ((previous.projectOrder || []).join('|') !== currentOrder.join('|')) changed += 1;
+  return changed;
+}
+
+function restoreProjectDates(project: Project): Project {
+  const toDate = (value: unknown): Date | null => {
+    if (!value) return null;
+    const date = new Date(String(value));
+    return Number.isNaN(date.getTime()) ? null : date;
+  };
+  return {
+    ...project,
+    startDate: toDate(project.startDate),
+    endDate: toDate(project.endDate),
+  };
+}
+
+function loadVersionHistory(boardId: string | null): VersionSnapshotStored[] {
+  if (!boardId) return [];
+  try {
+    const raw = localStorage.getItem(`${VERSION_HISTORY_PREFIX}-${boardId}`);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((x) => x && typeof x.id === 'string' && Array.isArray(x.projects) && Array.isArray(x.projectOrder))
+      .map((x) => ({
+        ...x,
+        projects: (x.projects as Project[]).map(restoreProjectDates),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+function persistVersionHistory(boardId: string | null, entries: VersionSnapshotStored[]): void {
+  if (!boardId) return;
+  try {
+    localStorage.setItem(`${VERSION_HISTORY_PREFIX}-${boardId}`, JSON.stringify(entries.slice(0, MAX_VERSION_HISTORY)));
+  } catch {
+    // ignore
+  }
 }
 
 interface ProjectContextValue {
@@ -254,8 +387,34 @@ interface ProjectContextValue {
   canUndo: boolean;
   canRedo: boolean;
   undoCount: number;
+  versionHistory: {
+    id: string;
+    createdAt: string;
+    createdById: string | null;
+    createdByLabel: string;
+    reason: string;
+    projectCount: number;
+    changedProjects: number;
+  }[];
+  createVersionSnapshot: (reason?: string) => void;
+  restoreVersionSnapshot: (versionId: string) => Promise<boolean>;
+  getVersionSnapshot: (versionId: string) => {
+    id: string;
+    createdAt: string;
+    createdByLabel: string;
+    reason: string;
+    projectCount: number;
+    changedProjects: number;
+    projects: Project[];
+    projectOrder: string[];
+  } | null;
+  versionHistorySync: 'cloud' | 'local';
   boards: { id: string; name: string }[];
   activeBoardId: string | null;
+  activeBoardRole: 'owner' | 'editor' | 'viewer' | null;
+  canEditActiveBoard: boolean;
+  isBoardLoading: boolean;
+  realtimeSyncState: 'disabled' | 'live' | 'degraded';
   selectBoard: (boardId: string) => void;
   createBoard: (name: string) => Promise<void>;
   renameBoardById: (boardId: string, name: string) => Promise<void>;
@@ -275,10 +434,11 @@ interface ProjectContextValue {
 const ProjectContext = createContext<ProjectContextValue | null>(null);
 
 export function ProjectProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const persisted = loadPersistedState();
   const initialState: AppState = { ...DEFAULT_STATE, ...persisted };
   const envBoardId = import.meta.env.VITE_SUPABASE_BOARD_ID;
+  const lastBoardId = typeof window !== 'undefined' ? loadLastBoardId() : null;
   const urlBoardId = typeof window !== 'undefined'
     ? new URLSearchParams(window.location.search).get('board')
     : null;
@@ -288,19 +448,139 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     present: initialState,
     future: [],
   });
-  const [activeBoardId, setActiveBoardId] = useState<string | null>(urlBoardId || envBoardId || null);
+  const [activeBoardId, setActiveBoardId] = useState<string | null>(urlBoardId || envBoardId || lastBoardId || null);
   const hasLoadedCloudRef = useRef(false);
+  const [isBoardLoading, setIsBoardLoading] = useState(() => isSupabaseConfigured && !!(urlBoardId || envBoardId));
   const [boards, setBoards] = useState<{ id: string; name: string }[]>([]);
+  const [activeBoardRole, setActiveBoardRole] = useState<'owner' | 'editor' | 'viewer' | null>(null);
+  const [realtimeSyncState, setRealtimeSyncState] = useState<'disabled' | 'live' | 'degraded'>('disabled');
   const saveTimerRef = useRef<number | null>(null);
+  const realtimeReloadTimerRef = useRef<number | null>(null);
+  const realtimeRequestSeqRef = useRef(0);
+  const realtimeAppliedSeqRef = useRef(0);
   const ignoreRealtimeUntilRef = useRef<number>(0);
   const realtimeChannelRef = useRef<any>(null);
   const [remoteEditingByRow, setRemoteEditingByRow] = useState<Record<string, { userId: string; label: string; ts: number }>>({});
   const [remoteEditingByColumn, setRemoteEditingByColumn] = useState<Record<string, { userId: string; label: string; ts: number }>>({});
+  const [versionHistory, setVersionHistory] = useState<VersionSnapshotStored[]>([]);
+  const [versionHistorySync, setVersionHistorySync] = useState<'cloud' | 'local'>('local');
+  const lastAutoSnapshotAtRef = useRef<number>(0);
+  const hasUnsavedChangesRef = useRef<boolean>(false);
+  const localRevisionRef = useRef<number>(0);
+  const lastSyncedRevisionRef = useRef<number>(0);
 
   const state = historyState.present;
   const canUndo = historyState.past.length > 0;
   const canRedo = historyState.future.length > 0;
   const undoCount = historyState.past.length;
+  const canEditActiveBoard = !isSupabaseConfigured || !user || activeBoardRole !== 'viewer';
+  const versionHistoryUi = useMemo(
+    () => versionHistory.map((v) => ({
+      id: v.id,
+      createdAt: v.createdAt,
+      createdById: v.createdById,
+      createdByLabel: v.createdByLabel,
+      reason: v.reason,
+      projectCount: v.projectCount,
+      changedProjects: v.changedProjects,
+    })),
+    [versionHistory]
+  );
+
+  useEffect(() => {
+    hasUnsavedChangesRef.current = state.hasUnsavedChanges;
+  }, [state.hasUnsavedChanges]);
+
+  const guardedDispatch = useCallback<React.Dispatch<AppAction | { type: 'UNDO' } | { type: 'REDO' }>>(
+    (action) => {
+      const mutatingActionTypes = new Set([
+        'UPDATE_PROJECT',
+        'ADD_PROJECT',
+        'DELETE_PROJECT',
+        'REORDER_PROJECTS',
+        'UPDATE_HIERARCHY',
+        'TOGGLE_EXPANSION',
+      ]);
+      if ('type' in action && mutatingActionTypes.has(action.type) && !canEditActiveBoard) return;
+      if ('type' in action && mutatingActionTypes.has(action.type)) {
+        localRevisionRef.current += 1;
+      }
+      dispatch(action);
+    },
+    [canEditActiveBoard]
+  );
+
+  const createVersionSnapshot = useCallback((reason = 'Snapshot manual') => {
+    if (!activeBoardId) return;
+    const fingerprint = buildSnapshotFingerprint(state.projects, state.projectOrder);
+    setVersionHistory((prev) => {
+      const latest = prev[0] || null;
+      if (latest?.fingerprint === fingerprint) return prev;
+      const entry: VersionSnapshotStored = {
+        id: crypto.randomUUID(),
+        createdAt: new Date().toISOString(),
+        createdById: user?.id || null,
+        createdByLabel: (user?.user_metadata?.full_name as string | undefined) || user?.email || 'Local',
+        reason,
+        projectCount: state.projects.length,
+        changedProjects: estimateChangedProjects(latest, state.projects, state.projectOrder),
+        fingerprint,
+        projects: state.projects.map((p) => ({ ...p })),
+        projectOrder: [...state.projectOrder],
+      };
+      const next = [entry, ...prev].slice(0, MAX_VERSION_HISTORY);
+      persistVersionHistory(activeBoardId, next);
+      if (isSupabaseConfigured && supabase && user) {
+        void insertBoardVersionRow({
+          boardId: activeBoardId,
+          createdBy: user.id,
+          createdByLabel: entry.createdByLabel,
+          reason: entry.reason,
+          projectCount: entry.projectCount,
+          changedProjects: entry.changedProjects,
+          fingerprint: entry.fingerprint,
+          payload: {
+            projects: entry.projects,
+            projectOrder: entry.projectOrder,
+          },
+        }).catch(() => {
+          // ignore remote version persistence errors; local history still works
+          setVersionHistorySync('local');
+        });
+      }
+      return next;
+    });
+  }, [activeBoardId, state.projects, state.projectOrder, user]);
+
+  const restoreVersionSnapshot = useCallback(async (versionId: string): Promise<boolean> => {
+    if (!canEditActiveBoard) return false;
+    const target = versionHistory.find((v) => v.id === versionId);
+    if (!target) return false;
+    dispatch({
+      type: 'SET_PROJECTS',
+      payload: {
+        projects: target.projects.map((p) => restoreProjectDates({ ...p })),
+        fileName: `Version: ${target.reason}`,
+      },
+    });
+    dispatch({ type: 'REORDER_PROJECTS', payload: [...target.projectOrder] });
+    return true;
+  }, [canEditActiveBoard, versionHistory]);
+
+  const getVersionSnapshot = useCallback((versionId: string) => {
+    const target = versionHistory.find((v) => v.id === versionId);
+    if (!target) return null;
+    return {
+      id: target.id,
+      createdAt: target.createdAt,
+      createdByLabel: target.createdByLabel,
+      reason: target.reason,
+      projectCount: target.projectCount,
+      changedProjects: target.changedProjects,
+      projects: target.projects.map((p) => restoreProjectDates({ ...p })),
+      projectOrder: [...target.projectOrder],
+    };
+  }, [versionHistory]);
 
   useEffect(() => {
     if (!activeBoardId || typeof window === 'undefined') return;
@@ -309,6 +589,95 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     url.searchParams.set('board', activeBoardId);
     window.history.replaceState({}, '', url.toString());
   }, [activeBoardId]);
+
+  useEffect(() => {
+    setDateDisplayFormat(state.config.dateFormat);
+  }, [state.config.dateFormat]);
+
+  useEffect(() => {
+    persistLastBoardId(activeBoardId);
+  }, [activeBoardId]);
+
+  useEffect(() => {
+    const local = loadVersionHistory(activeBoardId);
+    setVersionHistory(local);
+    setVersionHistorySync('local');
+    if (!activeBoardId || !isSupabaseConfigured || !supabase || !user) return;
+    let cancelled = false;
+    void loadBoardVersionRows(activeBoardId)
+      .then((rows) => {
+        if (cancelled || rows.length === 0) return;
+        const mapped: VersionSnapshotStored[] = rows.map((row) => {
+          const payload = (row.payload || {}) as { projects?: Project[]; projectOrder?: string[] };
+          return {
+            id: row.id,
+            createdAt: row.created_at,
+            createdById: row.created_by,
+            createdByLabel: row.created_by_label || 'Usuario',
+            reason: row.reason || 'Snapshot',
+            projectCount: Number(row.project_count || 0),
+            changedProjects: Number(row.changed_projects || 0),
+            fingerprint: row.fingerprint || '',
+            projects: (payload.projects || []).map((p) => restoreProjectDates(p)),
+            projectOrder: Array.isArray(payload.projectOrder) ? payload.projectOrder : [],
+          };
+        });
+        setVersionHistory(mapped);
+        persistVersionHistory(activeBoardId, mapped);
+        setVersionHistorySync('cloud');
+      })
+      .catch(() => {
+        // ignore; local history remains available
+        setVersionHistorySync('local');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBoardId, user]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !user || !activeBoardId) {
+      setActiveBoardRole(null);
+      return;
+    }
+    const sb = supabase;
+    let cancelled = false;
+    const run = async () => {
+      const { data: boardRow, error: boardErr } = await sb
+        .from('boards')
+        .select('workspace_id,created_by')
+        .eq('id', activeBoardId)
+        .maybeSingle();
+      if (cancelled) return;
+      if (boardErr) {
+        setActiveBoardRole(null);
+        return;
+      }
+      const workspaceId = boardRow?.workspace_id as string | undefined;
+      const createdBy = boardRow?.created_by as string | undefined;
+      if (createdBy && createdBy === user.id) {
+        setActiveBoardRole('owner');
+        return;
+      }
+      if (!workspaceId) {
+        setActiveBoardRole(null);
+        return;
+      }
+      const { data: membership } = await sb
+        .from('workspace_members')
+        .select('role')
+        .eq('workspace_id', workspaceId)
+        .eq('user_id', user.id)
+        .maybeSingle();
+      if (cancelled) return;
+      const role = membership?.role as 'owner' | 'editor' | 'viewer' | undefined;
+      setActiveBoardRole(role || null);
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBoardId, user]);
 
   const refreshBoards = useMemo(
     () => async (workspaceIdHint?: string) => {
@@ -345,9 +714,23 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 
   // Initial cloud load (optional): only when Supabase is configured, board id exists, and user is authenticated.
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase || !user || !activeBoardId) return;
+    if (!isSupabaseConfigured || !supabase || !activeBoardId) {
+      setIsBoardLoading(false);
+      return;
+    }
+    if (authLoading) {
+      setIsBoardLoading(true);
+      return;
+    }
+    if (!user) {
+      setIsBoardLoading(false);
+      return;
+    }
 
     let cancelled = false;
+    setIsBoardLoading(true);
+    localRevisionRef.current = 0;
+    lastSyncedRevisionRef.current = 0;
     const run = async () => {
       try {
         const cloud = await loadBoardProjects(activeBoardId, state.config);
@@ -358,10 +741,12 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
         });
         dispatch({ type: 'REORDER_PROJECTS', payload: cloud.projectOrder });
         dispatch({ type: 'MARK_SAVED' });
+        lastSyncedRevisionRef.current = localRevisionRef.current;
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn('Cloud load skipped/failed:', err);
       } finally {
+        if (!cancelled) setIsBoardLoading(false);
         hasLoadedCloudRef.current = true;
       }
     };
@@ -370,11 +755,11 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [activeBoardId, user, state.config]);
+  }, [activeBoardId, user, authLoading, state.config]);
 
   // Resolve default board and refresh board list after login.
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase || !user) return;
+    if (!isSupabaseConfigured || !supabase || authLoading || !user) return;
     const sb = supabase;
     let cancelled = false;
     const run = async () => {
@@ -399,20 +784,26 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [user, activeBoardId, refreshBoards]);
+  }, [user, authLoading, activeBoardId, refreshBoards]);
 
   // Keep an active board selected whenever board list is available.
   useEffect(() => {
     if (boards.length === 0) return;
     if (!activeBoardId || !boards.some((b) => b.id === activeBoardId)) {
+      const persistedBoardId = loadLastBoardId();
+      const nextBoardId = (persistedBoardId && boards.some((b) => b.id === persistedBoardId))
+        ? persistedBoardId
+        : boards[0].id;
       hasLoadedCloudRef.current = false;
-      setActiveBoardId(boards[0].id);
+      setIsBoardLoading(true);
+      setActiveBoardId(nextBoardId);
     }
   }, [boards, activeBoardId]);
 
   // Autosave to cloud when project data changes.
   useEffect(() => {
     if (!isSupabaseConfigured || !supabase || !activeBoardId || !user) return;
+    if (!canEditActiveBoard) return;
     if (!hasLoadedCloudRef.current || !state.hasUnsavedChanges) return;
 
     if (saveTimerRef.current) {
@@ -423,7 +814,12 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       try {
         ignoreRealtimeUntilRef.current = Date.now() + 2000;
         await saveBoardProjects(activeBoardId, state.projects, state.projectOrder);
+        if (Date.now() - lastAutoSnapshotAtRef.current > 90_000) {
+          createVersionSnapshot('Auto-guardado');
+          lastAutoSnapshotAtRef.current = Date.now();
+        }
         dispatch({ type: 'MARK_SAVED' });
+        lastSyncedRevisionRef.current = localRevisionRef.current;
       } catch (err) {
         // eslint-disable-next-line no-console
         console.warn('Cloud save failed:', err);
@@ -433,26 +829,66 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     return () => {
       if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current);
     };
-  }, [activeBoardId, user, state.projects, state.projectOrder, state.hasUnsavedChanges]);
+  }, [activeBoardId, user, canEditActiveBoard, state.projects, state.projectOrder, state.hasUnsavedChanges, createVersionSnapshot]);
 
   // Realtime sync: refresh board when tasks change from other tabs/users.
+  const syncBoardFromCloud = useMemo(
+    () => async () => {
+      if (!isSupabaseConfigured || !supabase || !activeBoardId || !user) return;
+      if (Date.now() < ignoreRealtimeUntilRef.current) return;
+      // Never pull remote snapshots over local in-progress edits.
+      if (hasUnsavedChangesRef.current) return;
+      // If local revision has not been acknowledged by a successful save yet, skip remote apply.
+      if (localRevisionRef.current !== lastSyncedRevisionRef.current) return;
+      const requestSeq = ++realtimeRequestSeqRef.current;
+      try {
+        const cloud = await loadBoardProjects(activeBoardId, state.config);
+        if (requestSeq < realtimeAppliedSeqRef.current) return;
+        realtimeAppliedSeqRef.current = requestSeq;
+        dispatch({
+          type: 'SET_PROJECTS',
+          payload: { projects: cloud.projects, fileName: 'Supabase' },
+        });
+        dispatch({ type: 'REORDER_PROJECTS', payload: cloud.projectOrder });
+        dispatch({ type: 'MARK_SAVED' });
+        lastSyncedRevisionRef.current = localRevisionRef.current;
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('Cloud sync failed:', err);
+      }
+    },
+    [activeBoardId, user, state.config]
+  );
+
   useEffect(() => {
-    if (!isSupabaseConfigured || !supabase || !activeBoardId || !user) return;
+    if (!isSupabaseConfigured || !supabase || !activeBoardId || !user) {
+      setRealtimeSyncState('disabled');
+      return;
+    }
     const sb = supabase;
+    setRealtimeSyncState('degraded');
+
+    const scheduleRealtimeReload = () => {
+      if (realtimeReloadTimerRef.current) window.clearTimeout(realtimeReloadTimerRef.current);
+      realtimeReloadTimerRef.current = window.setTimeout(() => {
+        void syncBoardFromCloud();
+      }, 120);
+    };
 
     const channel = sb
       .channel(`tasks-board-${activeBoardId}`)
       .on('broadcast', { event: 'row-editing' }, ({ payload }) => {
         const p = payload as { rowId?: string | null; columnId?: string | null; userId?: string; label?: string; ts?: number } | null;
-        if (!p?.userId || p.userId === user.id) return;
+        const remoteUserId = p?.userId;
+        if (!remoteUserId || remoteUserId === user.id) return;
         setRemoteEditingByRow((prev) => {
           const next = { ...prev };
           Object.keys(next).forEach((k) => {
-            if (next[k]?.userId === p.userId) delete next[k];
+            if (next[k]?.userId === remoteUserId) delete next[k];
           });
           if (p.rowId) {
             next[p.rowId] = {
-              userId: p.userId,
+              userId: remoteUserId,
               label: p.label || 'Usuario',
               ts: p.ts || Date.now(),
             };
@@ -462,11 +898,11 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
         setRemoteEditingByColumn((prev) => {
           const next = { ...prev };
           Object.keys(next).forEach((k) => {
-            if (next[k]?.userId === p.userId) delete next[k];
+            if (next[k]?.userId === remoteUserId) delete next[k];
           });
           if (p.columnId) {
             next[p.columnId] = {
-              userId: p.userId,
+              userId: remoteUserId,
               label: p.label || 'Usuario',
               ts: p.ts || Date.now(),
             };
@@ -482,30 +918,25 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
           table: 'tasks',
           filter: `board_id=eq.${activeBoardId}`,
         },
-        async () => {
-          if (Date.now() < ignoreRealtimeUntilRef.current) return;
-          try {
-            const cloud = await loadBoardProjects(activeBoardId, state.config);
-            dispatch({
-              type: 'SET_PROJECTS',
-              payload: { projects: cloud.projects, fileName: 'Supabase' },
-            });
-            dispatch({ type: 'REORDER_PROJECTS', payload: cloud.projectOrder });
-            dispatch({ type: 'MARK_SAVED' });
-          } catch (err) {
-            // eslint-disable-next-line no-console
-            console.warn('Realtime sync failed:', err);
-          }
-        }
+        async () => { scheduleRealtimeReload(); }
       )
-      .subscribe();
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') setRealtimeSyncState('live');
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          setRealtimeSyncState('degraded');
+        }
+      });
     realtimeChannelRef.current = channel;
 
     return () => {
+      if (realtimeReloadTimerRef.current) {
+        window.clearTimeout(realtimeReloadTimerRef.current);
+        realtimeReloadTimerRef.current = null;
+      }
       if (realtimeChannelRef.current === channel) realtimeChannelRef.current = null;
       sb.removeChannel(channel);
     };
-  }, [activeBoardId, user, state.config]);
+  }, [activeBoardId, user, syncBoardFromCloud]);
 
   useEffect(() => {
     const id = window.setInterval(() => {
@@ -532,10 +963,29 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     return () => window.clearInterval(id);
   }, []);
 
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !activeBoardId || !user) return;
+    const onFocus = async () => {
+      await syncBoardFromCloud();
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [activeBoardId, user, syncBoardFromCloud]);
+
+  useEffect(() => {
+    if (!isSupabaseConfigured || !supabase || !activeBoardId || !user) return;
+    if (realtimeSyncState === 'live') return;
+    const id = window.setInterval(() => {
+      void syncBoardFromCloud();
+    }, 12000);
+    return () => window.clearInterval(id);
+  }, [activeBoardId, user, realtimeSyncState, syncBoardFromCloud]);
+
   const selectBoard = useMemo(
     () => (boardId: string) => {
       if (!boardId || boardId === activeBoardId) return;
       hasLoadedCloudRef.current = false;
+      setIsBoardLoading(true);
       setActiveBoardId(boardId);
     },
     [activeBoardId]
@@ -544,6 +994,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const createBoard = useMemo(
     () => async (name: string) => {
       if (!supabase || !user) return;
+      if (!canEditActiveBoard) throw new Error('No tienes permisos de edición en este tablero.');
       const sb = supabase;
       const trimmed = name.trim();
       if (!trimmed) return;
@@ -594,7 +1045,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       setActiveBoardId(created.id);
       await refreshBoards(workspaceId);
     },
-    [activeBoardId, boards, user, refreshBoards, state.projects, state.projectOrder]
+    [activeBoardId, boards, user, canEditActiveBoard, refreshBoards, state.projects, state.projectOrder]
   );
 
   const copyBoardLink = useMemo(
@@ -610,16 +1061,20 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const saveActiveBoardNow = useMemo(
     () => async () => {
       if (!supabase || !user || !activeBoardId) return;
+      if (!canEditActiveBoard) throw new Error('No tienes permisos de edición en este tablero.');
       ignoreRealtimeUntilRef.current = Date.now() + 2000;
       await saveBoardProjects(activeBoardId, state.projects, state.projectOrder);
+      createVersionSnapshot('Guardado manual');
       dispatch({ type: 'MARK_SAVED' });
+      lastSyncedRevisionRef.current = localRevisionRef.current;
     },
-    [activeBoardId, user, state.projects, state.projectOrder]
+    [activeBoardId, user, canEditActiveBoard, state.projects, state.projectOrder, createVersionSnapshot]
   );
 
   const renameActiveBoard = useMemo(
     () => async (name: string) => {
       if (!supabase || !user || !activeBoardId) return;
+      if (!canEditActiveBoard) throw new Error('No tienes permisos de edición en este tablero.');
       const sb = supabase;
       const trimmed = name.trim();
       if (!trimmed) return;
@@ -629,12 +1084,13 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 
       setBoards((prev) => prev.map((b) => (b.id === activeBoardId ? { ...b, name: trimmed } : b)));
     },
-    [activeBoardId, user]
+    [activeBoardId, user, canEditActiveBoard]
   );
 
   const renameBoardById = useMemo(
     () => async (boardId: string, name: string) => {
       if (!supabase || !user || !boardId) return;
+      if (!canEditActiveBoard) throw new Error('No tienes permisos de edición en este tablero.');
       const sb = supabase;
       const trimmed = name.trim();
       if (!trimmed) return;
@@ -643,12 +1099,13 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error;
       setBoards((prev) => prev.map((b) => (b.id === boardId ? { ...b, name: trimmed } : b)));
     },
-    [user]
+    [user, canEditActiveBoard]
   );
 
   const duplicateActiveBoard = useMemo(
     () => async (name?: string) => {
       if (!supabase || !user || !activeBoardId) return;
+      if (!canEditActiveBoard) throw new Error('No tienes permisos de edición en este tablero.');
       const sb = supabase;
       const source = boards.find((b) => b.id === activeBoardId);
 
@@ -678,12 +1135,13 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       hasLoadedCloudRef.current = false;
       setActiveBoardId(newBoardId);
     },
-    [activeBoardId, boards, user, state.projects, state.projectOrder, refreshBoards]
+    [activeBoardId, boards, user, canEditActiveBoard, state.projects, state.projectOrder, refreshBoards]
   );
 
   const duplicateBoardById = useMemo(
     () => async (boardId: string, name?: string) => {
       if (!supabase || !user || !boardId) return;
+      if (!canEditActiveBoard) throw new Error('No tienes permisos de edición en este tablero.');
       const sb = supabase;
 
       const { data: sourceBoard, error: sourceErr } = await sb
@@ -715,12 +1173,13 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       hasLoadedCloudRef.current = false;
       setActiveBoardId(newBoardId);
     },
-    [activeBoardId, user, state.projects, state.projectOrder, state.config, refreshBoards]
+    [activeBoardId, user, canEditActiveBoard, state.projects, state.projectOrder, state.config, refreshBoards]
   );
 
   const deleteActiveBoard = useMemo(
     () => async () => {
       if (!supabase || !user || !activeBoardId) return;
+      if (!canEditActiveBoard) throw new Error('No tienes permisos de edición en este tablero.');
       const sb = supabase;
       const currentId = activeBoardId;
 
@@ -752,12 +1211,13 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       hasLoadedCloudRef.current = false;
       if (nextId) setActiveBoardId(nextId);
     },
-    [activeBoardId, user, refreshBoards]
+    [activeBoardId, user, canEditActiveBoard, refreshBoards]
   );
 
   const deleteBoardById = useMemo(
     () => async (boardId: string) => {
       if (!supabase || !user || !boardId) return;
+      if (!canEditActiveBoard) throw new Error('No tienes permisos de edición en este tablero.');
       const sb = supabase;
 
       const { data: boardRow, error: boardErr } = await sb
@@ -788,12 +1248,13 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       hasLoadedCloudRef.current = false;
       if (activeBoardId === boardId && nextId) setActiveBoardId(nextId);
     },
-    [activeBoardId, user, refreshBoards]
+    [activeBoardId, user, canEditActiveBoard, refreshBoards]
   );
 
   const inviteMemberByEmail = useMemo(
     () => async (email: string, role: 'editor' | 'viewer') => {
       if (!supabase || !user || !activeBoardId) return;
+      if (!canEditActiveBoard) throw new Error('No tienes permisos de edición en este tablero.');
       const sb = supabase;
       const trimmed = email.trim().toLowerCase();
       if (!trimmed) return;
@@ -825,7 +1286,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       );
       if (memberErr) throw memberErr;
     },
-    [activeBoardId, user]
+    [activeBoardId, user, canEditActiveBoard]
   );
 
   const announceEditingPresence = useMemo(
@@ -927,7 +1388,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo(() => ({
     state,
-    dispatch,
+    dispatch: guardedDispatch,
     filteredProjects,
     orderedFilteredProjects,
     allPersons,
@@ -937,8 +1398,17 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     canUndo,
     canRedo,
     undoCount,
+    versionHistory: versionHistoryUi,
+    createVersionSnapshot,
+    restoreVersionSnapshot,
+    getVersionSnapshot,
+    versionHistorySync,
     boards,
     activeBoardId,
+    activeBoardRole,
+    canEditActiveBoard,
+    isBoardLoading,
+    realtimeSyncState,
     selectBoard,
     createBoard,
     renameBoardById,
@@ -955,7 +1425,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     announceEditingPresence,
   }), [
     state,
-    dispatch,
+    guardedDispatch,
     filteredProjects,
     orderedFilteredProjects,
     allPersons,
@@ -965,8 +1435,17 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     canUndo,
     canRedo,
     undoCount,
+    versionHistoryUi,
+    createVersionSnapshot,
+    restoreVersionSnapshot,
+    getVersionSnapshot,
+    versionHistorySync,
     boards,
     activeBoardId,
+    activeBoardRole,
+    canEditActiveBoard,
+    isBoardLoading,
+    realtimeSyncState,
     selectBoard,
     createBoard,
     renameBoardById,

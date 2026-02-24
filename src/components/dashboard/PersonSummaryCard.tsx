@@ -1,11 +1,14 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useProject } from '@/context/ProjectContext';
+import { useAuth } from '@/context/AuthContext';
 import { getPersons, getPersonSummary } from '@/lib/workloadEngine';
 import { buildHierarchy, isParent, aggregateFromChildren } from '@/lib/hierarchyEngine';
 import { LoadBubble } from '@/components/shared/LoadBubble';
 import { PERSON_COLORS, getLoadColor } from '@/lib/constants';
-import { formatDateShort, format } from '@/lib/dateUtils';
+import { formatDateShort, format, isValidDateValue } from '@/lib/dateUtils';
+import { loadPersonProfiles, normalizePersonKey } from '@/lib/personProfiles';
 import { Briefcase, TrendingUp, Zap, Calendar, Users } from 'lucide-react';
+import { listBoardColumns, listTaskColumnValues } from '@/lib/dynamicColumnsRepository';
 import {
   ResponsiveContainer,
   AreaChart,
@@ -14,7 +17,10 @@ import {
 } from 'recharts';
 
 export function PersonSummaryCards() {
-  const { state, filteredProjects, workloadData } = useProject();
+  const { state, filteredProjects, workloadData, activeBoardId } = useProject();
+  const { user } = useAuth();
+  const [progressByTaskId, setProgressByTaskId] = useState<Map<string, number>>(new Map());
+  const [personProfiles, setPersonProfiles] = useState<Record<string, { avatarUrl?: string }>>({});
 
   const persons = useMemo(() => {
     const ps = getPersons(filteredProjects);
@@ -27,6 +33,52 @@ export function PersonSummaryCards() {
       return getPersonSummary(person, filteredProjects, wl, state.config);
     });
   }, [persons, filteredProjects, workloadData, state.config]);
+
+  useEffect(() => {
+    if (!activeBoardId || !user) {
+      setProgressByTaskId(new Map());
+      return;
+    }
+    let cancelled = false;
+    const run = async () => {
+      try {
+        const [columns, values] = await Promise.all([
+          listBoardColumns(activeBoardId),
+          listTaskColumnValues(activeBoardId),
+        ]);
+        if (cancelled) return;
+
+        const progressColumnIds = new Set(
+          columns
+            .filter((c) => c.type === 'number' && c.config?.display === 'progress')
+            .map((c) => c.id)
+        );
+
+        const next = new Map<string, number>();
+        values.forEach((rowValues, taskId) => {
+          const vals = Array.from(progressColumnIds)
+            .map((colId) => rowValues[colId])
+            .map((v) => (typeof v === 'number' ? v : Number(v)))
+            .filter((v) => Number.isFinite(v))
+            .map((v) => Math.max(0, Math.min(100, v)));
+          if (vals.length === 0) return;
+          const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+          next.set(taskId, Math.round(avg));
+        });
+        setProgressByTaskId(next);
+      } catch {
+        if (!cancelled) setProgressByTaskId(new Map());
+      }
+    };
+    void run();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBoardId, user]);
+
+  useEffect(() => {
+    setPersonProfiles(loadPersonProfiles(activeBoardId));
+  }, [activeBoardId, state.lastUpdated]);
 
   if (summaries.length === 0) {
     return (
@@ -47,7 +99,7 @@ export function PersonSummaryCards() {
           const wl = workloadData.get(summary.person) || [];
           const sparkData = wl.slice(0, 60).map((w) => ({
             load: Math.round(w.totalLoad * 100),
-            date: format(w.date, 'dd/MM'),
+            date: isValidDateValue(w.date) ? format(w.date, 'dd/MM') : 'Fecha inválida',
           }));
           const color = PERSON_COLORS[idx % PERSON_COLORS.length];
           const initials = summary.person
@@ -55,13 +107,26 @@ export function PersonSummaryCards() {
             .map(w => w.charAt(0).toUpperCase())
             .slice(0, 2)
             .join('');
+          const avatarUrl = personProfiles[normalizePersonKey(summary.person)]?.avatarUrl;
 
           const avgLoadColor = getLoadColor(summary.avgLoad);
           const peakLoadColor = getLoadColor(summary.peakLoad);
+          const personProgressValues = filteredProjects
+            .filter((p) => p.assignees.includes(summary.person))
+            .map((p) => progressByTaskId.get(p.id))
+            .filter((v): v is number => typeof v === 'number');
+          const avgProgress = personProgressValues.length > 0
+            ? Math.round(personProgressValues.reduce((a, b) => a + b, 0) / personProgressValues.length)
+            : null;
 
           // Person's projects with their load
           const personProjects = filteredProjects
-            .filter(p => p.assignees.includes(summary.person) && p.startDate && p.endDate)
+            .filter(
+              (p) =>
+                p.assignees.includes(summary.person) &&
+                isValidDateValue(p.startDate) &&
+                isValidDateValue(p.endDate),
+            )
             .sort((a, b) => (a.startDate!.getTime() - b.startDate!.getTime()));
 
           // Build hierarchical roots and flatten respecting `isExpanded` state
@@ -90,16 +155,27 @@ export function PersonSummaryCards() {
             >
               {/* Header with avatar */}
               <div className="px-5 pt-5 pb-3 flex items-center gap-3">
-                <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-base shadow-sm flex-shrink-0"
-                  style={{ backgroundColor: color }}
-                >
-                  {initials}
-                </div>
+                {avatarUrl ? (
+                  <img
+                    src={avatarUrl}
+                    alt={summary.person}
+                    className="w-12 h-12 rounded-full object-cover border border-border shadow-sm flex-shrink-0"
+                  />
+                ) : (
+                  <div
+                    className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-base shadow-sm flex-shrink-0"
+                    style={{ backgroundColor: color }}
+                  >
+                    {initials}
+                  </div>
+                )}
                 <div className="min-w-0 flex-1">
                   <h3 className="text-base font-semibold text-text-primary truncate">{summary.person}</h3>
                   <p className="text-xs text-text-secondary mt-0.5">
                     {summary.activeProjects} activo{summary.activeProjects !== 1 ? 's' : ''} de {summary.totalProjects} proyecto{summary.totalProjects !== 1 ? 's' : ''}
+                  </p>
+                  <p className="text-[11px] text-text-secondary mt-0.5">
+                    Avance prom.: {avgProgress === null ? '—' : `${avgProgress}%`}
                   </p>
                 </div>
               </div>
@@ -158,7 +234,7 @@ export function PersonSummaryCards() {
               {summary.peakDate && (
                 <div className="mx-5 mb-3 text-[11px] text-text-secondary flex items-center gap-1 bg-bg-secondary px-2.5 py-1.5 rounded-md">
                   <Calendar size={11} />
-                  Pico máximo: {formatDateShort(summary.peakDate)}
+                  Pico máximo: {isValidDateValue(summary.peakDate) ? formatDateShort(summary.peakDate) : 'Fecha inválida'}
                 </div>
               )}
 
@@ -237,10 +313,10 @@ export function PersonSummaryCards() {
 
                           <div className="flex justify-between mt-0.5">
                             <span className="text-[9px] text-text-secondary tabular-nums">
-                              {p.startDate ? formatDateShort(p.startDate) : ''}
+                              {isValidDateValue(p.startDate) ? formatDateShort(p.startDate) : 'Fecha inválida'}
                             </span>
                             <span className="text-[9px] text-text-secondary tabular-nums">
-                              {p.endDate ? formatDateShort(p.endDate) : ''}
+                              {isValidDateValue(p.endDate) ? formatDateShort(p.endDate) : 'Fecha inválida'}
                             </span>
                           </div>
                         </div>

@@ -14,6 +14,22 @@ import {
 import { es } from 'date-fns/locale';
 import type { AppConfig, NonWorkingDay } from './types';
 
+export type DateDisplayFormat = AppConfig['dateFormat'];
+
+export const DATE_FORMAT_OPTIONS: { value: DateDisplayFormat; label: string }[] = [
+  { value: 'dd/MM/yy', label: '15/02/26' },
+  { value: 'MM/dd/yy', label: '02/15/26' },
+  { value: 'dd MMM yyyy', label: '15 Feb 2026' },
+  { value: 'MMM dd, yyyy', label: 'Feb 15, 2026' },
+  { value: 'yyyy-MM-dd', label: '2026-02-15' },
+];
+
+let currentDateDisplayFormat: DateDisplayFormat = 'dd/MM/yy';
+
+export function setDateDisplayFormat(formatValue: DateDisplayFormat): void {
+  currentDateDisplayFormat = formatValue;
+}
+
 export function isHoliday(date: Date, holidays: NonWorkingDay[]): boolean {
   return holidays.some((h) => {
     if (h.recurring) {
@@ -43,8 +59,8 @@ export function countWorkingDays(start: Date, end: Date, config: AppConfig): num
 export function getDateRange(projects: { startDate: Date | null; endDate: Date | null }[]): { start: Date; end: Date } | null {
   const validDates: Date[] = [];
   projects.forEach((p) => {
-    if (p.startDate) validDates.push(p.startDate);
-    if (p.endDate) validDates.push(p.endDate);
+    if (p.startDate && !Number.isNaN(p.startDate.getTime())) validDates.push(p.startDate);
+    if (p.endDate && !Number.isNaN(p.endDate.getTime())) validDates.push(p.endDate);
   });
   if (validDates.length === 0) return null;
   const sorted = validDates.sort((a, b) => a.getTime() - b.getTime());
@@ -86,11 +102,15 @@ export function getMonthRanges(start: Date, end: Date): { start: Date; end: Date
 }
 
 export function formatDateShort(date: Date): string {
-  return format(date, 'dd/MM/yy');
+  return format(date, currentDateDisplayFormat, { locale: es });
 }
 
 export function formatDateFull(date: Date): string {
   return format(date, "dd 'de' MMMM, yyyy", { locale: es });
+}
+
+export function isValidDateValue(date: unknown): date is Date {
+  return date instanceof Date && !Number.isNaN(date.getTime());
 }
 
 export { format, differenceInCalendarDays, isSameDay, eachDayOfInterval, addDays, startOfWeek, endOfWeek, startOfMonth, endOfMonth, isWeekend, getDay };

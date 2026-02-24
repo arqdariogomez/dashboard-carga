@@ -6,6 +6,8 @@ export interface TaskComment {
   task_id: string;
   user_id: string;
   body: string;
+  author_label?: string | null;
+  author_avatar_url?: string | null;
   created_at: string;
 }
 
@@ -13,7 +15,7 @@ export async function listTaskComments(boardId: string, taskId: string): Promise
   if (!supabase) throw new Error('Supabase no esta configurado');
   const { data, error } = await supabase
     .from('task_comments')
-    .select('id,board_id,task_id,user_id,body,created_at')
+    .select('id,board_id,task_id,user_id,body,author_label,author_avatar_url,created_at')
     .eq('board_id', boardId)
     .eq('task_id', taskId)
     .order('created_at', { ascending: false });
@@ -26,6 +28,8 @@ export async function addTaskComment(input: {
   taskId: string;
   userId: string;
   body: string;
+  authorLabel?: string;
+  authorAvatarUrl?: string | null;
 }): Promise<void> {
   if (!supabase) throw new Error('Supabase no esta configurado');
   const text = input.body.trim();
@@ -35,6 +39,8 @@ export async function addTaskComment(input: {
     task_id: input.taskId,
     user_id: input.userId,
     body: text,
+    author_label: input.authorLabel || null,
+    author_avatar_url: input.authorAvatarUrl || null,
   });
   if (error) throw error;
 }

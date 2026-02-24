@@ -6,9 +6,10 @@ import { Step2_ColumnMapping } from './steps/Step2_ColumnMapping';
 import { Step3_DataPreview } from './steps/Step3_DataPreview';
 import { Step4_ImportComplete } from './steps/Step4_ImportComplete';
 import type { ColumnMapping } from './helpers/columnDetector';
-import { transformToProjects, saveMappingConfig } from './helpers/dataTransformer';
+import { transformToProjectsWithDiagnostics, saveMappingConfig } from './helpers/dataTransformer';
 import { detectHierarchyChanges } from '@/lib/hierarchyEngine';
 import { useProject } from '@/context/ProjectContext';
+import { useUiFeedback } from '@/context/UiFeedbackContext';
 import { createProjectsFromSample } from '@/lib/parseExcel';
 import { SAMPLE_DATA } from '@/lib/constants';
 import type { Project } from '@/lib/types';
@@ -28,6 +29,7 @@ const STEPS = [
 
 export function ImportWizard({ onComplete, onClose, isModal = false }: ImportWizardProps) {
   const { state, dispatch } = useProject();
+  const { confirm, toast } = useUiFeedback();
   const [currentStep, setCurrentStep] = useState(1);
   const [sheetData, setSheetData] = useState<ParsedSheetData | null>(null);
   const [mappings, setMappings] = useState<ColumnMapping[]>([]);
@@ -54,14 +56,14 @@ export function ImportWizard({ onComplete, onClose, isModal = false }: ImportWiz
   }, []);
 
   // Step 2: Quick import (high confidence, skip step 3)
-  const handleQuickImport = useCallback((newMappings: ColumnMapping[]) => {
+  const handleQuickImport = useCallback(async (newMappings: ColumnMapping[]) => {
     if (!sheetData) return;
     
     setMappings(newMappings);
     
     // detect hierarchy using name column mapping
     const nameMap = newMappings.find(m => m.field === 'name')?.excelColumn;
-    const projects = transformToProjects(sheetData.rows, {
+    const { projects, diagnostics } = transformToProjectsWithDiagnostics(sheetData.rows, {
       mappings: newMappings,
       config: state.config,
       detectHierarchy: true,
@@ -87,24 +89,27 @@ export function ImportWizard({ onComplete, onClose, isModal = false }: ImportWiz
       const msg = changes.length === 1
         ? `Cambio detectado en jerarquía: ${changes[0].projectPath} cambiará de grupo. ¿Proceder?`
         : `Se detectaron cambios en jerarquía para varios elementos. Al importar se reemplazarán los grupos. ¿Proceder?`;
-      if (!window.confirm(msg)) {
+      if (!(await confirm({ title: 'Cambios de jerarquia detectados', message: msg, confirmText: 'Proceder' }))) {
         return;
       }
     }
 
     dispatch({ type: 'SET_PROJECTS', payload: { projects, fileName: sheetData.fileName } });
+    if (diagnostics.invalidDateCells.length > 0) {
+      toast('info', `Importación completada: ${diagnostics.invalidDateCells.length} celdas con fecha inválida se descartaron.`);
+    }
     
     setImportedProjects(projects);
     setImportedFileName(sheetData.fileName);
     setCurrentStep(4);
-  }, [sheetData, state.config, dispatch]);
+  }, [sheetData, state.config, dispatch, confirm, toast]);
 
   // Step 3: Validation complete, do import
-  const handleStep3Complete = useCallback((skipRows: number[]) => {
+  const handleStep3Complete = useCallback(async (skipRows: number[]) => {
     if (!sheetData) return;
 
     const nameMap = mappings.find(m => m.field === 'name')?.excelColumn;
-    const projects = transformToProjects(sheetData.rows, {
+    const { projects, diagnostics } = transformToProjectsWithDiagnostics(sheetData.rows, {
       mappings,
       config: state.config,
       skipGroupRows: skipRows,
@@ -130,17 +135,20 @@ export function ImportWizard({ onComplete, onClose, isModal = false }: ImportWiz
       const msg = changes.length === 1
         ? `Cambio detectado en jerarquía: ${changes[0].projectPath} cambiará de grupo. ¿Proceder?`
         : `Se detectaron cambios en jerarquía para varios elementos. Al importar se reemplazarán los grupos. ¿Proceder?`;
-      if (!window.confirm(msg)) {
+      if (!(await confirm({ title: 'Cambios de jerarquia detectados', message: msg, confirmText: 'Proceder' }))) {
         return;
       }
     }
 
     dispatch({ type: 'SET_PROJECTS', payload: { projects, fileName: sheetData.fileName } });
+    if (diagnostics.invalidDateCells.length > 0) {
+      toast('info', `Importación completada: ${diagnostics.invalidDateCells.length} celdas con fecha inválida se descartaron.`);
+    }
 
     setImportedProjects(projects);
     setImportedFileName(sheetData.fileName);
     setCurrentStep(4);
-  }, [sheetData, mappings, state.config, dispatch]);
+  }, [sheetData, mappings, state.config, dispatch, confirm, toast]);
 
   // Step 4: Finish
   const handleFinish = useCallback(() => {

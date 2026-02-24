@@ -1,6 +1,7 @@
 import type { Project, PersonWorkload, ProjectLoad, AppConfig, FilterState, Granularity } from './types';
 import { getWorkingDays, countWorkingDays, isSameDay, getWeekRanges, getMonthRanges } from './dateUtils';
 import { getDescendants, isParent, getAncestors } from './hierarchyEngine';
+import { normalizeBranchList, branchMatches } from './branchUtils';
 
 export function computeProjectFields(project: Omit<Project, 'assignedDays' | 'balanceDays' | 'dailyLoad' | 'totalHours'>, config: AppConfig, allProjects?: Project[]): Project {
   let assignedDays = 0;
@@ -72,13 +73,21 @@ export function computeProjectFields(project: Omit<Project, 'assignedDays' | 'ba
 }
 
 export function getActiveProjects(projects: Project[]): Project[] {
-  return projects.filter((p) => p.startDate && p.endDate && p.assignees.length > 0);
+  return projects.filter((p) => {
+    const assignees = Array.isArray((p as { assignees?: unknown }).assignees)
+      ? ((p as { assignees: string[] }).assignees)
+      : [];
+    return Boolean(p.startDate && p.endDate && assignees.length > 0);
+  });
 }
 
 export function getPersons(projects: Project[]): string[] {
   const persons = new Set<string>();
   projects.forEach((p) => {
-    p.assignees.forEach((assignee) => {
+    const assignees = Array.isArray((p as { assignees?: unknown }).assignees)
+      ? ((p as { assignees: string[] }).assignees)
+      : [];
+    assignees.forEach((assignee) => {
       persons.add(assignee);
     });
   });
@@ -88,7 +97,7 @@ export function getPersons(projects: Project[]): string[] {
 export function getBranches(projects: Project[]): string[] {
   const branches = new Set<string>();
   projects.forEach((p) => {
-    if (p.branch) branches.add(p.branch);
+    normalizeBranchList(p.branch).forEach((b) => branches.add(b));
   });
   return Array.from(branches).sort();
 }
@@ -100,7 +109,7 @@ export function applyFilters(projects: Project[], filters: FilterState, config: 
       const hasMatchingPerson = p.assignees.some(assignee => filters.persons.includes(assignee));
       if (!hasMatchingPerson) return false;
     }
-    if (filters.branches.length > 0 && !filters.branches.includes(p.branch)) return false;
+    if (!branchMatches(p.branch, filters.branches)) return false;
     if (filters.types.length > 0 && !filters.types.includes(p.type)) return false;
     if (filters.showOnlyActive && p.type === 'En radar') return false;
     if (filters.dateRange && p.startDate && p.endDate) {

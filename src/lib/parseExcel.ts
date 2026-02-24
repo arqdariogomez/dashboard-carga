@@ -1,6 +1,25 @@
 import * as XLSX from 'xlsx';
 import type { Project, AppConfig } from './types';
 import { computeProjectFields } from './workloadEngine';
+import { normalizeBranchList } from './branchUtils';
+export interface ImportDiagnostics {
+  invalidDateCells: Array<{ rowIndex: number; field: 'startDate' | 'endDate'; rawValue: unknown }>;
+}
+
+function buildStrictDate(year: number, month1Based: number, day: number): Date | null {
+  if (!Number.isInteger(year) || !Number.isInteger(month1Based) || !Number.isInteger(day)) return null;
+  if (month1Based < 1 || month1Based > 12 || day < 1 || day > 31) return null;
+  const d = new Date(year, month1Based - 1, day);
+  if (
+    Number.isNaN(d.getTime()) ||
+    d.getFullYear() !== year ||
+    d.getMonth() !== month1Based - 1 ||
+    d.getDate() !== day
+  ) {
+    return null;
+  }
+  return d;
+}
 
 function normalizeHeader(header: string): string {
   return header
@@ -50,10 +69,10 @@ const HEADER_MAP: Record<string, string> = {
 
 function parseExcelDate(value: unknown): Date | null {
   if (!value) return null;
-  if (value instanceof Date) return value;
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value;
   if (typeof value === 'number') {
     const date = XLSX.SSF.parse_date_code(value);
-    if (date) return new Date(date.y, date.m - 1, date.d);
+    if (date) return buildStrictDate(date.y, date.m, date.d);
     return null;
   }
   if (typeof value === 'string') {
@@ -61,10 +80,10 @@ function parseExcelDate(value: unknown): Date | null {
     const parts = value.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/);
     if (parts) {
       const day = parseInt(parts[1]);
-      const month = parseInt(parts[2]) - 1;
+      const month = parseInt(parts[2]);
       let year = parseInt(parts[3]);
       if (year < 100) year += 2000;
-      return new Date(year, month, day);
+      return buildStrictDate(year, month, day);
     }
     const d = new Date(value);
     if (!isNaN(d.getTime())) return d;
@@ -128,11 +147,53 @@ function extractCellText(value: unknown): string | null {
 }
 
 export function parseExcelFile(buffer: ArrayBuffer, config: AppConfig): Project[] {
+  return parseExcelFileWithDiagnostics(buffer, config).projects;
+}
+
+export function parseExcelFileWithDiagnostics(
+  buffer: ArrayBuffer,
+  config: AppConfig
+): { projects: Project[]; diagnostics: ImportDiagnostics } {
   const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
   const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rawData = XLSX.utils.sheet_to_json<Record<string, unknown>>(firstSheet, { defval: null });
+  const matrix = XLSX.utils.sheet_to_json<unknown[]>(firstSheet, { header: 1, defval: null });
+  if (!matrix || matrix.length === 0) return { projects: [], diagnostics: { invalidDateCells: [] } };
 
-  if (rawData.length === 0) return [];
+  const scanLimit = Math.min(8, matrix.length);
+  let bestHeaderRow = 0;
+  let bestScore = -1;
+  for (let i = 0; i < scanLimit; i += 1) {
+    const row = matrix[i] || [];
+    const normalizedCells = row.map((v) => normalizeHeader(String(v || '')));
+    let score = 0;
+    let hasName = false;
+    normalizedCells.forEach((cell) => {
+      if (HEADER_MAP[cell]) {
+        score += 1;
+        if (HEADER_MAP[cell] === 'name') hasName = true;
+      }
+    });
+    if (hasName) score += 2;
+    if (score > bestScore) {
+      bestScore = score;
+      bestHeaderRow = i;
+    }
+  }
+
+  const headerRow = (matrix[bestHeaderRow] || []).map((v) => String(v || '').trim());
+  const dataRows = matrix.slice(bestHeaderRow + 1);
+  const rawData = dataRows
+    .map((row) => {
+      const obj: Record<string, unknown> = {};
+      headerRow.forEach((h, idx) => {
+        if (!h) return;
+        obj[h] = row[idx] ?? null;
+      });
+      return obj;
+    })
+    .filter((rowObj) => Object.values(rowObj).some((v) => v !== null && String(v).trim() !== ''));
+
+  if (rawData.length === 0) return { projects: [], diagnostics: { invalidDateCells: [] } };
 
   // Map headers
   const firstRow = rawData[0];
@@ -145,6 +206,7 @@ export function parseExcelFile(buffer: ArrayBuffer, config: AppConfig): Project[
     }
   });
 
+  const invalidDateCells: ImportDiagnostics['invalidDateCells'] = [];
   const projects: Project[] = rawData.map((row, index) => {
     const mapped: Record<string, unknown> = {};
     Object.entries(row).forEach(([key, value]) => {
@@ -155,12 +217,23 @@ export function parseExcelFile(buffer: ArrayBuffer, config: AppConfig): Project[
       }
     });
 
+    const rawStartDate = mapped.startDate;
+    const rawEndDate = mapped.endDate;
+    const parsedStartDate = parseExcelDate(rawStartDate);
+    const parsedEndDate = parseExcelDate(rawEndDate);
+    if (rawStartDate !== null && rawStartDate !== undefined && String(rawStartDate).trim() !== '' && !parsedStartDate) {
+      invalidDateCells.push({ rowIndex: index, field: 'startDate', rawValue: rawStartDate });
+    }
+    if (rawEndDate !== null && rawEndDate !== undefined && String(rawEndDate).trim() !== '' && !parsedEndDate) {
+      invalidDateCells.push({ rowIndex: index, field: 'endDate', rawValue: rawEndDate });
+    }
+
     const rawProject = {
       id: `proj-${index}-${Date.now()}`,
       name: String(mapped.name || '').trim(),
-      branch: String(mapped.branch || '').trim(),
-      startDate: parseExcelDate(mapped.startDate),
-      endDate: parseExcelDate(mapped.endDate),
+      branch: normalizeBranchList(String(mapped.branch || '').split(/[;,|/]+/).map((x) => x.trim())),
+      startDate: parsedStartDate,
+      endDate: parsedEndDate,
       assignee: mapped.assignee ? String(mapped.assignee).trim() : null,
       daysRequired: Number(mapped.daysRequired) || 0,
       priority: parsePriority(mapped.priority),
@@ -173,7 +246,7 @@ export function parseExcelFile(buffer: ArrayBuffer, config: AppConfig): Project[
     return computeProjectFields(rawProject, config);
   }).filter((p) => p.name.length > 0);
 
-  return projects;
+  return { projects, diagnostics: { invalidDateCells } };
 }
 
 export function createProjectsFromSample(sampleData: Array<Record<string, unknown>>, config: AppConfig): Project[] {
@@ -181,7 +254,7 @@ export function createProjectsFromSample(sampleData: Array<Record<string, unknow
     const rawProject = {
       id: `sample-${index}`,
       name: String(item.name || ''),
-      branch: String(item.branch || ''),
+      branch: normalizeBranchList(Array.isArray(item.branch) ? item.branch : String(item.branch || '').split(/[;,|/]+/).map((x) => x.trim())),
       startDate: item.startDate as Date | null,
       endDate: item.endDate as Date | null,
       assignee: (item.assignee as string) || null,

@@ -5,12 +5,13 @@ import { Toggle } from '@/components/shared/Toggle';
 import { DateRangeSlider } from '@/components/shared/DateRangeSlider';
 import { aggregateByPeriod, getPersons } from '@/lib/workloadEngine';
 import { isParent, aggregateFromChildren } from '@/lib/hierarchyEngine';
-import { format, isSameDay, addMonths, addWeeks, addDays, startOfMonth, startOfWeek, isToday, eachDayOfInterval, getDay } from 'date-fns';
+import { format, isSameDay, addMonths, addWeeks, addDays, startOfMonth, startOfWeek, isToday, eachDayOfInterval, getDay, isValid } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Calendar, X } from 'lucide-react';
 import type { Granularity, ProjectLoad, Project } from '@/lib/types';
 import { getLoadColor, PERSON_COLORS } from '@/lib/constants';
 import { isWorkingDay } from '@/lib/dateUtils';
+import { branchLabel } from '@/lib/branchUtils';
 
 interface DetailPanel {
   person: string;
@@ -26,6 +27,17 @@ export function WorkloadGrid() {
   const [detailPanel, setDetailPanel] = useState<DetailPanel | null>(null);
   const [showDateSlider, setShowDateSlider] = useState(false);
   const [customRange, setCustomRange] = useState<{ start: Date; end: Date } | null>(null);
+  const isValidDate = (d: Date | null | undefined): d is Date => Boolean(d && isValid(d));
+  const safeIsSameDay = (a: unknown, b: unknown) =>
+    a instanceof Date && b instanceof Date && isValidDate(a) && isValidDate(b) && isSameDay(a, b);
+  const safeFormatDate = (d: unknown, pattern: string) => {
+    if (!(d instanceof Date) || !isValidDate(d)) return '—';
+    try {
+      return format(d, pattern, { locale: es });
+    } catch {
+      return '—';
+    }
+  };
 
   const persons = useMemo(() => {
     const ps = getPersons(filteredProjects);
@@ -35,7 +47,9 @@ export function WorkloadGrid() {
   // Calculate visible date range based on granularity
   const visibleRange = useMemo(() => {
     if (!dateRange) return null;
+    if (!isValidDate(dateRange.start) || !isValidDate(dateRange.end)) return null;
     const start = viewStart || dateRange.start;
+    if (!isValidDate(start)) return null;
     let end: Date;
     switch (state.granularity) {
       case 'day':
@@ -51,6 +65,7 @@ export function WorkloadGrid() {
     // Don't exceed the project range
     const effectiveEnd = end > dateRange.end ? dateRange.end : end;
     const effectiveStart = start < dateRange.start ? dateRange.start : start;
+    if (effectiveStart > effectiveEnd) return null;
     return { start: effectiveStart, end: effectiveEnd };
   }, [dateRange, viewStart, state.granularity]);
 
@@ -60,7 +75,7 @@ export function WorkloadGrid() {
     const result = new Map<string, ReturnType<typeof aggregateByPeriod>>();
     persons.forEach((person) => {
       const wl = workloadData.get(person) || [];
-      const filtered = wl.filter(w => w.date >= visibleRange.start && w.date <= visibleRange.end);
+      const filtered = wl.filter(w => isValidDate(w.date) && w.date >= visibleRange.start && w.date <= visibleRange.end);
       const agg = aggregateByPeriod(filtered, state.granularity, visibleRange, state.config);
       result.set(person, agg);
     });
@@ -84,8 +99,8 @@ export function WorkloadGrid() {
       const days = eachDayOfInterval({ start: visibleRange.start, end: visibleRange.end })
         .filter(d => isWorkingDay(d, state.config));
       const headers: ColumnHeader[] = days.map(d => ({
-        label: format(d, 'd'),
-        sublabel: format(d, 'EEE', { locale: es }).slice(0, 2),
+        label: safeFormatDate(d, 'd'),
+        sublabel: safeFormatDate(d, 'EEE').slice(0, 2),
         date: d,
         isToday: isToday(d),
         isWeekend: [0, 6].includes(getDay(d)),
@@ -93,7 +108,7 @@ export function WorkloadGrid() {
       const monthGroups: { label: string; span: number }[] = [];
       let currentMonth = '';
       headers.forEach(h => {
-        const m = format(h.date, 'MMMM yyyy', { locale: es });
+        const m = safeFormatDate(h.date, 'MMMM yyyy');
         if (m !== currentMonth) {
           monthGroups.push({ label: m, span: 1 });
           currentMonth = m;
@@ -109,14 +124,14 @@ export function WorkloadGrid() {
       if (!firstPerson) return emptyResult;
       const headers: ColumnHeader[] = firstPerson.map((d, i) => ({
         label: `S${i + 1}`,
-        sublabel: format(d.start, 'dd MMM', { locale: es }),
+        sublabel: safeFormatDate(d.start, 'dd MMM'),
         date: d.start,
         isToday: false,
       }));
       const monthGroups: { label: string; span: number }[] = [];
       let currentMonth = '';
       headers.forEach(h => {
-        const m = format(h.date, 'MMM yyyy', { locale: es });
+        const m = safeFormatDate(h.date, 'MMM yyyy');
         if (m !== currentMonth) {
           monthGroups.push({ label: m, span: 1 });
           currentMonth = m;
@@ -131,7 +146,7 @@ export function WorkloadGrid() {
     const firstPerson = Array.from(gridData.values())[0];
     if (!firstPerson) return emptyResult;
     const headers: ColumnHeader[] = firstPerson.map(d => ({
-      label: format(d.start, 'MMM yy', { locale: es }),
+      label: safeFormatDate(d.start, 'MMM yy'),
       date: d.start,
       isToday: false,
     }));
@@ -162,8 +177,8 @@ export function WorkloadGrid() {
   // Range label
   const rangeLabel = useMemo(() => {
     if (!visibleRange) return '';
-    const startStr = format(visibleRange.start, 'MMMM yyyy', { locale: es });
-    const endStr = format(visibleRange.end, 'MMMM yyyy', { locale: es });
+    const startStr = safeFormatDate(visibleRange.start, 'MMMM yyyy');
+    const endStr = safeFormatDate(visibleRange.end, 'MMMM yyyy');
     if (startStr === endStr) return startStr.charAt(0).toUpperCase() + startStr.slice(1);
     return `${startStr.charAt(0).toUpperCase() + startStr.slice(1)} — ${endStr.charAt(0).toUpperCase() + endStr.slice(1)}`;
   }, [visibleRange]);
@@ -249,7 +264,7 @@ export function WorkloadGrid() {
             />
 
             {/* Navigation */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 rounded-lg border border-border bg-white p-0.5">
               <button
                 onClick={() => navigate('prev')}
                 className="p-1.5 rounded-md hover:bg-bg-secondary text-text-secondary hover:text-text-primary transition-colors"
@@ -259,7 +274,7 @@ export function WorkloadGrid() {
               </button>
               <button
                 onClick={() => navigate('today')}
-                className="px-2.5 py-1 text-xs font-medium rounded-md hover:bg-bg-secondary text-text-secondary hover:text-text-primary transition-colors"
+                className="px-2.5 py-1 text-xs font-medium rounded-md bg-bg-secondary text-text-primary transition-colors"
               >
                 Hoy
               </button>
@@ -275,10 +290,10 @@ export function WorkloadGrid() {
             {/* Date range slider toggle */}
             <button
               onClick={() => setShowDateSlider(!showDateSlider)}
-              className={`px-2.5 py-1 text-xs font-medium rounded-md transition-colors ${
+              className={`px-2.5 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
                 showDateSlider
-                  ? 'bg-accent-blue text-white'
-                  : 'hover:bg-bg-secondary text-text-secondary hover:text-text-primary'
+                  ? 'bg-text-primary text-white border-text-primary'
+                  : 'bg-white border-border text-text-secondary hover:bg-bg-secondary hover:text-text-primary'
               }`}
               title="Mostrar/ocultar selector de rango de fechas"
             >
@@ -321,7 +336,7 @@ export function WorkloadGrid() {
                       <th
                         key={i}
                         colSpan={group.span}
-                        className="bg-bg-secondary/80 backdrop-blur-sm border-b border-border px-2 py-1.5 text-[11px] font-semibold text-text-primary text-center capitalize"
+                        className="bg-bg-secondary border-b border-border px-2 py-1.5 text-[11px] font-semibold text-text-primary text-center capitalize"
                       >
                         {group.label}
                       </th>
@@ -337,7 +352,7 @@ export function WorkloadGrid() {
                   {columns.headers.map((col, i) => (
                     <th
                       key={i}
-                      className={`bg-white/95 backdrop-blur-sm border-b border-border px-1 py-1.5 text-center ${colWidth} ${
+                      className={`bg-white border-b border-border px-1 py-1.5 text-center ${colWidth} ${
                         col.isToday ? 'bg-accent-blue/30' : ''
                       }`}
                     >
@@ -387,23 +402,23 @@ export function WorkloadGrid() {
                       {/* Data cells */}
                       {personData.map((cell, colIdx) => {
                         const isSelected = detailPanel?.person === person &&
-                          isSameDay(detailPanel.periodStart, cell.start);
+                          safeIsSameDay(detailPanel.periodStart, cell.start);
                         const colHeader = columns.headers[colIdx];
                         const isTodayCol = colHeader?.isToday;
 
                         return (
                           <td
                             key={colIdx}
-                            className={`border-b border-border px-0.5 py-1.5 text-center ${colWidth} transition-colors ${
+                          className={`border-b border-border px-0.5 py-1.5 text-center ${colWidth} transition-colors ${
                               isTodayCol ? 'bg-accent-blue/10' : ''
-                            } ${isSelected ? 'bg-accent-blue/20 ring-1 ring-inset ring-person-1/30' : ''}`}
+                            } ${isSelected ? 'bg-accent-blue/20 ring-1 ring-inset ring-person-1/20' : ''}`}
                           >
                             <div className="flex items-center justify-center">
                               <LoadBubble
                                 load={cell.avgLoad}
                                 size={state.granularity === 'day' ? 'sm' : 'md'}
                                 projects={cell.projects}
-                                dateLabel={`${format(cell.start, 'dd MMM', { locale: es })}${!isSameDay(cell.start, cell.end) ? ` — ${format(cell.end, 'dd MMM', { locale: es })}` : ''}`}
+                                dateLabel={`${safeFormatDate(cell.start, 'dd MMM')}${!safeIsSameDay(cell.start, cell.end) ? ` — ${safeFormatDate(cell.end, 'dd MMM')}` : ''}`}
                                 onClick={() => handleCellClick(person, colIdx)}
                               />
                             </div>
@@ -470,19 +485,23 @@ function DetailSidePanel({
 }) {
   const color = getLoadColor(panel.load);
   const percentage = Math.round(panel.load * 100);
-  const isSingleDay = isSameDay(panel.periodStart, panel.periodEnd);
+  const isValidPanelStart = panel.periodStart instanceof Date && isValid(panel.periodStart);
+  const isValidPanelEnd = panel.periodEnd instanceof Date && isValid(panel.periodEnd);
+  const isSingleDay = isValidPanelStart && isValidPanelEnd && isSameDay(panel.periodStart, panel.periodEnd);
+  const panelStartLabel = isValidPanelStart ? format(panel.periodStart, "dd 'de' MMMM, yyyy", { locale: es }) : '—';
+  const panelRangeLabel =
+    isValidPanelStart && isValidPanelEnd
+      ? `${format(panel.periodStart, 'dd MMM', { locale: es })} — ${format(panel.periodEnd, 'dd MMM yyyy', { locale: es })}`
+      : '—';
 
   return (
-    <div className="w-[320px] flex-shrink-0 border-l border-border bg-white overflow-y-auto slide-in-right">
+    <div className="w-[320px] flex-shrink-0 border-l border-border bg-white overflow-y-auto slide-in-right shadow-[-4px_0_16px_rgba(15,23,42,0.06)]">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div>
           <h3 className="text-sm font-semibold text-text-primary">{panel.person}</h3>
           <p className="text-[11px] text-text-secondary mt-0.5">
-            {isSingleDay
-              ? format(panel.periodStart, "dd 'de' MMMM, yyyy", { locale: es })
-              : `${format(panel.periodStart, 'dd MMM', { locale: es })} — ${format(panel.periodEnd, 'dd MMM yyyy', { locale: es })}`
-            }
+            {isSingleDay ? panelStartLabel : panelRangeLabel}
           </p>
         </div>
         <button
@@ -543,7 +562,7 @@ function DetailSidePanel({
                     <div className="text-sm font-medium text-text-primary truncate">{p.projectName}</div>
                     {p.fullProject && (
                       <div className="text-[11px] text-text-secondary mt-0.5">
-                        {p.fullProject.branch}
+                        {branchLabel(p.fullProject.branch)}
                         {p.fullProject.type !== 'Proyecto' && ` · ${p.fullProject.type}`}
                       </div>
                     )}
@@ -604,3 +623,4 @@ function DetailSidePanel({
     </div>
   );
 }
+

@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import type { Project, AppConfig } from '@/lib/types';
 import { computeProjectFields } from '@/lib/workloadEngine';
 import { parseAssignees } from '@/lib/assigneeHelpers';
+import { normalizeBranchList } from '@/lib/branchUtils';
 import type { ColumnMapping } from './columnDetector';
 import {
   enrichRowsWithParent,
@@ -10,13 +11,29 @@ import {
   type RowWithParent,
   type RowIndexMap,
 } from './indentDetector';
+import type { ImportDiagnostics } from '@/lib/parseExcel';
+
+function buildStrictDate(year: number, month1Based: number, day: number): Date | null {
+  if (!Number.isInteger(year) || !Number.isInteger(month1Based) || !Number.isInteger(day)) return null;
+  if (month1Based < 1 || month1Based > 12 || day < 1 || day > 31) return null;
+  const d = new Date(year, month1Based - 1, day);
+  if (
+    Number.isNaN(d.getTime()) ||
+    d.getFullYear() !== year ||
+    d.getMonth() !== month1Based - 1 ||
+    d.getDate() !== day
+  ) {
+    return null;
+  }
+  return d;
+}
 
 function parseExcelDate(value: unknown): Date | null {
   if (!value) return null;
   if (value instanceof Date) return isNaN(value.getTime()) ? null : value;
   if (typeof value === 'number') {
     const date = XLSX.SSF.parse_date_code(value);
-    if (date) return new Date(date.y, date.m - 1, date.d);
+    if (date) return buildStrictDate(date.y, date.m, date.d);
     return null;
   }
   if (typeof value === 'string') {
@@ -24,15 +41,15 @@ function parseExcelDate(value: unknown): Date | null {
     const parts = value.match(/^(\d{1,2})[/\-.]+(\d{1,2})[/\-.]+(\d{2,4})$/);
     if (parts) {
       const day = parseInt(parts[1]);
-      const month = parseInt(parts[2]) - 1;
+      const month = parseInt(parts[2]);
       let year = parseInt(parts[3]);
       if (year < 100) year += 2000;
-      return new Date(year, month, day);
+      return buildStrictDate(year, month, day);
     }
     // Try yyyy-mm-dd
     const isoParts = value.match(/^(\d{4})[/\-.]+(\d{1,2})[/\-.]+(\d{1,2})$/);
     if (isoParts) {
-      return new Date(parseInt(isoParts[1]), parseInt(isoParts[2]) - 1, parseInt(isoParts[3]));
+      return buildStrictDate(parseInt(isoParts[1]), parseInt(isoParts[2]), parseInt(isoParts[3]));
     }
     const d = new Date(value);
     if (!isNaN(d.getTime())) return d;
@@ -98,8 +115,16 @@ export function transformToProjects(
   rows: Record<string, unknown>[],
   options: TransformOptions
 ): Project[] {
+  return transformToProjectsWithDiagnostics(rows, options).projects;
+}
+
+export function transformToProjectsWithDiagnostics(
+  rows: Record<string, unknown>[],
+  options: TransformOptions
+): { projects: Project[]; diagnostics: ImportDiagnostics } {
   const { mappings, config, skipGroupRows = [], nameColumnName, detectHierarchy = false } = options;
   const skipSet = new Set(skipGroupRows);
+  const invalidDateCells: ImportDiagnostics['invalidDateCells'] = [];
 
   // Build field->column lookup
   const fieldToColumn = new Map<string, string>();
@@ -133,12 +158,23 @@ export function transformToProjects(
 
     const projectId = `import-${i}-${Date.now()}`;
 
+    const rawStartDate = getVal(row, 'startDate');
+    const rawEndDate = getVal(row, 'endDate');
+    const parsedStartDate = parseExcelDate(rawStartDate);
+    const parsedEndDate = parseExcelDate(rawEndDate);
+    if (rawStartDate !== null && rawStartDate !== undefined && String(rawStartDate).trim() !== '' && !parsedStartDate) {
+      invalidDateCells.push({ rowIndex: i, field: 'startDate', rawValue: rawStartDate });
+    }
+    if (rawEndDate !== null && rawEndDate !== undefined && String(rawEndDate).trim() !== '' && !parsedEndDate) {
+      invalidDateCells.push({ rowIndex: i, field: 'endDate', rawValue: rawEndDate });
+    }
+
     const rawProject = {
       id: projectId,
       name: String(name).trim(),
-      branch: getVal(row, 'branch') ? String(getVal(row, 'branch')).trim() : '',
-      startDate: parseExcelDate(getVal(row, 'startDate')),
-      endDate: parseExcelDate(getVal(row, 'endDate')),
+      branch: normalizeBranchList(getVal(row, 'branch') ? String(getVal(row, 'branch')).split(/[;,|/]+/).map((x) => x.trim()) : []),
+      startDate: parsedStartDate,
+      endDate: parsedEndDate,
       assignees: parseAssignees(getVal(row, 'assignee') ? String(getVal(row, 'assignee')) : null),
       daysRequired: Number(getVal(row, 'daysRequired')) || 0,
       priority: parsePriority(getVal(row, 'priority')),
@@ -209,7 +245,7 @@ export function transformToProjects(
     });
   }
 
-  return projects;
+  return { projects, diagnostics: { invalidDateCells } };
 }
 
 /**

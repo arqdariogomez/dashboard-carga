@@ -3,6 +3,7 @@ import { useProject } from '@/context/ProjectContext';
 import { X, Plus, Trash2 } from 'lucide-react';
 import type { NonWorkingDay } from '@/lib/types';
 import { computeProjectFields } from '@/lib/workloadEngine';
+import { DATE_FORMAT_OPTIONS } from '@/lib/dateUtils';
 
 interface ConfigModalProps {
   onClose: () => void;
@@ -13,6 +14,7 @@ export function ConfigModal({ onClose }: ConfigModalProps) {
   const [hoursPerDay, setHoursPerDay] = useState(state.config.hoursPerDay);
   const [weekendDays, setWeekendDays] = useState<number[]>(state.config.weekendDays);
   const [holidays, setHolidays] = useState<NonWorkingDay[]>(state.config.holidays);
+  const [dateFormat, setDateFormat] = useState(state.config.dateFormat);
   const [newHolidayDate, setNewHolidayDate] = useState('');
   const [newHolidayName, setNewHolidayName] = useState('');
   const [newHolidayRecurring, setNewHolidayRecurring] = useState(true);
@@ -40,7 +42,7 @@ export function ConfigModal({ onClose }: ConfigModalProps) {
   };
 
   const handleSave = () => {
-    const newConfig = { ...state.config, hoursPerDay, weekendDays, holidays };
+    const newConfig = { ...state.config, hoursPerDay, weekendDays, holidays, dateFormat };
     dispatch({ type: 'SET_CONFIG', payload: newConfig });
     // Recompute projects with new config
     if (state.projects.length > 0) {
@@ -92,6 +94,19 @@ export function ConfigModal({ onClose }: ConfigModalProps) {
                 </button>
               ))}
             </div>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-text-primary mb-1.5">Formato de fecha del proyecto</label>
+            <select
+              value={dateFormat}
+              onChange={(e) => setDateFormat(e.target.value as typeof state.config.dateFormat)}
+              className="w-full max-w-[240px] px-3 py-1.5 border border-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-person-1/30 focus:border-person-1 bg-white"
+            >
+              {DATE_FORMAT_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
           </div>
 
           {/* Holidays */}

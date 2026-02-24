@@ -1,7 +1,7 @@
 export interface Project {
   id: string;
   name: string;
-  branch: string;
+  branch: string | string[];
   startDate: Date | null;
   endDate: Date | null;
   assignees: string[];
@@ -46,6 +46,7 @@ export interface AppConfig {
   weekendDays: number[];
   holidays: NonWorkingDay[];
   loadMode: 'calculated' | 'reported';
+  dateFormat: 'dd/MM/yy' | 'MM/dd/yy' | 'dd MMM yyyy' | 'MMM dd, yyyy' | 'yyyy-MM-dd';
 }
 
 export interface FilterState {

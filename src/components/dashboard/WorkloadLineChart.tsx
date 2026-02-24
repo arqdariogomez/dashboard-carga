@@ -1,32 +1,31 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { getPersons } from '@/lib/workloadEngine';
 import { PERSON_COLORS } from '@/lib/constants';
-import { format, isToday, addDays } from 'date-fns';
+import { format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { LineChart as LineChartIcon, ZoomIn, ZoomOut } from 'lucide-react';
-import { DateRangeSlider } from '@/components/shared/DateRangeSlider';
+import { LineChart as LineChartIcon } from 'lucide-react';
 import {
   Line,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
   ReferenceLine,
   Area,
   ComposedChart,
+  Brush,
 } from 'recharts';
 
 export function WorkloadLineChart() {
   const { state, filteredProjects, workloadData, dateRange } = useProject();
-  const [showDateSlider, setShowDateSlider] = useState(false);
-  const [customRange, setCustomRange] = useState<{ start: Date; end: Date } | null>(null);
+  const [visibleRange, setVisibleRange] = useState<{ startIndex: number; endIndex: number } | null>(null);
+  const [yMode, setYMode] = useState<'auto' | '200' | '300'>('auto');
 
   const persons = useMemo(() => {
     const ps = getPersons(filteredProjects);
-    return state.filters.persons.length > 0 ? ps.filter(p => state.filters.persons.includes(p)) : ps;
+    return state.filters.persons.length > 0 ? ps.filter((p) => state.filters.persons.includes(p)) : ps;
   }, [filteredProjects, state.filters.persons]);
 
   const chartData = useMemo(() => {
@@ -46,27 +45,40 @@ export function WorkloadLineChart() {
       });
     });
 
-    let data = Array.from(dateMap.entries())
+    const data = Array.from(dateMap.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, data]) => ({
+      .map(([key, dataByDate]) => ({
         date: key,
         label: format(new Date(key), 'dd MMM', { locale: es }),
-        ...data,
+        ...dataByDate,
       }));
-
-    // Filter by custom range if set
-    if (customRange) {
-      const startStr = format(customRange.start, 'yyyy-MM-dd');
-      const endStr = format(customRange.end, 'yyyy-MM-dd');
-      data = data.filter(d => d.date >= startStr && d.date <= endStr);
-    }
-
     return data;
-  }, [persons, workloadData, dateRange, customRange]);
+  }, [persons, workloadData, dateRange]);
 
-  // Find today's label for reference line
+  useEffect(() => {
+    if (chartData.length === 0) {
+      setVisibleRange(null);
+      return;
+    }
+    setVisibleRange((prev) => {
+      if (!prev) {
+        const start = Math.max(0, chartData.length - Math.min(45, chartData.length));
+        return { startIndex: start, endIndex: chartData.length - 1 };
+      }
+      const startIndex = Math.max(0, Math.min(prev.startIndex, chartData.length - 1));
+      const endIndex = Math.max(startIndex, Math.min(prev.endIndex, chartData.length - 1));
+      if (startIndex === prev.startIndex && endIndex === prev.endIndex) return prev;
+      return { startIndex, endIndex };
+    });
+  }, [chartData.length]);
+
+  const visibleDays = visibleRange ? visibleRange.endIndex - visibleRange.startIndex + 1 : chartData.length;
+  const canRenderDots = visibleDays <= 70;
+  const canRenderAreas = persons.length <= 6 && visibleDays <= 120;
+  const yDomain = yMode === 'auto' ? [0, 'auto'] as const : [0, Number(yMode)] as const;
+
   const todayLabel = useMemo(() => {
-    const todayEntry = chartData.find(d => 'isToday' in d && d.isToday);
+    const todayEntry = chartData.find((d) => 'isToday' in d && d.isToday);
     return todayEntry?.label || null;
   }, [chartData]);
 
@@ -76,77 +88,61 @@ export function WorkloadLineChart() {
         <div className="w-16 h-16 rounded-2xl bg-bg-secondary flex items-center justify-center mb-3">
           <LineChartIcon size={28} className="text-text-secondary/50" />
         </div>
-        <p className="text-sm font-medium">No hay datos para el gráfico</p>
+        <p className="text-sm font-medium">No hay datos para el grafico</p>
         <p className="text-xs mt-1">Verifica los filtros activos o carga un archivo.</p>
       </div>
     );
   }
 
   return (
-    <div className="p-4 flex-1 flex flex-col gap-4">
-      {/* Controls */}
-      <div className="flex items-center justify-between bg-white rounded-lg border border-border px-4 py-2">
-        <label className="text-xs font-medium text-text-secondary">Herramientas de visualización</label>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              if (!customRange || !dateRange) return;
-              const newStart = addDays(customRange.start, -7);
-              const newEnd = addDays(customRange.end, 7);
-              setCustomRange({
-                start: newStart < dateRange.start ? dateRange.start : newStart,
-                end: newEnd > dateRange.end ? dateRange.end : newEnd,
-              });
-            }}
-            className="p-1.5 rounded hover:bg-bg-secondary text-text-secondary hover:text-text-primary transition-colors"
-            title="Zoom out"
-          >
-            <ZoomOut size={16} />
-          </button>
-          <button
-            onClick={() => {
-              if (!customRange) return;
-              const days = Math.ceil((customRange.end.getTime() - customRange.start.getTime()) / (1000 * 60 * 60 * 24));
-              if (days <= 7) return; // No zoom in más de lo mínimo
-              const reduction = Math.ceil(days / 4);
-              setCustomRange({
-                start: addDays(customRange.start, reduction),
-                end: addDays(customRange.end, -reduction),
-              });
-            }}
-            className="p-1.5 rounded hover:bg-bg-secondary text-text-secondary hover:text-text-primary transition-colors"
-            title="Zoom in"
-          >
-            <ZoomIn size={16} />
-          </button>
-          <button
-            onClick={() => setShowDateSlider(!showDateSlider)}
-            className={`px-2.5 py-1 text-xs font-medium rounded transition-colors ${
-              showDateSlider
-                ? 'bg-accent-blue text-white'
-                : 'hover:bg-bg-secondary text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            📅 Rango
-          </button>
+    <div className="p-3 flex-1 min-h-0 flex flex-col">
+      <div className="bg-white rounded-xl border border-border p-3 flex-1 min-h-0 flex flex-col">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setYMode('auto')}
+              className={`px-2 py-1 text-[11px] rounded-md border ${yMode === 'auto' ? 'bg-text-primary text-white border-text-primary' : 'bg-white text-text-secondary border-border hover:bg-bg-secondary'}`}
+            >
+              Escala auto
+            </button>
+            <button
+              type="button"
+              onClick={() => setYMode('200')}
+              className={`px-2 py-1 text-[11px] rounded-md border ${yMode === '200' ? 'bg-text-primary text-white border-text-primary' : 'bg-white text-text-secondary border-border hover:bg-bg-secondary'}`}
+            >
+              Tope 200%
+            </button>
+            <button
+              type="button"
+              onClick={() => setYMode('300')}
+              className={`px-2 py-1 text-[11px] rounded-md border ${yMode === '300' ? 'bg-text-primary text-white border-text-primary' : 'bg-white text-text-secondary border-border hover:bg-bg-secondary'}`}
+            >
+              Tope 300%
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (chartData.length === 0) return;
+                setVisibleRange({ startIndex: 0, endIndex: chartData.length - 1 });
+              }}
+              className="px-2 py-1 text-[11px] rounded-md border border-border bg-white text-text-secondary hover:bg-bg-secondary"
+            >
+              Ajustar rango
+            </button>
+          </div>
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {persons.map((person, i) => (
+              <span key={person} className="inline-flex items-center gap-1 text-[11px] text-text-secondary">
+                <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PERSON_COLORS[i % PERSON_COLORS.length] }} />
+                {person}
+              </span>
+            ))}
+          </div>
         </div>
-      </div>
-
-      {/* Date range slider */}
-      {showDateSlider && dateRange && (
-        <DateRangeSlider
-          min={dateRange.start}
-          max={dateRange.end}
-          value={customRange || dateRange}
-          onChange={setCustomRange}
-          label="Rango del gráfico"
-        />
-      )}
-
-      {/* Chart */}
-      <div className="bg-white rounded-xl border border-border p-5 h-[500px]">
+        <div className="flex-1 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+          <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
             <CartesianGrid strokeDasharray="3 3" stroke="#E9E9E7" />
             <XAxis
               dataKey="label"
@@ -160,7 +156,7 @@ export function WorkloadLineChart() {
               tickLine={false}
               axisLine={{ stroke: '#E9E9E7' }}
               tickFormatter={(v) => `${v}%`}
-              domain={[0, 'auto']}
+              domain={yDomain}
             />
             <Tooltip
               contentStyle={{
@@ -174,9 +170,6 @@ export function WorkloadLineChart() {
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               formatter={(value: any, name: any) => [`${value}%`, name]}
               labelFormatter={(label) => label}
-            />
-            <Legend
-              wrapperStyle={{ fontSize: '12px', paddingTop: '8px' }}
             />
             <ReferenceLine
               y={100}
@@ -193,16 +186,18 @@ export function WorkloadLineChart() {
                 label={{ value: 'HOY', position: 'top', fontSize: 9, fill: '#F87171', fontWeight: 'bold' }}
               />
             )}
-            {persons.map((person, i) => (
-              <Area
-                key={`area-${person}`}
-                type="monotone"
-                dataKey={person}
-                fill={PERSON_COLORS[i % PERSON_COLORS.length]}
-                fillOpacity={0.08}
-                stroke="none"
-              />
-            ))}
+            {canRenderAreas &&
+              persons.map((person, i) => (
+                <Area
+                  key={`area-${person}`}
+                  type="monotone"
+                  dataKey={person}
+                  fill={PERSON_COLORS[i % PERSON_COLORS.length]}
+                  fillOpacity={0.07}
+                  stroke="none"
+                  isAnimationActive={false}
+                />
+              ))}
             {persons.map((person, i) => (
               <Line
                 key={person}
@@ -210,12 +205,29 @@ export function WorkloadLineChart() {
                 dataKey={person}
                 stroke={PERSON_COLORS[i % PERSON_COLORS.length]}
                 strokeWidth={2.5}
-                dot={{ r: 2, fill: PERSON_COLORS[i % PERSON_COLORS.length] }}
+                dot={canRenderDots ? { r: 2, fill: PERSON_COLORS[i % PERSON_COLORS.length] } : false}
                 activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }}
+                isAnimationActive={false}
               />
             ))}
+            {visibleRange && (
+              <Brush
+                dataKey="label"
+                height={24}
+                startIndex={visibleRange.startIndex}
+                endIndex={visibleRange.endIndex}
+                onChange={(next) => {
+                  if (typeof next?.startIndex === 'number' && typeof next?.endIndex === 'number') {
+                    setVisibleRange({ startIndex: next.startIndex, endIndex: next.endIndex });
+                  }
+                }}
+                travellerWidth={14}
+                stroke="#9CA3AF"
+              />
+            )}
           </ComposedChart>
         </ResponsiveContainer>
+        </div>
       </div>
     </div>
   );
