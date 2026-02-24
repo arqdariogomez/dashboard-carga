@@ -1,6 +1,7 @@
 import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { useUiFeedback } from '@/context/UiFeedbackContext';
+import { usePersonProfiles } from '@/context/PersonProfilesContext';
 import {
   getPersons,
   getActiveProjects,
@@ -1012,6 +1013,7 @@ export function GanttTimeline() {
     dateRange: globalRange,
   } = useProject();
   const { confirm } = useUiFeedback();
+  const { getAvatarUrl } = usePersonProfiles();
 
   // ── State ──
   const [collapsedPersons, setCollapsedPersons] = useState<Set<string>>(
@@ -1900,10 +1902,21 @@ export function GanttTimeline() {
                           />
                         )}
                         <div
-                          className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0"
+                          className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 overflow-hidden"
                           style={{ backgroundColor: pColor }}
                         >
-                          {person.charAt(0)}
+                          {(() => {
+                            const avatarUrl = getAvatarUrl(person);
+                            return avatarUrl ? (
+                              <img
+                                src={avatarUrl}
+                                alt={person}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              person.charAt(0)
+                            );
+                          })()}
                         </div>
                         <span className="text-sm font-semibold text-text-primary truncate flex-1">
                           {person}

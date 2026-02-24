@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
 import { ProjectProvider, useProject } from '@/context/ProjectContext';
 import { AuthProvider } from '@/context/AuthContext';
+import { PersonProfilesProvider } from '@/context/PersonProfilesContext';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { FilterBar } from '@/components/layout/FilterBar';
@@ -284,11 +285,13 @@ export function App() {
   return (
     <AuthProvider>
       <UiFeedbackProvider>
-        <AppErrorBoundary>
-          <ProjectProvider>
-            <DashboardContent />
-          </ProjectProvider>
-        </AppErrorBoundary>
+        <PersonProfilesProvider>
+          <AppErrorBoundary>
+            <ProjectProvider>
+              <DashboardContent />
+            </ProjectProvider>
+          </AppErrorBoundary>
+        </PersonProfilesProvider>
       </UiFeedbackProvider>
     </AuthProvider>
   );

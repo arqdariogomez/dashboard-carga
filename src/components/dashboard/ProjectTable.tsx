@@ -2,6 +2,7 @@
 import { useProject } from '@/context/ProjectContext';
 import { useAuth } from '@/context/AuthContext';
 import { useUiFeedback } from '@/context/UiFeedbackContext';
+import { usePersonProfiles } from '@/context/PersonProfilesContext';
 import { LoadBubble } from '@/components/shared/LoadBubble';
 import { formatDateShort, format, isValidDateValue } from '@/lib/dateUtils';
 import { computeProjectFields } from '@/lib/workloadEngine';
@@ -26,7 +27,6 @@ import {
 } from '@/lib/dynamicColumnsRepository';
 import { supabase } from '@/lib/supabaseClient';
 import { addTaskComment, deleteTaskComment, listTaskComments, type TaskComment } from '@/lib/taskCommentsRepository';
-import { loadPersonProfiles, normalizePersonKey, savePersonProfiles } from '@/lib/personProfiles';
 import {
   DndContext,
   closestCenter,
@@ -455,12 +455,12 @@ function EditableAssigneesCell({
   };
 
   const AvatarDot = ({ name }: { name: string }) => {
-    const profile = personProfiles[normalizePersonKey(name)];
+    const avatarUrl = getAvatarUrl(name);
     const c = pastelTagColor(name || 'persona');
-    if (profile?.avatarUrl) {
+    if (avatarUrl) {
       return (
         <img
-          src={profile.avatarUrl}
+          src={avatarUrl}
           alt={name}
           className="h-5 w-5 shrink-0 rounded-full border border-border object-cover"
           title={name}
@@ -1970,6 +1970,7 @@ export function ProjectTable() {
   const { state, dispatch, allPersons, allBranches, activeBoardId, remoteEditingByRow, remoteEditingByColumn, announceEditingPresence } = useProject();
   const { user } = useAuth();
   const { confirm, toast } = useUiFeedback();
+  const { getAvatarUrl, setAvatar } = usePersonProfiles();
   const groupHintAtRef = useRef<number>(0);
   const showGroupRowEditHint = useCallback(() => {
     const now = Date.now();

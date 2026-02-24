@@ -1,5 +1,6 @@
 import { useMemo, useState, useCallback } from 'react';
 import { useProject } from '@/context/ProjectContext';
+import { usePersonProfiles } from '@/context/PersonProfilesContext';
 import { LoadBubble } from '@/components/shared/LoadBubble';
 import { Toggle } from '@/components/shared/Toggle';
 import { DateRangeSlider } from '@/components/shared/DateRangeSlider';
@@ -23,6 +24,7 @@ interface DetailPanel {
 
 export function WorkloadGrid() {
   const { state, dispatch, filteredProjects, workloadData, dateRange } = useProject();
+  const { getAvatarUrl } = usePersonProfiles();
   const [viewStart, setViewStart] = useState<Date | null>(null);
   const [detailPanel, setDetailPanel] = useState<DetailPanel | null>(null);
   const [showDateSlider, setShowDateSlider] = useState(false);
@@ -384,12 +386,23 @@ export function WorkloadGrid() {
                       {/* Person info - sticky column */}
                       <td className="sticky left-0 z-10 bg-white group-hover:bg-bg-secondary/30 border-b border-r border-border px-4 py-3 transition-colors">
                         <div className="flex items-center gap-2.5">
-                          <div
-                            className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                            style={{ backgroundColor: personColor }}
-                          >
-                            {person.charAt(0).toUpperCase()}
-                          </div>
+                          {(() => {
+                            const avatarUrl = getAvatarUrl(person);
+                            return avatarUrl ? (
+                              <img
+                                src={avatarUrl}
+                                alt={person}
+                                className="w-8 h-8 rounded-full object-cover border border-border"
+                              />
+                            ) : (
+                              <div
+                                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                                style={{ backgroundColor: personColor }}
+                              >
+                                {person.charAt(0).toUpperCase()}
+                              </div>
+                            );
+                          })()}
                           <div className="min-w-0">
                             <div className="text-sm font-semibold text-text-primary truncate">{person}</div>
                             <div className="text-[10px] text-text-secondary mt-0.5">

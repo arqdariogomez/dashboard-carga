@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { useAuth } from '@/context/AuthContext';
+import { usePersonProfiles } from '@/context/PersonProfilesContext';
 import { getPersons, getPersonSummary } from '@/lib/workloadEngine';
 import { buildHierarchy, isParent, aggregateFromChildren } from '@/lib/hierarchyEngine';
 import { LoadBubble } from '@/components/shared/LoadBubble';
 import { PERSON_COLORS, getLoadColor } from '@/lib/constants';
 import { formatDateShort, format, isValidDateValue } from '@/lib/dateUtils';
-import { loadPersonProfiles, normalizePersonKey } from '@/lib/personProfiles';
-import { Briefcase, TrendingUp, Zap, Calendar, Users } from 'lucide-react';
+import { Briefcase, TrendingUp, Zap, Calendar, Users, Pencil, Upload, Trash2 } from 'lucide-react';
 import { listBoardColumns, listTaskColumnValues } from '@/lib/dynamicColumnsRepository';
 import {
   ResponsiveContainer,
@@ -19,8 +19,11 @@ import {
 export function PersonSummaryCards() {
   const { state, filteredProjects, workloadData, activeBoardId } = useProject();
   const { user } = useAuth();
+  const { getAvatarUrl, setAvatar, deleteProfile } = usePersonProfiles();
   const [progressByTaskId, setProgressByTaskId] = useState<Map<string, number>>(new Map());
-  const [personProfiles, setPersonProfiles] = useState<Record<string, { avatarUrl?: string }>>({});
+  const [hoveredPerson, setHoveredPerson] = useState<string | null>(null);
+  const [showPersonMenu, setShowPersonMenu] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   const persons = useMemo(() => {
     const ps = getPersons(filteredProjects);
@@ -76,9 +79,17 @@ export function PersonSummaryCards() {
     };
   }, [activeBoardId, user]);
 
+  // Close menu when clicking outside
   useEffect(() => {
-    setPersonProfiles(loadPersonProfiles(activeBoardId));
-  }, [activeBoardId, state.lastUpdated]);
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowPersonMenu(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   if (summaries.length === 0) {
     return (
@@ -107,7 +118,7 @@ export function PersonSummaryCards() {
             .map(w => w.charAt(0).toUpperCase())
             .slice(0, 2)
             .join('');
-          const avatarUrl = personProfiles[normalizePersonKey(summary.person)]?.avatarUrl;
+          const avatarUrl = getAvatarUrl(summary.person);
 
           const avgLoadColor = getLoadColor(summary.avgLoad);
           const peakLoadColor = getLoadColor(summary.peakLoad);
@@ -155,20 +166,77 @@ export function PersonSummaryCards() {
             >
               {/* Header with avatar */}
               <div className="px-5 pt-5 pb-3 flex items-center gap-3">
-                {avatarUrl ? (
-                  <img
-                    src={avatarUrl}
-                    alt={summary.person}
-                    className="w-12 h-12 rounded-full object-cover border border-border shadow-sm flex-shrink-0"
-                  />
-                ) : (
-                  <div
-                    className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-base shadow-sm flex-shrink-0"
-                    style={{ backgroundColor: color }}
-                  >
-                    {initials}
-                  </div>
-                )}
+                <div 
+                  className="relative group"
+                  onMouseEnter={() => setHoveredPerson(summary.person)}
+                  onMouseLeave={() => setHoveredPerson(null)}
+                >
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt={summary.person}
+                      className="w-12 h-12 rounded-full object-cover border border-border shadow-sm flex-shrink-0"
+                    />
+                  ) : (
+                    <div
+                      className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-base shadow-sm flex-shrink-0"
+                      style={{ backgroundColor: color }}
+                    >
+                      {initials}
+                    </div>
+                  )}
+                  
+                  {/* Hover pencil icon */}
+                  {hoveredPerson === summary.person && (
+                    <div 
+                      className="absolute -top-1 -right-1 w-6 h-6 bg-white rounded-full border border-border shadow-sm flex items-center justify-center cursor-pointer hover:bg-bg-secondary transition-colors"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setShowPersonMenu(showPersonMenu === summary.person ? null : summary.person);
+                      }}
+                    >
+                      <Pencil size={10} className="text-text-secondary" />
+                    </div>
+                  )}
+                  
+                  {/* Context menu */}
+                  {showPersonMenu === summary.person && (
+                    <div 
+                      ref={menuRef}
+                      className="absolute top-full left-0 mt-1 bg-white border border-border rounded-lg shadow-lg py-1 z-50 min-w-[140px]"
+                    >
+                      <label className="flex items-center gap-2 px-3 py-2 text-xs text-text-primary hover:bg-bg-secondary cursor-pointer">
+                        <Upload size={12} />
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              await setAvatar(summary.person, file);
+                              setShowPersonMenu(null);
+                            }
+                          }}
+                        />
+                        Subir foto
+                      </label>
+                      
+                      {avatarUrl && (
+                        <button
+                          className="flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50 w-full text-left"
+                          onClick={async () => {
+                            await deleteProfile(summary.person);
+                            setShowPersonMenu(null);
+                          }}
+                        >
+                          <Trash2 size={12} />
+                          Eliminar foto
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <div className="min-w-0 flex-1">
                   <h3 className="text-base font-semibold text-text-primary truncate">{summary.person}</h3>
                   <p className="text-xs text-text-secondary mt-0.5">

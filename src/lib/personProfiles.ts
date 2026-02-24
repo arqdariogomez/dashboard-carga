@@ -1,4 +1,10 @@
-export type PersonProfile = { avatarUrl?: string };
+export type PersonProfile = { 
+  avatarUrl?: string;
+  email?: string;
+  displayName?: string;
+  updatedAt?: string;
+  createdAt?: string;
+};
 export type PersonProfilesMap = Record<string, PersonProfile>;
 
 export function normalizePersonKey(raw: string): string {

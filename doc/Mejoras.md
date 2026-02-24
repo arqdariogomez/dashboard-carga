@@ -3,14 +3,12 @@ MEJORAS:
 - Que al querer editar algo (que no sea el nombre) en una fila Grupo/Parent salga un pequeño Hint de que las filas Grupo no se pueden editar ya que su función es resumir.
 
 - En vista Linea de tiempo: 
-	- Al hacer hover sobre un proyecto/fila le salgan handles al inicio y al final para poder arrastrar y que eso cambie su fecha de inicio o final. Que el hito también se pueda mover de forma similar.
 	- Al hacer hover sobre un proyecto/fila no haga que su index quede por encima de la sección donde están los nombres de proyecto.
 al hacer hover sobre un proyecto/fila no haga que su index quede por encima de la sección donde están los nombres de proyecto.
 	- Que también al hacer hover en el nombre de proyecto/fila salgan Handles como los de Tabla de proyecto, para poder abrir menú contextual, que podría tener opciones de Nuevo, duplicar, que con doble clic se renombre, marcar como Hito, Depender de otro proyecto
 , y otros que sean prudentes.
 	- Que no necesite estar acomodado por persona a fuerza, que mas bien sea un Agrupar por (Persona, Tipo, personalizado) similar al Colorear por, pero sin reemplazarlo, es una opción extra.
 	- Poder hacer zoom o zoom out como el de Grafico de linea, y con un botón de "Hoy".
-- Añadir filtro rápido en Timeline: Mostrar solo hitos para revisión/planeación rápida.
 - Hacer que al cambiar la foto sea permanente en todas las fotos. Y que se pueda abrir el panel de Gestionar personas en Configuración. Y que se pueda cambiar foto o abrir el de gestionar personas desde la vista Resumen por persona en algún menú contextual al dar clic en una Persona, tal vez que al hacer Hover sobre una foto  salga un icono de Lápiz que sea de editar, y ahí salga un menú contextual flotante.
 - Que al arrastrar fila o columna, haya mejor feedback profesional y fluido del dónde caerá ese elemento y cómo se acomodará.
 - Se me hace raro que dura mucho tiempo lo de Guardado hace menos de un minuto, podrá ser porque se guarda constantemente o porque eso no se actualiza bien. Debe guardarse automáticamente únicamente si detecta que hubo un cambio.
