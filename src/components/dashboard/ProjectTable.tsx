@@ -595,6 +595,7 @@ export function ProjectTable() {
     const filtered = state.projects.filter((project) => {
       if (search && !project.name.toLowerCase().includes(search.toLowerCase())) return false;
       if (!showUnscheduled && !project.startDate && project.type !== 'En radar') return false;
+      if (!showRadar && project.type === 'En radar') return false;
       return true;
     });
 
@@ -616,7 +617,18 @@ export function ProjectTable() {
     const radar = sorted.filter((p) => p.type === 'En radar');
 
     return { scheduled, unscheduled, radar };
-  }, [state.projects, search, sortKey, sortDir, showUnscheduled]);
+  }, [state.projects, search, sortKey, sortDir, showUnscheduled, showRadar]);
+
+  // Counts from raw projects (not filtered) for toggle buttons
+  const unscheduledCountRaw = useMemo(() => {
+    if (!state.projects || !Array.isArray(state.projects)) return 0;
+    return state.projects.filter((p) => (!p.startDate || !p.endDate) && p.type !== 'En radar').length;
+  }, [state.projects]);
+
+  const radarCountRaw = useMemo(() => {
+    if (!state.projects || !Array.isArray(state.projects)) return 0;
+    return state.projects.filter((p) => p.type === 'En radar').length;
+  }, [state.projects]);
 
   // Flat list for compatibility
   const flatSortedProjects = [...sortedProjects.scheduled, ...sortedProjects.unscheduled, ...sortedProjects.radar];
@@ -1113,6 +1125,12 @@ export function ProjectTable() {
         onExportExcel={tableActions.handleExportExcel}
         onCopyCSV={tableActions.handleCopyCSV}
         onAddColumn={handleAddColumn}
+        showUnscheduled={showUnscheduled}
+        setShowUnscheduled={setShowUnscheduled}
+        unscheduledCount={unscheduledCountRaw}
+        showRadar={showRadar}
+        setShowRadar={setShowRadar}
+        radarCount={radarCountRaw}
       />
 
       <DndContext

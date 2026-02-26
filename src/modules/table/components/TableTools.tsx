@@ -1,4 +1,4 @@
-import { Search, Plus, Download, ClipboardCopy } from 'lucide-react';
+import { Search, Plus, Download, ClipboardCopy, ChevronRight, ChevronDown } from 'lucide-react';
 import { BulkMenu } from './BulkMenu';
 
 interface TableToolsProps {
@@ -23,6 +23,12 @@ interface TableToolsProps {
   onExportExcel: () => void;
   onCopyCSV: () => void;
   onAddColumn: () => void;
+  showUnscheduled?: boolean;
+  setShowUnscheduled?: (show: boolean) => void;
+  unscheduledCount?: number;
+  showRadar?: boolean;
+  setShowRadar?: (show: boolean) => void;
+  radarCount?: number;
 }
 
 export function TableTools({
@@ -47,6 +53,12 @@ export function TableTools({
   onExportExcel,
   onCopyCSV,
   onAddColumn,
+  showUnscheduled = true,
+  setShowUnscheduled,
+  unscheduledCount = 0,
+  showRadar = false,
+  setShowRadar,
+  radarCount = 0,
 }: TableToolsProps) {
   return (
     <div className="py-2.5 flex items-center gap-2 flex-wrap">
@@ -64,6 +76,38 @@ export function TableTools({
       <span className="text-xs text-text-secondary">
         {projectsCount} proyectos
       </span>
+
+      {/* Unscheduled toggle */}
+      {setShowUnscheduled && unscheduledCount > 0 && (
+        <button
+          onClick={() => setShowUnscheduled(!showUnscheduled)}
+          className={`flex items-center gap-1 px-2 py-1 text-xs rounded-lg border transition-colors ${
+            showUnscheduled
+              ? 'bg-[#FEF3C7] border-[#FCD34D] text-[#92400E]'
+              : 'bg-white border-border text-text-secondary hover:text-text-primary hover:bg-bg-secondary'
+          }`}
+          title={showUnscheduled ? 'Ocultar proyectos sin fecha' : 'Mostrar proyectos sin fecha'}
+        >
+          {showUnscheduled ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          Sin fecha ({unscheduledCount})
+        </button>
+      )}
+
+      {/* Radar toggle */}
+      {setShowRadar && radarCount > 0 && (
+        <button
+          onClick={() => setShowRadar(!showRadar)}
+          className={`flex items-center gap-1 px-2 py-1 text-xs rounded-lg border transition-colors ${
+            showRadar
+              ? 'bg-[#E0E7FF] border-[#A5B4FC] text-[#3730A3]'
+              : 'bg-white border-border text-text-secondary hover:text-text-primary hover:bg-bg-secondary'
+          }`}
+          title={showRadar ? 'Ocultar proyectos en radar' : 'Mostrar proyectos en radar'}
+        >
+          {showRadar ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          En radar ({radarCount})
+        </button>
+      )}
 
       <div className="flex-1" />
 
