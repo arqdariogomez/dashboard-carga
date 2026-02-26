@@ -31,8 +31,20 @@ type VersionSnapshotStored = {
 
 function safeDate(value: unknown): Date | null {
   if (!value) return null;
-  const d = new Date(String(value));
+  const asString = String(value);
+  const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(asString);
+  const d = ymd
+    ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]), 12, 0, 0, 0)
+    : new Date(asString);
   return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function toLocalISODate(value: Date | null): string | null {
+  if (!(value instanceof Date) || Number.isNaN(value.getTime())) return null;
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 interface HistoryState {
@@ -126,13 +138,13 @@ function appReducer(state: AppState, action: AppAction): AppState {
     }
     case 'ADD_PROJECT': {
       let projects = [...state.projects, action.payload];
-      const projectOrder = [...state.projectOrder, action.payload.id];
+      const projectOrder = [...(state.projectOrder || []), action.payload.id];
       projects = projects.map(p => ({ ...p, hierarchyLevel: calculateHierarchyLevel(p.id, projects) }));
       return { ...state, projects, projectOrder, hasUnsavedChanges: true };
     }
     case 'DELETE_PROJECT': {
       let projects = state.projects.filter(p => p.id !== action.payload);
-      const projectOrder = state.projectOrder.filter(id => id !== action.payload);
+      const projectOrder = (state.projectOrder || []).filter(id => id !== action.payload);
       projects = projects.map(p => ({ ...p, hierarchyLevel: calculateHierarchyLevel(p.id, projects) }));
       return { ...state, projects, projectOrder, hasUnsavedChanges: true };
     }
@@ -289,12 +301,8 @@ function persistLastBoardId(boardId: string | null): void {
 }
 
 function serializeProjectForFingerprint(project: Project): string {
-  const startDate = project.startDate instanceof Date && !Number.isNaN(project.startDate.getTime())
-    ? project.startDate.toISOString().slice(0, 10)
-    : null;
-  const endDate = project.endDate instanceof Date && !Number.isNaN(project.endDate.getTime())
-    ? project.endDate.toISOString().slice(0, 10)
-    : null;
+  const startDate = toLocalISODate(project.startDate);
+  const endDate = toLocalISODate(project.endDate);
   return JSON.stringify({
     id: project.id,
     name: project.name,
@@ -338,7 +346,11 @@ function estimateChangedProjects(
 function restoreProjectDates(project: Project): Project {
   const toDate = (value: unknown): Date | null => {
     if (!value) return null;
-    const date = new Date(String(value));
+    const asString = String(value);
+    const ymd = /^(\d{4})-(\d{2})-(\d{2})$/.exec(asString);
+    const date = ymd
+      ? new Date(Number(ymd[1]), Number(ymd[2]) - 1, Number(ymd[3]), 12, 0, 0, 0)
+      : new Date(asString);
     return Number.isNaN(date.getTime()) ? null : date;
   };
   return {
@@ -1364,7 +1376,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 
   // Order filtered projects by projectOrder
   const orderedFilteredProjects = useMemo(() => {
-    if (state.projectOrder.length === 0) return filteredProjects;
+    if (!state.projectOrder || state.projectOrder.length === 0) return filteredProjects;
     const orderMap = new Map(state.projectOrder.map((id, idx) => [id, idx]));
     return [...filteredProjects].sort((a, b) => {
       const aIdx = orderMap.get(a.id) ?? Number.MAX_SAFE_INTEGER;

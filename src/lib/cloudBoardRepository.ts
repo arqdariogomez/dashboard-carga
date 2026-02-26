@@ -25,6 +25,14 @@ export interface CloudTaskRow {
 
 function toDate(value: string | null): Date | null {
   if (!value) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (m) {
+    const year = Number(m[1]);
+    const month = Number(m[2]) - 1;
+    const day = Number(m[3]);
+    const d = new Date(year, month, day, 12, 0, 0, 0);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
 }
