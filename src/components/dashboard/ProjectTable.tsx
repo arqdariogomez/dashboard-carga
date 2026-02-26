@@ -662,6 +662,41 @@ export function ProjectTable() {
     setLastSelectedRowId(null);
   }, [setSelectedRowIds, setSelectedRowId]);
 
+  const handleToggleChecked = useCallback((id: string, checked: boolean) => {
+    setMultiSelectMode(true);
+    setSelectedRowIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, [setSelectedRowIds]);
+
+  const handleRowSelect = useCallback((id: string, ev?: React.MouseEvent<HTMLElement>) => {
+    if (multiSelectMode) {
+      if (ev?.shiftKey && lastSelectedRowId) {
+        const allIds = flatSortedProjects.map((p) => p.id);
+        const lastIdx = allIds.indexOf(lastSelectedRowId);
+        const currIdx = allIds.indexOf(id);
+        const [start, end] = lastIdx < currIdx ? [lastIdx, currIdx] : [currIdx, lastIdx];
+        const range = allIds.slice(start, end + 1);
+        setSelectedRowIds(new Set([...selectedRowIds, ...range]));
+      } else if (ev?.ctrlKey || ev?.metaKey) {
+        setSelectedRowIds((prev) => {
+          const next = new Set(prev);
+          if (next.has(id)) next.delete(id);
+          else next.add(id);
+          return next;
+        });
+      } else {
+        setSelectedRowIds(new Set([id]));
+      }
+      setLastSelectedRowId(id);
+    } else {
+      setSelectedRowId(id);
+    }
+  }, [multiSelectMode, lastSelectedRowId, flatSortedProjects, selectedRowIds, setSelectedRowIds, setSelectedRowId, setLastSelectedRowId]);
+
   const handleBulkMenuToggle = useCallback(() => {
     setBulkMenuOpen((prev) => !prev);
   }, [setBulkMenuOpen]);
@@ -1256,6 +1291,11 @@ export function ProjectTable() {
                         await updateBoardColumn(columnId, { config: { ...(column.config || {}), options: next } });
                         await refreshDynamicColumns();
                       }}
+                      isSelected={multiSelectMode ? selectedRowIds.has(project.id) : selectedRowId === project.id}
+                      onSelectRow={handleRowSelect}
+                      multiSelectMode={multiSelectMode}
+                      isChecked={selectedRowIds.has(project.id)}
+                      onToggleChecked={handleToggleChecked}
                       rowRef={(node) => { rowRefs.current[project.id] = node; }}
                     />
                   );
