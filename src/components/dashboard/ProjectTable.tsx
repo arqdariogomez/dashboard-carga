@@ -639,10 +639,10 @@ export function ProjectTable() {
   }, [activeBoardId, dynamicColumns]);
 
   const handleSelectAll = useCallback(() => {
-    const allIds = sortedProjects.map((p) => p.id);
+    const allIds = flatSortedProjects.map((p) => p.id);
     setSelectedRowIds(new Set(allIds));
     setLastSelectedRowId(allIds[allIds.length - 1]);
-  }, [sortedProjects, setSelectedRowIds, setLastSelectedRowId]);
+  }, [flatSortedProjects, setSelectedRowIds, setLastSelectedRowId]);
 
   const clearSelection = useCallback(() => {
     setSelectedRowIds(new Set());
@@ -1166,11 +1166,11 @@ export function ProjectTable() {
             maxColumnWidths={maxColumnWidths}
           />
             <SortableContext
-              items={sortedProjects.map((p) => p.id)}
+              items={renderedProjectIds}
               strategy={verticalListSortingStrategy}
             >
               <tbody>
-                {sortedProjects.map((project) => {
+                {flatSortedProjects.map((project) => {
                   const isDropTarget = dragPreview?.overId === project.id;
                   const dropPlacement = dragPreview?.overId === project.id ? 'after' : null;
 
