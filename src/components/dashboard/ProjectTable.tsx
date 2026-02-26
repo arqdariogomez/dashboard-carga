@@ -961,6 +961,29 @@ export function ProjectTable() {
     dispatch({ type: 'REORDER_PROJECTS', payload: newOrder });
   }, [state.projectOrder, state.projects, dispatch]);
 
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (!selectedRowId || multiSelectMode) return;
+      if (e.key !== 'Tab') return;
+
+      const target = e.target as HTMLElement | null;
+      if (!target) return;
+      const tag = target.tagName.toLowerCase();
+      const editable = target.getAttribute('contenteditable');
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || editable === 'true') return;
+
+      e.preventDefault();
+      if (e.shiftKey) {
+        handleOutdent(selectedRowId);
+      } else {
+        handleIndent(selectedRowId);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [selectedRowId, multiSelectMode, handleIndent, handleOutdent]);
+
   const handleMoveBefore = useCallback((projectId: string, beforeId: string | '__end__') => {
     const order = state.projectOrder.length > 0 ? [...state.projectOrder] : state.projects.map((p) => p.id);
     const moving = state.projects.find((p) => p.id === projectId);
