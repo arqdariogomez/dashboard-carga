@@ -590,15 +590,15 @@ export function ProjectTable() {
   }, [columnOrder, dynamicColumns, essentialColumnDefs]);
 
   const sortedProjects = useMemo(() => {
-    if (!state.projects || !Array.isArray(state.projects)) return [];
+    if (!state.projects || !Array.isArray(state.projects)) return { scheduled: [], unscheduled: [], radar: [] };
     
     const filtered = state.projects.filter((project) => {
       if (search && !project.name.toLowerCase().includes(search.toLowerCase())) return false;
-      if (!showUnscheduled && !project.startDate) return false;
+      if (!showUnscheduled && !project.startDate && project.type !== 'En radar') return false;
       return true;
     });
 
-    return filtered.sort((a, b) => {
+    const sorted = filtered.sort((a, b) => {
       let comparison = 0;
       if (sortKey && sortKey in a && sortKey in b) {
         const aVal = a[sortKey];
@@ -610,9 +610,17 @@ export function ProjectTable() {
       }
       return sortDir === 'desc' ? -comparison : comparison;
     });
+
+    const scheduled = sorted.filter((p) => p.startDate && p.endDate && p.type !== 'En radar');
+    const unscheduled = sorted.filter((p) => (!p.startDate || !p.endDate) && p.type !== 'En radar');
+    const radar = sorted.filter((p) => p.type === 'En radar');
+
+    return { scheduled, unscheduled, radar };
   }, [state.projects, search, sortKey, sortDir, showUnscheduled]);
 
-  const renderedProjectIds = sortedProjects.map((p) => p.id);
+  // Flat list for compatibility
+  const flatSortedProjects = [...sortedProjects.scheduled, ...sortedProjects.unscheduled, ...sortedProjects.radar];
+  const renderedProjectIds = flatSortedProjects.map((p) => p.id);
 
   const persistDynamicPositionsFromOrder = useCallback(async (order: ColumnToken[]) => {
     if (!activeBoardId) return;
