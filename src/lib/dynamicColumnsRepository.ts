@@ -69,11 +69,12 @@ export async function createBoardColumn(input: {
 
 export async function updateBoardColumn(
   columnId: string,
-  updates: Partial<Pick<DynamicColumn, 'name' | 'position' | 'config'>>
+  updates: Partial<Pick<DynamicColumn, 'name' | 'position' | 'config' | 'type'>>
 ): Promise<void> {
   if (!supabase) throw new Error('Supabase no esta configurado');
   const payload: Record<string, unknown> = {};
   if (typeof updates.name === 'string') payload.name = updates.name;
+  if (typeof updates.type === 'string') payload.type = updates.type;
   if (typeof updates.position === 'number') payload.position = updates.position;
   if (updates.config) payload.config = updates.config;
   if (Object.keys(payload).length === 0) return;
