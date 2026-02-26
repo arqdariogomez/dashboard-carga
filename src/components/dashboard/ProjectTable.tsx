@@ -289,6 +289,28 @@ export function ProjectTable() {
     dynamicAppliedSeqRef,
   } = tableState;
 
+  // Estado para edición de nombre de proyecto
+  const [editingName, setEditingName] = useState<string | null>(null);
+  const [editNameValue, setEditNameValue] = useState('');
+
+  const handleStartEditName = useCallback((projectId: string, currentName: string) => {
+    setEditingName(projectId);
+    setEditNameValue(currentName);
+  }, []);
+
+  const handleFinishEditName = useCallback((newName: string) => {
+    if (editingName && newName.trim()) {
+      dispatch({ type: 'UPDATE_PROJECT', payload: { id: editingName, updates: { name: newName.trim() } } });
+    }
+    setEditingName(null);
+    setEditNameValue('');
+  }, [editingName]);
+
+  const handleCancelEditName = useCallback(() => {
+    setEditingName(null);
+    setEditNameValue('');
+  }, []);
+
   // Funciones para columnas dinámicas (extraídas del código monolítico)
   const refreshDynamicColumns = useCallback(async () => {
     if (!activeBoardId) {
@@ -1320,6 +1342,11 @@ export function ProjectTable() {
                       isChecked={selectedRowIds.has(project.id)}
                       onToggleChecked={handleToggleChecked}
                       rowRef={(node) => { rowRefs.current[project.id] = node; }}
+                      editingNameId={editingName}
+                      editNameValue={editNameValue}
+                      onStartEditName={handleStartEditName}
+                      onFinishEditName={handleFinishEditName}
+                      onCancelEditName={handleCancelEditName}
                     />
                   );
                 })}

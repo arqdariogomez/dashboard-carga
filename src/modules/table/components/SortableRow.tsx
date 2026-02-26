@@ -68,6 +68,11 @@ interface SortableRowProps {
   onToggleChecked?: (id: string, checked: boolean) => void;
   onSelectRow?: (id: string, ev?: ReactMouseEvent<HTMLElement>) => void;
   rowRef?: (node: HTMLTableRowElement | null) => void;
+  editingNameId?: string | null;
+  editNameValue?: string;
+  onStartEditName?: (projectId: string, currentName: string) => void;
+  onFinishEditName?: (newName: string) => void;
+  onCancelEditName?: () => void;
 }
 
 export function SortableRow({
@@ -112,13 +117,25 @@ export function SortableRow({
   onToggleChecked,
   onSelectRow,
   rowRef,
+  editingNameId,
+  editNameValue,
+  onStartEditName,
+  onFinishEditName,
+  onCancelEditName,
 }: SortableRowProps) {
   const [rowMenuOpen, setRowMenuOpen] = useState(false);
   const [moveToOpen, setMoveToOpen] = useState(false);
+  const [localEditNameValue, setLocalEditNameValue] = useState('');
   const [moveToMode, setMoveToMode] = useState<'before' | 'inside'>('before');
   const [moveToQuery, setMoveToQuery] = useState('');
   const [moveToTargetId, setMoveToTargetId] = useState<string | '__end__'>('__end__');
-  const rowMenuRef = useRef<HTMLDivElement | null>(null);
+  const rowMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (editingNameId === project.id && editNameValue !== undefined) {
+      setLocalEditNameValue(editNameValue);
+    }
+  }, [editingNameId, project.id, editNameValue]);
 
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: project.id });
 
@@ -184,7 +201,7 @@ export function SortableRow({
         rowRef?.(node);
       }}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 }}
-      className={`group ${isSelected ? 'bg-[#EAF2FF]' : 'bg-white'} ${isSelected ? 'ring-2 ring-inset ring-[#3B82F6]/50' : ''} ${isDropTarget ? 'bg-accent-blue/10' : ''} ${isPastDue ? 'border-l-4 border-l-red-500' : ''} ${isOverloaded ? 'border-l-4 border-l-orange-500' : ''}`}
+      className={`group ${isSelected ? 'bg-[#E6F0FF] border-l-2 border-l-[#3B82F6] [&>td]:bg-[#EAF2FF] [&>td]:border-t [&>td]:border-b [&>td]:border-t-[#60A5FA] [&>td]:border-b-[#60A5FA] [&>td:first-child]:border-l-2 [&>td:first-child]:border-l-[#3B82F6] [&>td:last-child]:border-r-2 [&>td:last-child]:border-r-[#3B82F6]' : 'bg-white'} ${isDropTarget ? 'bg-accent-blue/10' : ''} ${isPastDue ? 'border-l-4 border-l-red-500' : ''} ${isOverloaded ? 'border-l-4 border-l-orange-500' : ''}`}
       onClick={(e) => onSelectRow?.(project.id, e)}
       onMouseEnter={() => onPresenceChange(project.id)}
       onMouseLeave={() => onPresenceChange(null)}
@@ -278,7 +295,20 @@ export function SortableRow({
           case 'project':
             return (
               <td key={rc.token} className="px-0 py-1 border-b border-border bg-white min-w-[240px]">
-                <ExpandableCell project={project} hasChildren={hasChildren} childCount={childCount} onToggleExpand={onToggleExpand} />
+                <ExpandableCell
+                  project={project}
+                  hasChildren={hasChildren}
+                  childCount={childCount}
+                  onToggleExpand={onToggleExpand}
+                  isEditing={editingNameId === project.id}
+                  editValue={editingNameId === project.id ? localEditNameValue : project.name}
+                  onStartEdit={() => onStartEditName?.(project.id, project.name)}
+                  onFinishEdit={(v) => onFinishEditName?.(v)}
+                  onCancelEdit={() => onCancelEditName?.()}
+                  onEditChange={setLocalEditNameValue}
+                  onIndent={onIndent}
+                  onOutdent={onOutdent}
+                />
               </td>
             );
           case 'branch':
