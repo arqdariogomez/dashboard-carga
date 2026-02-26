@@ -184,7 +184,7 @@ export function SortableRow({
         rowRef?.(node);
       }}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 }}
-      className={`group ${isSelected ? 'bg-[#EAF2FF]' : 'bg-white'} ${isDropTarget ? 'bg-accent-blue/10' : ''} ${isPastDue ? 'border-l-4 border-l-red-500' : ''} ${isOverloaded ? 'border-l-4 border-l-orange-500' : ''}`}
+      className={`group ${isSelected ? 'bg-[#EAF2FF]' : 'bg-white'} ${isSelected ? 'ring-2 ring-inset ring-[#3B82F6]/50' : ''} ${isDropTarget ? 'bg-accent-blue/10' : ''} ${isPastDue ? 'border-l-4 border-l-red-500' : ''} ${isOverloaded ? 'border-l-4 border-l-orange-500' : ''}`}
       onClick={(e) => onSelectRow?.(project.id, e)}
       onMouseEnter={() => onPresenceChange(project.id)}
       onMouseLeave={() => onPresenceChange(null)}
