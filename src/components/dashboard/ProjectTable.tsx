@@ -1264,7 +1264,7 @@ export function ProjectTable() {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="w-full overflow-x-auto">
+        <div className="w-full overflow-x-scroll overflow-y-visible">
           <table className="w-full border-separate border-spacing-0">
             <TableHeader
               renderColumns={renderColumns}
