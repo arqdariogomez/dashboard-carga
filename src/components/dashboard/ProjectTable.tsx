@@ -1260,7 +1260,7 @@ export function ProjectTable() {
       </div>
 
       <div className="flex-1 overflow-auto min-h-0">
-        <div className="overflow-y-auto px-8 pb-4" style={{ maxHeight: 'calc(100vh - 220px)' }}>
+        <div className="overflow-y-auto px-8 pb-4 pr-12" style={{ maxHeight: 'calc(100vh - 220px)' }}>
           <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
