@@ -1226,7 +1226,7 @@ export function ProjectTable() {
   };
 
   return (
-    <div className="w-full overflow-y-auto flex-1">
+    <div className="w-full overflow-y-auto flex-1 px-8 py-4">
       <TableTools
         search={search}
         setSearch={setSearch}
