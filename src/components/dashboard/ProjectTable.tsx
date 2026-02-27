@@ -1226,40 +1226,42 @@ export function ProjectTable() {
   };
 
   return (
-    <div className="w-full overflow-x-scroll overflow-y-auto flex-1 px-8 py-4">
-      <div className="sticky top-0 z-10 bg-bg-secondary pb-2">
+    <div className="w-full flex flex-col flex-1 px-8 py-4 min-h-0">
+      <div className="sticky top-0 z-10 bg-bg-secondary pb-2 shrink-0">
         <TableTools
-        search={search}
-        setSearch={setSearch}
-        projectsCount={state.projects.length}
-        multiSelectMode={multiSelectMode}
-        selectedRowId={selectedRowId}
-        selectedRowIds={selectedRowIds}
-        bulkMenuOpen={bulkMenuOpen}
-        bulkMenuRef={bulkMenuRef}
-        renderedProjectIds={renderedProjectIds}
-        onMultiSelectModeToggle={handleMultiSelectModeToggle}
-        onClearSelection={clearSelection}
-        onBulkMenuToggle={handleBulkMenuToggle}
-        onSelectAll={handleSelectAll}
-        onBulkIndent={handleBulkIndent}
-        onBulkOutdent={handleBulkOutdent}
-        onBulkDuplicate={handleBulkDuplicate}
-        onBulkDelete={handleBulkDelete}
-        onAddProject={tableActions.handleAddProject}
-        onExportExcel={tableActions.handleExportExcel}
-        onCopyCSV={tableActions.handleCopyCSV}
-        onAddColumn={handleAddColumn}
-        showUnscheduled={showUnscheduled}
-        setShowUnscheduled={setShowUnscheduled}
-        unscheduledCount={unscheduledCountRaw}
-        showRadar={showRadar}
-        setShowRadar={setShowRadar}
-        radarCount={radarCountRaw}
-      />
+          search={search}
+          setSearch={setSearch}
+          projectsCount={state.projects.length}
+          multiSelectMode={multiSelectMode}
+          selectedRowId={selectedRowId}
+          selectedRowIds={selectedRowIds}
+          bulkMenuOpen={bulkMenuOpen}
+          bulkMenuRef={bulkMenuRef}
+          renderedProjectIds={renderedProjectIds}
+          onMultiSelectModeToggle={handleMultiSelectModeToggle}
+          onClearSelection={clearSelection}
+          onBulkMenuToggle={handleBulkMenuToggle}
+          onSelectAll={handleSelectAll}
+          onBulkIndent={handleBulkIndent}
+          onBulkOutdent={handleBulkOutdent}
+          onBulkDuplicate={handleBulkDuplicate}
+          onBulkDelete={handleBulkDelete}
+          onAddProject={tableActions.handleAddProject}
+          onExportExcel={tableActions.handleExportExcel}
+          onCopyCSV={tableActions.handleCopyCSV}
+          onAddColumn={handleAddColumn}
+          showUnscheduled={showUnscheduled}
+          setShowUnscheduled={setShowUnscheduled}
+          unscheduledCount={unscheduledCountRaw}
+          showRadar={showRadar}
+          setShowRadar={setShowRadar}
+          radarCount={radarCountRaw}
+        />
       </div>
 
-      <DndContext
+      <div className="flex-1 overflow-x-scroll min-h-0">
+        <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 220px)' }}>
+          <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
@@ -1400,7 +1402,8 @@ export function ProjectTable() {
             </SortableContext>
           </table>
         </div>
-      </DndContext>
+        </DndContext>
+        </div>
 
       <DynamicColumnsDialog
         newColumnDialog={newColumnDialog}
@@ -1498,6 +1501,7 @@ export function ProjectTable() {
           </div>
         </div>
       )}
+    </div>
     </div>
   );
 }
