@@ -1227,7 +1227,8 @@ export function ProjectTable() {
 
   return (
     <div className="w-full overflow-x-scroll overflow-y-auto flex-1 px-8 py-4">
-      <TableTools
+      <div className="sticky top-0 z-10 bg-bg-secondary pb-2">
+        <TableTools
         search={search}
         setSearch={setSearch}
         projectsCount={state.projects.length}
@@ -1256,6 +1257,7 @@ export function ProjectTable() {
         setShowRadar={setShowRadar}
         radarCount={radarCountRaw}
       />
+      </div>
 
       <DndContext
         sensors={sensors}
