@@ -1021,6 +1021,13 @@ export function ProjectTable() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
+      // Escape cancels multi-select mode
+      if (e.key === 'Escape') {
+        setSelectedRowIds(new Set());
+        setMultiSelectMode(false);
+        return;
+      }
+
       if (!selectedRowId || multiSelectMode) return;
       if (e.key !== 'Tab') return;
 
@@ -1037,13 +1044,6 @@ export function ProjectTable() {
         handleIndent(selectedRowId);
       }
     };
-
-    // Escape cancels multi-select mode
-    if (e.key === 'Escape') {
-      setSelectedRowIds(new Set());
-      setMultiSelectMode(false);
-      return;
-    }
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
