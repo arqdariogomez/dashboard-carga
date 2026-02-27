@@ -1226,7 +1226,7 @@ export function ProjectTable() {
   };
 
   return (
-    <div className="w-full overflow-y-auto flex-1 px-8 py-4">
+    <div className="w-full overflow-x-scroll overflow-y-auto flex-1 px-8 py-4">
       <TableTools
         search={search}
         setSearch={setSearch}
@@ -1264,7 +1264,7 @@ export function ProjectTable() {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="w-full overflow-x-scroll overflow-y-visible">
+        <div className="w-full">
           <table className="w-full border-separate border-spacing-0">
             <TableHeader
               renderColumns={renderColumns}
