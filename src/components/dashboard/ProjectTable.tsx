@@ -1260,7 +1260,7 @@ export function ProjectTable() {
       </div>
 
       <div className="flex-1 overflow-auto min-h-0">
-        <div className="overflow-y-auto px-8 pb-4 pr-12" style={{ maxHeight: 'calc(100vh - 220px)' }}>
+        <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 220px)' }}>
           <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -1268,7 +1268,7 @@ export function ProjectTable() {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="w-full">
+        <div className="w-full px-8 pb-4 pr-12">
           <table className="w-full border-separate border-spacing-0">
             <TableHeader
               renderColumns={renderColumns}
