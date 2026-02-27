@@ -1227,7 +1227,7 @@ export function ProjectTable() {
 
   return (
     <div className="w-full flex flex-col flex-1 min-h-0">
-      <div className="sticky top-0 z-20 bg-bg-secondary pb-2 px-8 pt-4 shrink-0">
+      <div className="sticky top-0 z-20 bg-bg-secondary pb-2 pt-4 shrink-0">
         <TableTools
           search={search}
           setSearch={setSearch}
