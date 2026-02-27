@@ -1226,7 +1226,7 @@ export function ProjectTable() {
   };
 
   return (
-    <div className="w-full">
+    <div className="w-full overflow-y-auto flex-1">
       <TableTools
         search={search}
         setSearch={setSearch}
