@@ -224,7 +224,7 @@ export function SortableRow({
               e.stopPropagation();
               setRowMenuOpen((v) => !v);
             }}
-            className="p-0.5 rounded text-text-secondary/30 hover:text-text-secondary hover:bg-bg-secondary"
+            className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-text-secondary/30 hover:text-text-secondary hover:bg-bg-secondary transition-opacity"
             title="Arrastrar y menú"
           >
             <GripVertical size={15} />

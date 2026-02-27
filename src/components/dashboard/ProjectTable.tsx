@@ -695,29 +695,65 @@ export function ProjectTable() {
   }, [setSelectedRowIds]);
 
   const handleRowSelect = useCallback((id: string, ev?: React.MouseEvent<HTMLElement>) => {
-    if (multiSelectMode) {
-      if (ev?.shiftKey && lastSelectedRowId) {
-        const allIds = flatSortedProjects.map((p) => p.id);
-        const lastIdx = allIds.indexOf(lastSelectedRowId);
-        const currIdx = allIds.indexOf(id);
-        const [start, end] = lastIdx < currIdx ? [lastIdx, currIdx] : [currIdx, lastIdx];
-        const range = allIds.slice(start, end + 1);
-        setSelectedRowIds(new Set([...selectedRowIds, ...range]));
-      } else if (ev?.ctrlKey || ev?.metaKey) {
-        setSelectedRowIds((prev) => {
-          const next = new Set(prev);
-          if (next.has(id)) next.delete(id);
-          else next.add(id);
-          return next;
-        });
-      } else {
-        setSelectedRowIds(new Set([id]));
+    const shiftPressed = ev?.shiftKey;
+    const ctrlPressed = ev?.ctrlKey || ev?.metaKey;
+    const isRangeSelect = shiftPressed;
+    const isAdditiveSelect = ctrlPressed;
+
+    // Si hay Shift o Ctrl, activamos multi-select mode automáticamente
+    if (isRangeSelect || isAdditiveSelect) {
+      if (!multiSelectMode) {
+        setMultiSelectMode(true);
+        // Si es Shift (rango) pero no había nada seleccionado, solo seleccionar uno
+        if (isRangeSelect && !selectedRowId && selectedRowIds.size === 0) {
+          setSelectedRowId(id);
+          setLastSelectedRowId(id);
+          return;
+        }
       }
+    }
+
+    if (isRangeSelect && lastSelectedRowId) {
+      // Selección de rango con Shift
+      const allIds = flatSortedProjects.map((p) => p.id);
+      const lastIdx = allIds.indexOf(lastSelectedRowId);
+      const currIdx = allIds.indexOf(id);
+      if (lastIdx === -1 || currIdx === -1) {
+        setSelectedRowId(id);
+        setLastSelectedRowId(id);
+        return;
+      }
+      const [start, end] = lastIdx < currIdx ? [lastIdx, currIdx] : [currIdx, lastIdx];
+      const range = allIds.slice(start, end + 1);
+      setSelectedRowIds(new Set([...selectedRowIds, ...range]));
+      setSelectedRowId(id);
+      setLastSelectedRowId(id);
+    } else if (isAdditiveSelect) {
+      // Selección aditiva con Ctrl - agregar/quitar de selección
+      setSelectedRowIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      setSelectedRowId(id);
+      setLastSelectedRowId(id);
+    } else if (multiSelectMode) {
+      // Ya estamos en modo multi-select (sin modificadores) - togglear selección
+      setSelectedRowIds((prev) => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+      });
+      setSelectedRowId(id);
       setLastSelectedRowId(id);
     } else {
+      // Selección normal (single select)
       setSelectedRowId(id);
+      setLastSelectedRowId(id);
     }
-  }, [multiSelectMode, lastSelectedRowId, flatSortedProjects, selectedRowIds, setSelectedRowIds, setSelectedRowId, setLastSelectedRowId]);
+  }, [multiSelectMode, lastSelectedRowId, flatSortedProjects, selectedRowIds, selectedRowId, setSelectedRowIds, setSelectedRowId, setLastSelectedRowId, setMultiSelectMode]);
 
   const handleBulkMenuToggle = useCallback(() => {
     setBulkMenuOpen((prev) => !prev);
