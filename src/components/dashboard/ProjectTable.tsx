@@ -1019,6 +1019,16 @@ export function ProjectTable() {
     dispatch({ type: 'REORDER_PROJECTS', payload: newOrder });
   }, [state.projectOrder, state.projects, dispatch]);
 
+  // Measure toolbar height for sticky header offset
+  useEffect(() => {
+    if (stickyToolsRef.current) {
+      const height = stickyToolsRef.current.getBoundingClientRect().height;
+      if (height > 0 && height !== stickyToolsHeight) {
+        setStickyToolsHeight(height);
+      }
+    }
+  }, [stickyToolsRef.current, state.projects.length]);
+
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       // Escape cancels selection
@@ -1237,6 +1247,7 @@ export function ProjectTable() {
           selectedRowIds={selectedRowIds}
           bulkMenuOpen={bulkMenuOpen}
           bulkMenuRef={bulkMenuRef}
+          toolbarRef={stickyToolsRef}
           renderedProjectIds={renderedProjectIds}
           onMultiSelectModeToggle={handleMultiSelectModeToggle}
           onClearSelection={clearSelection}
@@ -1259,7 +1270,7 @@ export function ProjectTable() {
         />
       </div>
 
-      <div className="flex-1 overflow-auto min-h-0">
+      <div className="flex-1 overflow-auto min-h-0 pb-4">
         <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -1267,7 +1278,7 @@ export function ProjectTable() {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-          <table className="w-full px-8 pb-6 border-separate border-spacing-0 rounded-[24px] overflow-hidden">
+          <table className="w-full px-8 pb-6 border-separate border-spacing-0">
             <TableHeader
               renderColumns={renderColumns}
               columnWidths={columnWidths}
@@ -1314,7 +1325,8 @@ export function ProjectTable() {
               strategy={verticalListSortingStrategy}
             >
               <tbody>
-                {flatSortedProjects.map((project) => {
+                {flatSortedProjects.map((project, index) => {
+                  const isLastRow = index === flatSortedProjects.length - 1;
                   const isDropTarget = dragPreview?.overId === project.id;
                   const dropPlacement = dragPreview?.overId === project.id ? 'after' : null;
 
@@ -1322,6 +1334,7 @@ export function ProjectTable() {
                     <SortableRow
                       key={project.id}
                       project={project}
+                      isLastRow={isLastRow}
                       allProjects={state.projects}
                       isDropTarget={isDropTarget}
                       dropPlacement={dropPlacement}

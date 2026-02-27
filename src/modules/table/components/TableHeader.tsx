@@ -89,20 +89,20 @@ export function TableHeader({
   const [dragColumnToken, setDragColumnToken] = useState<string | null>(null);
 
   return (
-    <thead style={{ top: stickyToolsHeight }} className="sticky z-30 bg-bg-secondary">
+    <thead style={{ top: 0 }} className="sticky z-30 bg-white">
       <tr className="h-11 bg-white">
         <th
-          style={{ top: stickyToolsHeight }}
-          className="sticky z-30 bg-bg-secondary w-7 px-1 py-2.5 border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)] rounded-tl-lg"
+          className="bg-white w-7 px-1 py-2.5 border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)] rounded-tl-[24px]"
         />
         {renderColumns.map((rc, index) => {
           const label = rc.kind === 'dynamic' ? (rc.column.name || rc.label || 'Columna') : rc.label;
           const width = rc.kind === 'essential' ? columnWidths[rc.widthKey] : 160;
+          const isLast = index === renderColumns.length - 1;
           return (
             <th
               key={rc.token}
-              className="group relative sticky z-30 bg-bg-secondary px-2 py-2.5 text-left text-xs font-semibold text-text-secondary border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)]"
-              style={{ top: stickyToolsHeight, width }}
+              className={`group relative bg-white px-2 py-2.5 text-left text-xs font-semibold text-text-secondary border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)] ${isLast ? 'rounded-tr-[24px]' : ''}`}
+              style={{ width }}
               onDragOver={(e) => {
                 if (!dragColumnToken) return;
                 e.preventDefault();

@@ -150,6 +150,7 @@ interface SortableRowProps {
   onStartEditName?: (projectId: string, currentName: string) => void;
   onFinishEditName?: (newName: string) => void;
   onCancelEditName?: () => void;
+  isLastRow?: boolean;
 }
 
 export function SortableRow({
@@ -199,6 +200,7 @@ export function SortableRow({
   onStartEditName,
   onFinishEditName,
   onCancelEditName,
+  isLastRow,
 }: SortableRowProps) {
   const [rowMenuOpen, setRowMenuOpen] = useState(false);
   const [moveToOpen, setMoveToOpen] = useState(false);
@@ -283,7 +285,7 @@ export function SortableRow({
       onMouseEnter={() => onPresenceChange(project.id)}
       onMouseLeave={() => onPresenceChange(null)}
     >
-      <td className="relative w-8 px-1 py-2 border-b border-border bg-white" ref={rowMenuRef}>
+      <td className={`relative w-8 px-1 py-2 border-b border-border bg-white${isLastRow ? ' rounded-bl-[24px]' : ''}`} ref={rowMenuRef}>
         {multiSelectMode ? (
           <input
             type="checkbox"
@@ -432,7 +434,7 @@ export function SortableRow({
             return <td key={rc.token} className="px-2 py-2 border-b border-border text-center bg-white">{(project.dailyLoad ?? 0) > 0 ? <LoadBubble load={project.dailyLoad} size="sm" /> : <span className="text-xs text-text-secondary">Sin carga</span>}</td>;
           case 'status':
             return (
-              <td key={rc.token} className="px-2 py-2 border-b border-border bg-white">
+              <td key={rc.token} className={`px-2 py-2 border-b border-border bg-white${isLastRow ? ' rounded-br-[24px]' : ''}`}>
                 <StatusBadge status={getProjectStatus(project, dynamicValues)} />
               </td>
             );
