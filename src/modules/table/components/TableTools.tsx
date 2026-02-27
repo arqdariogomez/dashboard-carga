@@ -61,7 +61,7 @@ export function TableTools({
   radarCount = 0,
 }: TableToolsProps) {
   return (
-    <div className="py-2.5 flex items-center gap-2 flex-wrap">
+    <div className="py-2.5 pl-6 flex items-center gap-2 flex-wrap">
       <div className="relative flex-1 max-w-sm">
         <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-secondary" />
         <input

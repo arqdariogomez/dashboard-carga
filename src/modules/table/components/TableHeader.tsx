@@ -89,11 +89,11 @@ export function TableHeader({
   const [dragColumnToken, setDragColumnToken] = useState<string | null>(null);
 
   return (
-    <thead style={{ top: stickyToolsHeight }} className="sticky z-20">
+    <thead style={{ top: stickyToolsHeight }} className="sticky z-30 bg-bg-secondary">
       <tr className="h-11 bg-white">
         <th
           style={{ top: stickyToolsHeight }}
-          className="sticky z-20 bg-white w-7 px-1 py-2.5 border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)] rounded-tl-lg"
+          className="sticky z-30 bg-bg-secondary w-7 px-1 py-2.5 border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)] rounded-tl-lg"
         />
         {renderColumns.map((rc, index) => {
           const label = rc.kind === 'dynamic' ? (rc.column.name || rc.label || 'Columna') : rc.label;
@@ -101,7 +101,7 @@ export function TableHeader({
           return (
             <th
               key={rc.token}
-              className="group relative sticky z-20 bg-white px-2 py-2.5 text-left text-xs font-semibold text-text-secondary border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)]"
+              className="group relative sticky z-30 bg-bg-secondary px-2 py-2.5 text-left text-xs font-semibold text-text-secondary border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)]"
               style={{ top: stickyToolsHeight, width }}
               onDragOver={(e) => {
                 if (!dragColumnToken) return;
