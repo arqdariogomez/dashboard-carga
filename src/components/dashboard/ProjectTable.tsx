@@ -1260,16 +1260,14 @@ export function ProjectTable() {
       </div>
 
       <div className="flex-1 overflow-auto min-h-0">
-        <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 220px)' }}>
-          <DndContext
+        <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div className="w-full px-8 pb-4 pr-12">
-          <table className="w-full border-separate border-spacing-0">
+          <table className="w-full px-8 pb-6 border-separate border-spacing-0 rounded-[24px] overflow-hidden">
             <TableHeader
               renderColumns={renderColumns}
               columnWidths={columnWidths}
@@ -1401,9 +1399,7 @@ export function ProjectTable() {
               </tbody>
             </SortableContext>
           </table>
-        </div>
         </DndContext>
-        </div>
 
       <DynamicColumnsDialog
         newColumnDialog={newColumnDialog}
