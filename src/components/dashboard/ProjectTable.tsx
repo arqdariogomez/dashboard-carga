@@ -1021,8 +1021,9 @@ export function ProjectTable() {
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      // Escape cancels multi-select mode
+      // Escape cancels selection
       if (e.key === 'Escape') {
+        setSelectedRowId(null);
         setSelectedRowIds(new Set());
         setMultiSelectMode(false);
         return;
