@@ -27,7 +27,7 @@ type ColumnKey =
   | 'priority'
   | 'type'
   | 'load'
-  | 'balance';
+  | 'status';
 
 type EssentialColumnId =
   | 'project'
@@ -39,7 +39,7 @@ type EssentialColumnId =
   | 'priority'
   | 'type'
   | 'load'
-  | 'balance';
+  | 'status';
 
 type ColumnToken = `essential:${EssentialColumnId}` | `dynamic:${string}`;
 type DynamicDisplayType = DynamicColumn['type'] | 'progress' | 'stars';
@@ -131,7 +131,7 @@ export function useProjectTableState() {
     priority: 84,
     type: 108,
     load: 92,
-    balance: 92,
+    status: 120,
   }), []);
   const [columnWidths, setColumnWidths] = useState<Record<ColumnKey, number>>(defaultColumnWidths);
   
@@ -163,7 +163,7 @@ export function useProjectTableState() {
     priority: 70,
     type: 88,
     load: 72,
-    balance: 72,
+    status: 100,
   }), []);
   
   const maxColumnWidths = useMemo<Record<ColumnKey, number>>(() => ({
@@ -177,7 +177,7 @@ export function useProjectTableState() {
     priority: 150,
     type: 240,
     load: 160,
-    balance: 160,
+    status: 180,
   }), []);
 
   return {

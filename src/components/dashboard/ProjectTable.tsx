@@ -70,7 +70,7 @@ type ColumnKey =
   | 'priority'
   | 'type'
   | 'load'
-  | 'balance';
+  | 'status';
 
 type ColumnToken = `essential:${EssentialColumnId}` | `dynamic:${string}`;
 
@@ -84,7 +84,7 @@ type EssentialColumnId =
   | 'priority'
   | 'type'
   | 'load'
-  | 'balance';
+  | 'status';
 
 type RenderColumn =
   | {
@@ -505,7 +505,7 @@ export function ProjectTable() {
     { kind: 'essential', token: 'essential:priority', id: 'priority', label: 'Prior.', sortKey: 'priority', widthKey: 'priority', nonEditableName: true },
     { kind: 'essential', token: 'essential:type', id: 'type', label: 'Tipo', sortKey: 'type', widthKey: 'type', nonEditableName: true },
     { kind: 'essential', token: 'essential:load', id: 'load', label: 'Carga', sortKey: 'dailyLoad', widthKey: 'load', nonEditableName: true },
-    { kind: 'essential', token: 'essential:balance', id: 'balance', label: 'Balance', sortKey: 'balanceDays', widthKey: 'balance', nonEditableName: true },
+    { kind: 'essential', token: 'essential:status', id: 'status', label: 'Estatus', sortKey: 'status', widthKey: 'status', nonEditableName: true },
   ]), []);
 
   useEffect(() => {

@@ -17,9 +17,86 @@ import { StarRating } from './StarRating';
 import { ProgressRating } from './ProgressRating';
 import { isProgressColumn, isStarsColumn, normalizeProgressValue, normalizeStarsValue } from '../utils/table.utils';
 
+type ProjectStatus = 'por-hacer' | 'en-progreso' | 'en-riesgo' | 'en-retraso' | 'completado';
+
+function getProjectStatus(project: Project, dynamicValues?: Record<string, DynamicCellValue>): ProjectStatus {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const startDate = project.startDate ? new Date(project.startDate) : null;
+  const endDate = project.endDate ? new Date(project.endDate) : null;
+  
+  if (startDate) startDate.setHours(0, 0, 0, 0);
+  if (endDate) endDate.setHours(0, 0, 0, 0);
+  
+  let progress = 0;
+  
+  if (dynamicValues) {
+    const progressColId = Object.keys(dynamicValues).find(colId => {
+      return true; 
+    });
+    const progressValue = dynamicValues[progressColId || ''];
+    if (typeof progressValue === 'number') {
+      progress = progressValue;
+    }
+  }
+  
+  if (progress >= 100) {
+    return 'completado';
+  }
+  
+  if (!startDate || !endDate) {
+    return 'por-hacer';
+  }
+  
+  if (today < startDate) {
+    return 'por-hacer';
+  }
+  
+  if (today > endDate) {
+    return 'en-retraso';
+  }
+  
+  const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  const daysPassed = Math.ceil((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
+  const expectedProgress = totalDays > 0 ? (daysPassed / totalDays) * 100 : 0;
+  
+  if (progress < expectedProgress - 25) {
+    return 'en-riesgo';
+  }
+  
+  if (progress > 0) {
+    return 'en-progreso';
+  }
+  
+  if (daysPassed > 3 && progress === 0) {
+    return 'en-riesgo';
+  }
+  
+  return 'en-progreso';
+}
+
+function StatusBadge({ status }: { status: ProjectStatus }) {
+  const config = {
+    'por-hacer': { label: 'Por hacer', bg: 'bg-gray-100', text: 'text-gray-600', border: 'border-gray-200' },
+    'en-progreso': { label: 'En progreso', bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+    'en-riesgo': { label: 'En riesgo', bg: 'bg-amber-50', text: 'text-amber-700', border: 'border-amber-200' },
+    'en-retraso': { label: 'En retraso', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
+    'completado': { label: 'Completado', bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
+  };
+  
+  const c = config[status];
+  
+  return (
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${c.bg} ${c.text} border ${c.border}`}>
+      {c.label}
+    </span>
+  );
+}
+
 type SortKey = keyof Project;
-type ColumnKey = 'drag' | 'project' | 'branch' | 'start' | 'end' | 'assignees' | 'days' | 'priority' | 'type' | 'load' | 'balance';
-type EssentialColumnId = 'project' | 'branch' | 'start' | 'end' | 'assignees' | 'days' | 'priority' | 'type' | 'load' | 'balance';
+type ColumnKey = 'drag' | 'project' | 'branch' | 'start' | 'end' | 'assignees' | 'days' | 'priority' | 'type' | 'load' | 'status';
+type EssentialColumnId = 'project' | 'branch' | 'start' | 'end' | 'assignees' | 'days' | 'priority' | 'type' | 'load' | 'status';
 
 type RenderColumn =
   | { kind: 'essential'; token: `essential:${EssentialColumnId}`; id: EssentialColumnId; label: string; sortKey: SortKey; widthKey: ColumnKey; nonEditableName: true }
@@ -353,10 +430,10 @@ export function SortableRow({
             return <td key={rc.token} className="px-2 py-2 border-b border-border bg-white"><EditableSelectCell value={project.type || null} onChange={(v) => onUpdate(project.id, { type: (v as Project['type']) || 'Proyecto' })} options={['Proyecto', 'Lanzamiento', 'En radar']} /></td>;
           case 'load':
             return <td key={rc.token} className="px-2 py-2 border-b border-border text-center bg-white">{(project.dailyLoad ?? 0) > 0 ? <LoadBubble load={project.dailyLoad} size="sm" /> : <span className="text-xs text-text-secondary">Sin carga</span>}</td>;
-          case 'balance':
+          case 'status':
             return (
-              <td key={rc.token} className="px-2 py-2 border-b border-border text-center bg-white tabular-nums">
-                {project.assignedDays > 0 ? <span className={(project.balanceDays ?? 0) >= 0 ? 'text-[#2D6A2E]' : 'text-[#B71C1C]'}>{(project.balanceDays ?? 0) > 0 ? '+' : ''}{project.balanceDays ?? 0}d</span> : '—'}
+              <td key={rc.token} className="px-2 py-2 border-b border-border bg-white">
+                <StatusBadge status={getProjectStatus(project, dynamicValues)} />
               </td>
             );
           default:
