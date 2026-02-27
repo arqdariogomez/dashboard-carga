@@ -201,7 +201,7 @@ export function SortableRow({
         rowRef?.(node);
       }}
       style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 }}
-      className={`group ${isSelected ? 'bg-[#E6F0FF] border-l-2 border-l-[#3B82F6] [&>td]:bg-[#EAF2FF] [&>td]:border-t [&>td]:border-b [&>td]:border-t-[#60A5FA] [&>td]:border-b-[#60A5FA] [&>td:first-child]:border-l-2 [&>td:first-child]:border-l-[#3B82F6] [&>td:last-child]:border-r-2 [&>td:last-child]:border-r-[#3B82F6]' : 'bg-white'} ${isDropTarget ? 'bg-accent-blue/10' : ''} ${isPastDue ? 'border-l-4 border-l-red-500' : ''} ${isOverloaded ? 'border-l-4 border-l-orange-500' : ''}`}
+      className={`group select-none ${isSelected ? 'bg-[#E6F0FF] border-l-2 border-l-[#3B82F6] [&>td]:bg-[#EAF2FF] [&>td]:border-t [&>td]:border-b [&>td]:border-t-[#60A5FA] [&>td]:border-b-[#60A5FA] [&>td:first-child]:border-l-2 [&>td:first-child]:border-l-[#3B82F6] [&>td:last-child]:border-r-2 [&>td:last-child]:border-r-[#3B82F6]' : 'bg-white'} ${isDropTarget ? 'bg-accent-blue/10' : ''} ${isPastDue ? 'border-l-4 border-l-red-500' : ''} ${isOverloaded ? 'border-l-4 border-l-orange-500' : ''}`}
       onClick={(e) => onSelectRow?.(project.id, e)}
       onMouseEnter={() => onPresenceChange(project.id)}
       onMouseLeave={() => onPresenceChange(null)}

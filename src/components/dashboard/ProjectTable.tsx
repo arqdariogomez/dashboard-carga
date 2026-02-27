@@ -1038,6 +1038,13 @@ export function ProjectTable() {
       }
     };
 
+    // Escape cancels multi-select mode
+    if (e.key === 'Escape') {
+      setSelectedRowIds(new Set());
+      setMultiSelectMode(false);
+      return;
+    }
+
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedRowId, multiSelectMode, handleIndent, handleOutdent]);
