@@ -1227,7 +1227,7 @@ export function ProjectTable() {
 
   return (
     <div className="w-full flex flex-col flex-1 px-8 py-4 min-h-0">
-      <div className="sticky top-0 z-10 bg-bg-secondary pb-2 shrink-0">
+      <div className="sticky top-0 z-20 bg-bg-secondary pb-2 shrink-0">
         <TableTools
           search={search}
           setSearch={setSearch}
@@ -1259,7 +1259,7 @@ export function ProjectTable() {
         />
       </div>
 
-      <div className="flex-1 overflow-x-scroll min-h-0">
+      <div className="flex-1 overflow-auto min-h-0">
         <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 220px)' }}>
           <DndContext
         sensors={sensors}
