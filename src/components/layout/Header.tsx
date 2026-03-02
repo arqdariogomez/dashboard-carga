@@ -201,6 +201,21 @@ export function Header({ onReload, fileInputRef, onImport }: HeaderProps) {
     }
   })();
 
+  const handleCreateBoard = async (closeOpenModal: boolean) => {
+    const name = await promptText({ title: 'Nuevo tablero', label: 'Nombre del tablero', initialValue: '' });
+    if (!name) return;
+    try {
+      await createBoard(name);
+      setMenuOpen(false);
+      if (closeOpenModal) {
+        setOpenModal(false);
+      }
+      toast('success', 'Tablero creado.');
+    } catch (err) {
+      toast('error', `No se pudo crear el tablero: ${formatUiError(err)}`);
+    }
+  };
+
   return (
     <header className="h-14 border-b border-border/90 bg-white flex items-center justify-between px-4 flex-shrink-0">
       <div className="flex items-center gap-2 min-w-0">
@@ -240,7 +255,7 @@ export function Header({ onReload, fileInputRef, onImport }: HeaderProps) {
 
             {menuOpen && (
               <div className="absolute left-0 mt-1.5 w-56 rounded-xl border border-border bg-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] z-[140] p-1.5">
-                <button disabled={!canEditActiveBoard} className="w-full text-left px-2.5 py-2 rounded-lg text-xs hover:bg-bg-secondary flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed" onClick={async () => { const name = await promptText({ title: 'Nuevo tablero', label: 'Nombre del tablero', initialValue: '' }); if (!name) return; try { await createBoard(name); setMenuOpen(false); toast('success', 'Tablero creado.'); } catch (err) { toast('error', `No se pudo crear el tablero: ${formatUiError(err)}`); } }}>
+                <button disabled={!canEditActiveBoard} className="w-full text-left px-2.5 py-2 rounded-lg text-xs hover:bg-bg-secondary flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed" onClick={() => { void handleCreateBoard(false); }}>
                   <Plus size={14} /> Nuevo
                 </button>
                 <button className="w-full text-left px-2.5 py-2 rounded-lg text-xs hover:bg-bg-secondary flex items-center gap-2" onClick={() => { setOpenModal(true); setMenuOpen(false); }}>
@@ -260,6 +275,30 @@ export function Header({ onReload, fileInputRef, onImport }: HeaderProps) {
                 </button>
                 <button disabled={!canManageBoard} className="w-full text-left px-2.5 py-2 rounded-lg text-xs hover:bg-bg-secondary flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed" onClick={async () => { if (!canManageBoard) return; const email = await promptText({ title: 'Compartir tablero', label: 'Correo del usuario' }); if (!email) return; const roleRaw = await promptText({ title: 'Rol del usuario', label: 'editor o viewer', initialValue: 'viewer' }); const role = roleRaw === 'editor' ? 'editor' : 'viewer'; try { await inviteMemberByEmail(email, role); toast('success', 'Invitacion aplicada correctamente.'); setMenuOpen(false); } catch (err) { toast('error', `No se pudo invitar: ${formatUiError(err)}`); } }}>
                   <Share2 size={14} /> Compartir
+                </button>
+                <div className="my-1 border-t border-border" />
+                <button
+                  disabled={!canManageBoard}
+                  className="w-full text-left px-2.5 py-2 rounded-lg text-xs text-red-600 hover:bg-red-50 flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={async () => {
+                    if (!canManageBoard || !activeBoardId) return;
+                    const ok = await confirm({
+                      title: 'Eliminar tablero',
+                      message: 'Esta accion no se puede deshacer.',
+                      confirmText: 'Eliminar',
+                      tone: 'danger',
+                    });
+                    if (!ok) return;
+                    try {
+                      await deleteBoardById(activeBoardId);
+                      setMenuOpen(false);
+                      toast('success', 'Tablero eliminado.');
+                    } catch (err) {
+                      toast('error', `No se pudo eliminar: ${formatUiError(err)}`);
+                    }
+                  }}
+                >
+                  <Trash2 size={14} /> Eliminar
                 </button>
               </div>
             )}
@@ -361,7 +400,17 @@ export function Header({ onReload, fileInputRef, onImport }: HeaderProps) {
           <div className="w-[720px] max-w-[92vw] max-h-[80vh] rounded-xl border border-border bg-white shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-4 py-3 border-b border-border flex items-center justify-between">
               <div className="text-sm font-semibold text-text-primary">Abrir tablero</div>
-              <button className="text-xs px-2 py-1 rounded border border-border hover:bg-bg-secondary" onClick={() => setOpenModal(false)}>Cerrar</button>
+              <div className="flex items-center gap-2">
+                <button
+                  disabled={!canEditActiveBoard}
+                  className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded border border-border hover:bg-bg-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={() => { void handleCreateBoard(false); }}
+                >
+                  <Plus size={13} />
+                  Nuevo
+                </button>
+                <button className="text-xs px-2 py-1 rounded border border-border hover:bg-bg-secondary" onClick={() => setOpenModal(false)}>Cerrar</button>
+              </div>
             </div>
             <div className="px-4 py-3 border-b border-border">
               <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Buscar tablero..." className="w-full h-9 rounded-md border border-border px-3 text-sm outline-none focus:ring-2 focus:ring-blue-100" />

@@ -151,33 +151,33 @@ export function useProjectTableState() {
   const dynamicRequestSeqRef = useRef(0);
   const dynamicAppliedSeqRef = useRef(0);
   
-  // Column width constraints
+  // Column width constraints - generous ranges for flexibility
   const minColumnWidths = useMemo<Record<ColumnKey, number>>(() => ({
-    drag: 32,
-    project: 190,
-    branch: 92,
-    start: 90,
-    end: 90,
-    assignees: 60,
-    days: 72,
-    priority: 70,
-    type: 88,
-    load: 72,
-    status: 100,
+    drag: 28,
+    project: 150,
+    branch: 80,
+    start: 80,
+    end: 80,
+    assignees: 50,
+    days: 60,
+    priority: 60,
+    type: 80,
+    load: 60,
+    status: 72,
   }), []);
   
   const maxColumnWidths = useMemo<Record<ColumnKey, number>>(() => ({
-    drag: 56,
-    project: 720,
-    branch: 280,
-    start: 190,
-    end: 190,
-    assignees: 200,
-    days: 180,
-    priority: 150,
-    type: 240,
-    load: 160,
-    status: 180,
+    drag: 64,
+    project: 900,
+    branch: 400,
+    start: 240,
+    end: 240,
+    assignees: 320,
+    days: 240,
+    priority: 200,
+    type: 320,
+    load: 200,
+    status: 200,
   }), []);
 
   return {

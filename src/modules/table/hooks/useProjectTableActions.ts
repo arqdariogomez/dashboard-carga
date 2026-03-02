@@ -26,6 +26,7 @@ const normalizePersonKey = (name: string): string => {
 const normalizeTagList = (tags: string[]): string[] => {
   return [...new Set(tags.map(t => t.trim()).filter(Boolean))];
 };
+const equalsIgnoreCase = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 export function useProjectTableActions({
   state,
@@ -64,42 +65,66 @@ export function useProjectTableActions({
   const handleRenameBranchOption = useCallback((from: string, to: string) => {
     const fromClean = from.trim();
     const toClean = to.trim();
-    if (fromClean && toClean) {
-      const updates = (state.projects || []).reduce((acc, project) => {
-        const oldBranches = Array.isArray(project.branch) ? project.branch : [];
-        const newBranches = oldBranches.map((b) => b === fromClean ? toClean : b);
-        if (JSON.stringify(oldBranches) !== JSON.stringify(newBranches)) {
-          acc[project.id] = { branch: newBranches };
-        }
-        return acc;
-      }, {} as Record<string, { branch: string[] }>);
+    if (!fromClean || !toClean) return;
 
-      if (Object.keys(updates).length > 0) {
-        dispatch({ type: 'BULK_UPDATE_PROJECTS', payload: updates });
-        setBranchCatalog(prev => normalizeTagList([...prev.filter(b => b !== fromClean), toClean]));
+    const updates = (state.projects || []).reduce((acc, project) => {
+      const oldBranches = Array.isArray(project.branch) ? project.branch : [];
+      const newBranches = normalizeTagList(oldBranches.map((b) => equalsIgnoreCase(b, fromClean) ? toClean : b));
+      if (JSON.stringify(oldBranches) !== JSON.stringify(newBranches)) {
+        acc[project.id] = { branch: newBranches };
       }
+      return acc;
+    }, {} as Record<string, { branch: string[] }>);
+
+    if (Object.keys(updates).length > 0) {
+      dispatch({ type: 'BULK_UPDATE_PROJECTS', payload: updates });
     }
+    setBranchCatalog(prev => normalizeTagList([...prev.filter((b) => !equalsIgnoreCase(b, fromClean)), toClean]));
   }, [state.projects, dispatch, setBranchCatalog]);
 
   const handleDeleteBranchOption = useCallback((label: string) => {
     const clean = label.trim();
-    if (clean) {
-      const key = clean.toLowerCase();
+    if (!clean) return;
 
-      const updates = (state.projects || []).reduce((acc, project) => {
-        const oldBranches = Array.isArray(project.branch) ? project.branch : [];
-        const newBranches = oldBranches.filter((b) => b.toLowerCase() !== key);
-        if (oldBranches.length !== newBranches.length) {
-          acc[project.id] = { branch: newBranches };
-        }
-        return acc;
-      }, {} as Record<string, { branch: string[] }>);
-
-      if (Object.keys(updates).length > 0) {
-        dispatch({ type: 'BULK_UPDATE_PROJECTS', payload: updates });
-        setBranchCatalog(prev => prev.filter(b => b !== clean));
+    const updates = (state.projects || []).reduce((acc, project) => {
+      const oldBranches = Array.isArray(project.branch) ? project.branch : [];
+      const newBranches = oldBranches.filter((b) => !equalsIgnoreCase(b, clean));
+      if (oldBranches.length !== newBranches.length) {
+        acc[project.id] = { branch: newBranches };
       }
+      return acc;
+    }, {} as Record<string, { branch: string[] }>);
+
+    if (Object.keys(updates).length > 0) {
+      dispatch({ type: 'BULK_UPDATE_PROJECTS', payload: updates });
     }
+    setBranchCatalog(prev => prev.filter((b) => !equalsIgnoreCase(b, clean)));
+  }, [state.projects, dispatch, setBranchCatalog]);
+
+  const handleMergeBranchOptions = useCallback((left: string, right: string, keep: string) => {
+    const leftClean = left.trim();
+    const rightClean = right.trim();
+    const keepClean = keep.trim();
+    if (!leftClean || !rightClean || !keepClean) return;
+
+    const updates = (state.projects || []).reduce((acc, project) => {
+      const oldBranches = Array.isArray(project.branch) ? project.branch : [];
+      const next = normalizeTagList(
+        oldBranches.map((b) => (equalsIgnoreCase(b, leftClean) || equalsIgnoreCase(b, rightClean)) ? keepClean : b),
+      );
+      if (JSON.stringify(oldBranches) !== JSON.stringify(next)) {
+        acc[project.id] = { branch: next };
+      }
+      return acc;
+    }, {} as Record<string, { branch: string[] }>);
+
+    if (Object.keys(updates).length > 0) {
+      dispatch({ type: 'BULK_UPDATE_PROJECTS', payload: updates });
+    }
+    setBranchCatalog((prev) => normalizeTagList([
+      ...prev.filter((b) => !equalsIgnoreCase(b, leftClean) && !equalsIgnoreCase(b, rightClean)),
+      keepClean,
+    ]));
   }, [state.projects, dispatch, setBranchCatalog]);
 
   // Person operations
@@ -367,6 +392,7 @@ export function useProjectTableActions({
     handleAddBranchOption,
     handleRenameBranchOption,
     handleDeleteBranchOption,
+    handleMergeBranchOptions,
     
     // Person operations
     handleRenamePersonGlobal,

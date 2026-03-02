@@ -97,6 +97,7 @@ export type AppAction =
   | { type: 'TOGGLE_SIDEBAR' }
   | { type: 'SET_LOAD_MODE'; payload: 'calculated' | 'reported' }
   | { type: 'UPDATE_PROJECT'; payload: { id: string; updates: Partial<Project> } }
+  | { type: 'BULK_UPDATE_PROJECTS'; payload: Record<string, Partial<Project>> }
   | { type: 'ADD_PROJECT'; payload: Project }
   | { type: 'DELETE_PROJECT'; payload: string }
   | { type: 'REORDER_PROJECTS'; payload: string[] }

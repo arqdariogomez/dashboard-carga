@@ -5,7 +5,6 @@ import { useUiFeedback } from '@/context/UiFeedbackContext';
 import { usePersonProfiles } from '@/context/PersonProfilesContext';
 import { LoadBubble } from '@/components/shared/LoadBubble';
 import { formatDateShort, format, isValidDateValue } from '@/lib/dateUtils';
-import { branchLabel, normalizeBranchList } from '@/lib/branchUtils';
 import { exportToExcel, copyAsCSV } from '@/lib/exportUtils';
 import { validateNoCircles, getCollapsedMetricsSummary, getAncestors, getDescendants } from '@/lib/hierarchyEngine';
 import {
@@ -127,6 +126,8 @@ const dedupeTokens = <T extends string>(tokens: T[]): T[] => {
   }
   return out;
 };
+
+const normalizeTagList = (tags: string[]): string[] => [...new Set(tags.map((t) => t.trim()).filter(Boolean))];
 
 // Helper function
 const normalizePersonKey = (name: string): string => {
@@ -583,6 +584,38 @@ export function ProjectTable() {
       // ignore storage errors
     }
   }, [activeBoardId, columnOrder, columnWidths]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const key = `workload-dashboard-branch-catalog:${activeBoardId || 'local'}`;
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) {
+        setBranchCatalog([]);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      const safe = Array.isArray(parsed) ? normalizeTagList(parsed.map((x) => String(x))) : [];
+      setBranchCatalog(safe);
+    } catch {
+      setBranchCatalog([]);
+    }
+  }, [activeBoardId, setBranchCatalog]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const key = `workload-dashboard-branch-catalog:${activeBoardId || 'local'}`;
+    try {
+      window.localStorage.setItem(key, JSON.stringify(branchCatalog));
+    } catch {
+      // ignore storage errors
+    }
+  }, [activeBoardId, branchCatalog]);
+
+  const branchOptions = useMemo(
+    () => normalizeTagList([...(allBranches || []), ...(branchCatalog || [])]),
+    [allBranches, branchCatalog]
+  );
 
   const renderColumns = useMemo(() => {
     const essentialByToken = new Map(essentialColumnDefs.map((c) => [c.token, c]));
@@ -1237,7 +1270,7 @@ export function ProjectTable() {
 
   return (
     <div className="w-full flex flex-col flex-1 min-h-0">
-      <div className="sticky top-0 z-20 bg-bg-secondary pb-2 pt-4 shrink-0">
+      <div className="sticky top-0 z-20 bg-bg-secondary pb-0 pt-0 shrink-0">
         <TableTools
           search={search}
           setSearch={setSearch}
@@ -1278,7 +1311,7 @@ export function ProjectTable() {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-          <table className="w-full px-8 pb-6 border-separate border-spacing-0">
+          <table className="w-full px-8 pb-6 border-separate border-spacing-0 table-fixed">
             <TableHeader
               renderColumns={renderColumns}
               columnWidths={columnWidths}
@@ -1326,7 +1359,6 @@ export function ProjectTable() {
             >
               <tbody>
                 {flatSortedProjects.map((project, index) => {
-                  const isLastRow = index === flatSortedProjects.length - 1;
                   const isDropTarget = dragPreview?.overId === project.id;
                   const dropPlacement = dragPreview?.overId === project.id ? 'after' : null;
 
@@ -1334,7 +1366,6 @@ export function ProjectTable() {
                     <SortableRow
                       key={project.id}
                       project={project}
-                      isLastRow={isLastRow}
                       allProjects={state.projects}
                       isDropTarget={isDropTarget}
                       dropPlacement={dropPlacement}
@@ -1359,9 +1390,10 @@ export function ProjectTable() {
                       onAddBranchOption={tableActions.handleAddBranchOption}
                       onRenameBranchOption={tableActions.handleRenameBranchOption}
                       onDeleteBranchOption={tableActions.handleDeleteBranchOption}
+                      onMergeBranchOption={tableActions.handleMergeBranchOptions}
                       personProfiles={personProfiles}
                       allPersons={allPersons}
-                      allBranches={allBranches}
+                      allBranches={branchOptions}
                       onRenamePersonGlobal={tableActions.handleRenamePersonGlobal}
                       onDeletePersonGlobal={tableActions.handleDeletePersonGlobal}
                       onMergePersonsGlobal={tableActions.handleMergePersonsGlobal}

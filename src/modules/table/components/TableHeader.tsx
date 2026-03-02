@@ -3,7 +3,7 @@ import { GripVertical, Plus, Trash2, Copy, ChevronRight, ArrowLeft, ArrowRight, 
 import type { DynamicColumn } from '@/lib/types';
 
 type DynamicDisplayType = DynamicColumn['type'] | 'progress' | 'stars';
-type ColumnKey = 'drag' | 'project' | 'branch' | 'start' | 'end' | 'assignees' | 'days' | 'priority' | 'type' | 'load' | 'balance';
+type ColumnKey = 'drag' | 'project' | 'branch' | 'start' | 'end' | 'assignees' | 'days' | 'priority' | 'type' | 'load' | 'status';
 type SortKey = string;
 const dynamicTypeLabels: Record<DynamicDisplayType, string> = {
   text: 'Texto',
@@ -52,7 +52,7 @@ interface TableHeaderProps {
   onReorderColumns: (dragToken: string, dropToken: string) => void;
   onOpenMoveCopy: (token: string) => void;
   onColumnResize: (columnKey: ColumnKey, width: number) => void;
-  resizingColumnRef: React.RefObject<{ key: string; startX: number; startWidth: number } | null>;
+  resizingColumnRef: React.RefObject<{ key: ColumnKey; startX: number; startWidth: number } | null>;
   minColumnWidths: Record<ColumnKey, number>;
   maxColumnWidths: Record<ColumnKey, number>;
 }
@@ -87,21 +87,21 @@ export function TableHeader({
   const [optionsEditorFor, setOptionsEditorFor] = useState<string | null>(null);
   const [optionsDraft, setOptionsDraft] = useState('');
   const [dragColumnToken, setDragColumnToken] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
 
   return (
     <thead style={{ top: 0 }} className="sticky z-30 bg-white">
       <tr className="h-11 bg-white">
         <th
-          className="bg-white w-7 px-1 py-2.5 border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)] rounded-tl-[24px]"
+          className="bg-white w-7 px-1 py-2.5 border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)]"
         />
         {renderColumns.map((rc, index) => {
           const label = rc.kind === 'dynamic' ? (rc.column.name || rc.label || 'Columna') : rc.label;
           const width = rc.kind === 'essential' ? columnWidths[rc.widthKey] : 160;
-          const isLast = index === renderColumns.length - 1;
           return (
             <th
               key={rc.token}
-              className={`group relative bg-white px-2 py-2.5 text-left text-xs font-semibold text-text-secondary border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)] ${isLast ? 'rounded-tr-[24px]' : ''}`}
+              className={`group relative bg-white px-2 py-2.5 text-left text-xs font-semibold text-text-secondary border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)]`}
               style={{ width }}
               onDragOver={(e) => {
                 if (!dragColumnToken) return;
@@ -153,7 +153,22 @@ export function TableHeader({
                   onDragStart={() => setDragColumnToken(rc.token)}
                   onDragEnd={() => setDragColumnToken(null)}
                   className="opacity-0 group-hover:opacity-100 h-6 w-6 inline-flex items-center justify-center rounded border border-transparent hover:border-border hover:bg-bg-secondary text-text-secondary"
-                  onClick={() => onColumnMenuToggle(columnMenuOpenFor === rc.id ? null : rc.id)}
+                  onClick={(e) => {
+                    if (columnMenuOpenFor === rc.id) {
+                      onColumnMenuToggle(null);
+                      setMenuPos(null);
+                      return;
+                    }
+                    const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                    const menuW = 240;
+                    const menuH = 360;
+                    const gap = 6;
+                    const left = Math.max(8, Math.min(rect.right - menuW, window.innerWidth - menuW - 8));
+                    const openUp = rect.bottom + gap + menuH > window.innerHeight && rect.top > menuH;
+                    const top = openUp ? Math.max(8, rect.top - gap - menuH) : Math.min(window.innerHeight - 8, rect.bottom + gap);
+                    setMenuPos({ top, left });
+                    onColumnMenuToggle(rc.id);
+                  }}
                   title="Opciones de columna"
                 >
                   <GripVertical size={14} />
@@ -161,7 +176,10 @@ export function TableHeader({
               </div>
 
               {columnMenuOpenFor === rc.id && (
-                <div className="absolute right-0 top-full mt-1 z-[180] w-[240px] rounded-xl border border-border bg-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] p-1.5">
+                <div
+                  className={menuPos ? "fixed z-[260] w-[240px] rounded-xl border border-border bg-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] p-1.5" : "absolute right-0 top-full mt-1 z-[180] w-[240px] rounded-xl border border-border bg-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] p-1.5"}
+                  style={menuPos ? { top: menuPos.top, left: menuPos.left } : undefined}
+                >
                   <button type="button" className="w-full text-left px-2.5 py-1.5 text-xs rounded-lg hover:bg-bg-secondary inline-flex items-center gap-2" onClick={() => { onCreateColumn(index, 'text'); onColumnMenuToggle(null); }}><Plus size={13} />Agregar antes</button>
                   <button type="button" className="w-full text-left px-2.5 py-1.5 text-xs rounded-lg hover:bg-bg-secondary inline-flex items-center gap-2" onClick={() => { onCreateColumn(index + 1, 'text'); onColumnMenuToggle(null); }}><Plus size={13} />Agregar después</button>
                   <button type="button" className="w-full text-left px-2.5 py-1.5 text-xs rounded-lg hover:bg-bg-secondary inline-flex items-center gap-2" onClick={() => { onMoveColumnLeft(rc.token); onColumnMenuToggle(null); }}><ArrowLeft size={13} />Mover a la izquierda</button>

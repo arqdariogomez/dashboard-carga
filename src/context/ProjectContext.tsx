@@ -55,7 +55,7 @@ interface HistoryState {
 
 // Check if action modifies project data (should be tracked in history)
 function isUndoableAction(action: AppAction): boolean {
-  return ['UPDATE_PROJECT', 'ADD_PROJECT', 'DELETE_PROJECT', 'REORDER_PROJECTS', 'UPDATE_HIERARCHY', 'TOGGLE_EXPANSION'].includes(action.type);
+  return ['UPDATE_PROJECT', 'BULK_UPDATE_PROJECTS', 'ADD_PROJECT', 'DELETE_PROJECT', 'REORDER_PROJECTS', 'UPDATE_HIERARCHY', 'TOGGLE_EXPANSION'].includes(action.type);
 }
 
 function appReducer(state: AppState, action: AppAction): AppState {
@@ -134,6 +134,26 @@ function appReducer(state: AppState, action: AppAction): AppState {
       // Recalculate hierarchy levels after updates
       projects = projects.map(p => ({ ...p, hierarchyLevel: calculateHierarchyLevel(p.id, projects) }));
 
+      return { ...state, projects, hasUnsavedChanges: true };
+    }
+    case 'BULK_UPDATE_PROJECTS': {
+      const updatesById = action.payload || {};
+      const updateIds = new Set(Object.keys(updatesById));
+      if (updateIds.size === 0) return state;
+
+      let projects = state.projects.map((p) => {
+        if (!updateIds.has(p.id)) return p;
+        const merged = { ...p, ...(updatesById[p.id] || {}) };
+        return computeProjectFields(merged, state.config, state.projects);
+      });
+
+      projects = projects.map((p) => {
+        if (!p.parentId) return p;
+        if (!updateIds.has(p.id) && !updateIds.has(p.parentId)) return p;
+        return computeProjectFields(p, state.config, projects);
+      });
+
+      projects = projects.map((p) => ({ ...p, hierarchyLevel: calculateHierarchyLevel(p.id, projects) }));
       return { ...state, projects, hasUnsavedChanges: true };
     }
     case 'ADD_PROJECT': {
@@ -507,6 +527,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     (action) => {
       const mutatingActionTypes = new Set([
         'UPDATE_PROJECT',
+        'BULK_UPDATE_PROJECTS',
         'ADD_PROJECT',
         'DELETE_PROJECT',
         'REORDER_PROJECTS',
@@ -1050,9 +1071,31 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
 
       const created = { id: boardId, name: trimmed };
       setBoards((prev) => [...prev, created]);
-      // New boards start with a copy of current local state so shared links open meaningful content immediately.
+      // New boards start with a single placeholder row instead of cloning current board data.
+      const placeholderBase: Project = {
+        id: `proj-new-${Date.now()}`,
+        name: 'Proyecto de prueba',
+        branch: [],
+        startDate: null,
+        endDate: null,
+        assignees: [],
+        daysRequired: 0,
+        priority: 0,
+        type: 'Proyecto',
+        blockedBy: null,
+        blocksTo: null,
+        reportedLoad: null,
+        parentId: null,
+        isExpanded: true,
+        hierarchyLevel: 0,
+        assignedDays: 0,
+        balanceDays: 0,
+        dailyLoad: 0,
+        totalHours: 0,
+      };
+      const placeholder = computeProjectFields(placeholderBase, state.config, [placeholderBase]);
       ignoreRealtimeUntilRef.current = Date.now() + 2000;
-      await saveBoardProjects(boardId, state.projects, state.projectOrder);
+      await saveBoardProjects(boardId, [placeholder], [placeholder.id]);
       hasLoadedCloudRef.current = false;
       setActiveBoardId(created.id);
       await refreshBoards(workspaceId);

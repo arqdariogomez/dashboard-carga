@@ -22,57 +22,32 @@ type ProjectStatus = 'por-hacer' | 'en-progreso' | 'en-riesgo' | 'en-retraso' | 
 function getProjectStatus(project: Project, dynamicValues?: Record<string, DynamicCellValue>): ProjectStatus {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  
+
   const startDate = project.startDate ? new Date(project.startDate) : null;
   const endDate = project.endDate ? new Date(project.endDate) : null;
-  
+
   if (startDate) startDate.setHours(0, 0, 0, 0);
   if (endDate) endDate.setHours(0, 0, 0, 0);
-  
+
   let progress = 0;
-  
   if (dynamicValues) {
-    const progressColId = Object.keys(dynamicValues).find(colId => {
-      return true; 
-    });
+    const progressColId = Object.keys(dynamicValues).find(() => true);
     const progressValue = dynamicValues[progressColId || ''];
-    if (typeof progressValue === 'number') {
-      progress = progressValue;
-    }
+    if (typeof progressValue === 'number') progress = progressValue;
   }
-  
-  if (progress >= 100) {
-    return 'completado';
-  }
-  
-  if (!startDate || !endDate) {
-    return 'por-hacer';
-  }
-  
-  if (today < startDate) {
-    return 'por-hacer';
-  }
-  
-  if (today > endDate) {
-    return 'en-retraso';
-  }
-  
+
+  if (progress >= 100) return 'completado';
+  if (!startDate || !endDate) return 'por-hacer';
+  if (today < startDate) return 'por-hacer';
+  if (today > endDate) return 'en-retraso';
+
   const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
   const daysPassed = Math.ceil((today.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
   const expectedProgress = totalDays > 0 ? (daysPassed / totalDays) * 100 : 0;
-  
-  if (progress < expectedProgress - 25) {
-    return 'en-riesgo';
-  }
-  
-  if (progress > 0) {
-    return 'en-progreso';
-  }
-  
-  if (daysPassed > 3 && progress === 0) {
-    return 'en-riesgo';
-  }
-  
+
+  if (progress < expectedProgress - 25) return 'en-riesgo';
+  if (progress > 0) return 'en-progreso';
+  if (daysPassed > 3 && progress === 0) return 'en-riesgo';
   return 'en-progreso';
 }
 
@@ -84,13 +59,29 @@ function StatusBadge({ status }: { status: ProjectStatus }) {
     'en-retraso': { label: 'En retraso', bg: 'bg-red-50', text: 'text-red-700', border: 'border-red-200' },
     'completado': { label: 'Completado', bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
   };
-  
   const c = config[status];
-  
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${c.bg} ${c.text} border ${c.border}`}>
       {c.label}
     </span>
+  );
+}
+
+function GroupRowLockedOverlay({ onShowHint }: { onShowHint: () => void }) {
+  return (
+    <div className="absolute inset-0 z-10">
+      <button
+        type="button"
+        className="peer absolute inset-0 z-10 cursor-not-allowed"
+        onClick={(e) => {
+          e.stopPropagation();
+          onShowHint();
+        }}
+      />
+      <div className="pointer-events-none absolute left-1/2 top-1 z-20 -translate-x-1/2 rounded-md border border-border bg-white/95 px-2 py-1 text-[11px] text-text-secondary opacity-0 peer-hover:opacity-100 transition-none whitespace-nowrap shadow-sm">
+        No se pueden editar los Grupos, prueba editar un proyecto individual
+      </div>
+    </div>
   );
 }
 
@@ -124,6 +115,7 @@ interface SortableRowProps {
   onAddBranchOption?: (label: string) => void;
   onRenameBranchOption?: (from: string, to: string) => void;
   onDeleteBranchOption?: (label: string) => void;
+  onMergeBranchOption?: (left: string, right: string, keep: string) => void;
   onPresenceChange: (rowId: string | null, columnId?: string | null) => void;
   onSetPersonAvatar: (name: string, file: File) => Promise<void>;
   allPersons: string[];
@@ -150,7 +142,6 @@ interface SortableRowProps {
   onStartEditName?: (projectId: string, currentName: string) => void;
   onFinishEditName?: (newName: string) => void;
   onCancelEditName?: () => void;
-  isLastRow?: boolean;
 }
 
 export function SortableRow({
@@ -175,6 +166,7 @@ export function SortableRow({
   onAddBranchOption,
   onRenameBranchOption,
   onDeleteBranchOption,
+  onMergeBranchOption,
   onPresenceChange,
   onSetPersonAvatar,
   allPersons,
@@ -200,7 +192,6 @@ export function SortableRow({
   onStartEditName,
   onFinishEditName,
   onCancelEditName,
-  isLastRow,
 }: SortableRowProps) {
   const [rowMenuOpen, setRowMenuOpen] = useState(false);
   const [moveToOpen, setMoveToOpen] = useState(false);
@@ -208,6 +199,7 @@ export function SortableRow({
   const [moveToMode, setMoveToMode] = useState<'before' | 'inside'>('before');
   const [moveToQuery, setMoveToQuery] = useState('');
   const [moveToTargetId, setMoveToTargetId] = useState<string | '__end__'>('__end__');
+  const [rowMenuPos, setRowMenuPos] = useState<{ top: number; left: number } | null>(null);
   const rowMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -266,6 +258,7 @@ export function SortableRow({
       if (rowMenuRef.current && !rowMenuRef.current.contains(e.target as Node)) {
         setRowMenuOpen(false);
         setMoveToOpen(false);
+        setRowMenuPos(null);
       }
     };
     document.addEventListener('mousedown', onDocClick);
@@ -285,7 +278,7 @@ export function SortableRow({
       onMouseEnter={() => onPresenceChange(project.id)}
       onMouseLeave={() => onPresenceChange(null)}
     >
-      <td className={`relative w-8 px-1 py-2 border-b border-border bg-white${isLastRow ? ' rounded-bl-[24px]' : ''}`} ref={rowMenuRef}>
+      <td className="relative w-8 px-1 py-2 border-b border-border bg-white" ref={rowMenuRef}>
         {multiSelectMode ? (
           <input
             type="checkbox"
@@ -301,7 +294,22 @@ export function SortableRow({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              setRowMenuOpen((v) => !v);
+              setRowMenuOpen((v) => {
+                const next = !v;
+                if (next) {
+                  const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                  const menuW = 240;
+                  const menuH = 320;
+                  const gap = 6;
+                  const left = Math.max(8, Math.min(rect.right + gap, window.innerWidth - menuW - 8));
+                  const openUp = rect.bottom + menuH > window.innerHeight && rect.top > menuH;
+                  const top = openUp ? Math.max(8, rect.top - menuH) : Math.min(window.innerHeight - 8, rect.top);
+                  setRowMenuPos({ top, left });
+                } else {
+                  setRowMenuPos(null);
+                }
+                return next;
+              });
             }}
             className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-text-secondary/30 hover:text-text-secondary hover:bg-bg-secondary transition-opacity"
             title="Arrastrar y menú"
@@ -311,7 +319,11 @@ export function SortableRow({
         )}
 
         {rowMenuOpen && (
-          <div className="absolute left-6 top-0 z-[170] w-[240px] rounded-xl border border-border bg-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] p-1.5" onClick={(e) => e.stopPropagation()}>
+          <div
+            className={rowMenuPos ? "fixed z-[260] w-[240px] rounded-xl border border-border bg-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] p-1.5" : "absolute left-6 top-0 z-[170] w-[240px] rounded-xl border border-border bg-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] p-1.5"}
+            style={rowMenuPos ? { top: rowMenuPos.top, left: rowMenuPos.left } : undefined}
+            onClick={(e) => e.stopPropagation()}
+          >
             <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-lg hover:bg-bg-secondary inline-flex items-center gap-2" onClick={() => { onAddAbove(project.id); setRowMenuOpen(false); }}><Plus size={13} />Agregar fila arriba</button>
             <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-lg hover:bg-bg-secondary inline-flex items-center gap-2" onClick={() => { onAddBelow(project.id); setRowMenuOpen(false); }}><Plus size={13} />Agregar fila debajo</button>
             <button className="w-full text-left px-2.5 py-1.5 text-xs rounded-lg hover:bg-bg-secondary inline-flex items-center gap-2" onClick={() => { onAddGroupAbove(project.id); setRowMenuOpen(false); }}><Plus size={13} />Agregar grupo arriba</button>
@@ -346,7 +358,7 @@ export function SortableRow({
           const col = rc.column;
           const cellValue = dynamicValues?.[col.id] ?? null;
           return (
-            <td key={rc.token} className="px-2 py-2 border-b border-border text-xs bg-white min-w-[140px]">
+            <td key={rc.token} className="relative px-2 py-2 border-b border-border text-xs bg-white min-w-[140px]">
               {col.type === 'checkbox' ? (
                 <input type="checkbox" checked={Boolean(cellValue)} onChange={(e) => onUpdateDynamicCell(project.id, col.id, e.target.checked)} className="h-3.5 w-3.5 accent-[#3B82F6]" />
               ) : col.type === 'number' ? (
@@ -365,6 +377,9 @@ export function SortableRow({
                 <EditableTagsCell value={Array.isArray(cellValue) ? (cellValue as string[]) : []} options={Array.isArray(col.config?.options) ? (col.config.options as string[]) : []} columnName={col.name} onChange={(v) => onUpdateDynamicCell(project.id, col.id, v)} onAddOption={(label) => onAddDynamicTagOption?.(col.id, label) || Promise.resolve()} onRenameOption={(from, to) => onRenameDynamicTagOption?.(col.id, from, to) || Promise.resolve()} onDeleteOption={(label) => onDeleteDynamicTagOption?.(col.id, label) || Promise.resolve()} />
               ) : (
                 <EditableTextCell value={typeof cellValue === 'string' ? cellValue : ''} onChange={(v) => onUpdateDynamicCell(project.id, col.id, v)} placeholder="Escribir..." />
+              )}
+              {hasChildren && (
+                <GroupRowLockedOverlay onShowHint={onShowGroupEditHint} />
               )}
             </td>
           );
@@ -392,7 +407,7 @@ export function SortableRow({
             );
           case 'branch':
             return (
-              <td key={rc.token} className="px-2 py-2 border-b border-border bg-white min-w-[120px]">
+              <td key={rc.token} className="relative px-2 py-2 border-b border-border bg-white min-w-[120px]">
                 <EditableBranchTagCell
                   value={normalizeBranchList(project.branch)}
                   options={allBranches}
@@ -401,40 +416,79 @@ export function SortableRow({
                   onAddOption={(label) => onAddBranchOption?.(label)}
                   onRenameOption={(from, to) => onRenameBranchOption?.(from, to)}
                   onDeleteOption={(label) => onDeleteBranchOption?.(label)}
+                  onMergeOption={(left, right, keep) => onMergeBranchOption?.(left, right, keep)}
                 />
+                {hasChildren && (
+                  <GroupRowLockedOverlay onShowHint={onShowGroupEditHint} />
+                )}
               </td>
             );
           case 'start':
-            return <td key={rc.token} className="px-2 py-2 border-b border-border bg-white"><EditableDateCell value={toInputDate(project.startDate)} onChange={(v) => onUpdate(project.id, { startDate: fromInputDate(v) })} /></td>;
+            return (
+              <td key={rc.token} className="relative px-2 py-2 border-b border-border bg-white">
+                <EditableDateCell value={toInputDate(project.startDate)} onChange={(v) => onUpdate(project.id, { startDate: fromInputDate(v) })} />
+                {hasChildren && (
+                  <GroupRowLockedOverlay onShowHint={onShowGroupEditHint} />
+                )}
+              </td>
+            );
           case 'end':
-            return <td key={rc.token} className="px-2 py-2 border-b border-border bg-white"><EditableDateCell value={toInputDate(project.endDate)} onChange={(v) => onUpdate(project.id, { endDate: fromInputDate(v) })} /></td>;
+            return (
+              <td key={rc.token} className="relative px-2 py-2 border-b border-border bg-white">
+                <EditableDateCell value={toInputDate(project.endDate)} onChange={(v) => onUpdate(project.id, { endDate: fromInputDate(v) })} />
+                {hasChildren && (
+                  <GroupRowLockedOverlay onShowHint={onShowGroupEditHint} />
+                )}
+              </td>
+            );
           case 'assignees':
             return (
-              <td key={rc.token} className="px-2 py-2 border-b border-border bg-white">
+              <td key={rc.token} className="relative px-2 py-2 border-b border-border bg-white">
                 <RichEditableAssigneesCell
                   value={project.assignees || []}
                   options={allPersons}
                   onChange={(v) => onUpdate(project.id, { assignees: v })}
                   onRenamePerson={onRenamePersonGlobal || (async () => {})}
+                  onDeletePerson={onDeletePersonGlobal || (async () => {})}
                   onSetPersonAvatar={onSetPersonAvatar}
                 />
+                {hasChildren && (
+                  <GroupRowLockedOverlay onShowHint={onShowGroupEditHint} />
+                )}
               </td>
             );
           case 'days':
             return (
-              <td key={rc.token} className="px-2 py-2 border-b border-border text-center bg-white">
+              <td key={rc.token} className="relative px-2 py-2 border-b border-border text-center bg-white">
                 <EditableNumberCell value={project.daysRequired ?? 0} onChange={(v) => onUpdate(project.id, { daysRequired: Math.max(0, v ?? 0) })} min={0} />
+                {hasChildren && (
+                  <GroupRowLockedOverlay onShowHint={onShowGroupEditHint} />
+                )}
               </td>
             );
           case 'priority':
-            return <td key={rc.token} className="px-2 py-2 border-b border-border bg-white"><StarRating value={project.priority || 0} onChange={(v) => onUpdate(project.id, { priority: v })} /></td>;
+            return (
+              <td key={rc.token} className="relative px-2 py-2 border-b border-border bg-white">
+                <StarRating value={project.priority || 0} onChange={(v) => onUpdate(project.id, { priority: v })} />
+                {hasChildren && (
+                  <GroupRowLockedOverlay onShowHint={onShowGroupEditHint} />
+                )}
+              </td>
+            );
           case 'type':
-            return <td key={rc.token} className="px-2 py-2 border-b border-border bg-white"><EditableSelectCell value={project.type || null} onChange={(v) => onUpdate(project.id, { type: (v as Project['type']) || 'Proyecto' })} options={['Proyecto', 'Lanzamiento', 'En radar']} /></td>;
+            return (
+              <td key={rc.token} className="relative px-2 py-2 border-b border-border bg-white">
+                <EditableSelectCell value={project.type || null} onChange={(v) => onUpdate(project.id, { type: (v as Project['type']) || 'Proyecto' })} options={['Proyecto', 'Lanzamiento', 'En radar']} />
+                {hasChildren && (
+                  <GroupRowLockedOverlay onShowHint={onShowGroupEditHint} />
+                )}
+              </td>
+            );
           case 'load':
             return <td key={rc.token} className="px-2 py-2 border-b border-border text-center bg-white">{(project.dailyLoad ?? 0) > 0 ? <LoadBubble load={project.dailyLoad} size="sm" /> : <span className="text-xs text-text-secondary">Sin carga</span>}</td>;
           case 'status':
             return (
-              <td key={rc.token} className={`px-2 py-2 border-b border-border bg-white${isLastRow ? ' rounded-br-[24px]' : ''}`}>
+              <td key={rc.token} className="px-2 py-2 border-b border-border bg-white">
                 <StatusBadge status={getProjectStatus(project, dynamicValues)} />
               </td>
             );

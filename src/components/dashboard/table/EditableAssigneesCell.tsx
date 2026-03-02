@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Plus, Edit3, UserPlus, ArrowRightLeft } from 'lucide-react';
+import { Search, Plus, Edit3, UserPlus, ArrowRightLeft, Trash2 } from 'lucide-react';
 import { usePersonProfiles } from '@/context/PersonProfilesContext';
 
 interface EditableAssigneesCellProps {
@@ -7,6 +7,7 @@ interface EditableAssigneesCellProps {
   options: string[];
   onChange: (v: string[]) => void;
   onRenamePerson: (from: string, to: string) => Promise<void>;
+  onDeletePerson?: (name: string) => Promise<void>;
   onSetPersonAvatar: (name: string, file: File) => Promise<void>;
 }
 
@@ -15,19 +16,25 @@ export function EditableAssigneesCell({
   options,
   onChange,
   onRenamePerson,
+  onDeletePerson,
   onSetPersonAvatar,
 }: EditableAssigneesCellProps) {
   const { getAvatarUrl } = usePersonProfiles();
   const safeValue = Array.isArray(value) ? value : [];
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
-  const [newAssignee, setNewAssignee] = useState('');
+  const [newRows, setNewRows] = useState<string[]>(['']);
   const [mergeLeft, setMergeLeft] = useState('');
   const [mergeRight, setMergeRight] = useState('');
   const [mergeKeep, setMergeKeep] = useState<'left' | 'right'>('left');
   const [editingName, setEditingName] = useState<string | null>(null);
   const [editValue, setEditValue] = useState('');
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
   const dropdownRef = useRef<HTMLDivElement | null>(null);
+  const normalizeInputRows = (rows: string[]): string[] => {
+    const filled = rows.map((r) => r.trim()).filter(Boolean);
+    return [...filled, ''];
+  };
 
   const mergedOptions = [...new Set([...safeValue, ...options])].sort();
 
@@ -38,14 +45,18 @@ export function EditableAssigneesCell({
     else onChange([...safeValue, name]);
   };
 
-  const addQuick = () => {
-    const label = newAssignee.trim();
+  const addQuick = (rowIndex: number) => {
+    const label = (newRows[rowIndex] || '').trim();
     if (!label) return;
     const key = label.trim().toLowerCase();
     if (!safeValue.some((x) => x.trim().toLowerCase() === key)) {
       onChange([...safeValue, label]);
     }
-    setNewAssignee('');
+    setNewRows((prev) => {
+      const next = [...prev];
+      next[rowIndex] = '';
+      return normalizeInputRows(next);
+    });
   };
 
   const startEdit = (name: string) => {
@@ -69,20 +80,41 @@ export function EditableAssigneesCell({
     if (e.key === 'Escape') {
       setOpen(false);
       setSearch('');
-      setNewAssignee('');
+      setNewRows(['']);
     }
   };
 
   useEffect(() => {
     if (!open) {
       setSearch('');
-      setNewAssignee('');
+      setNewRows(['']);
       setMergeLeft('');
       setMergeRight('');
       setMergeKeep('left');
       setEditingName(null);
       setEditValue('');
     }
+  }, [open]);
+
+  useEffect(() => {
+    if (!open || !dropdownRef.current || typeof window === 'undefined') return;
+    const updatePos = () => {
+      if (!dropdownRef.current) return;
+      const rect = dropdownRef.current.getBoundingClientRect();
+      const menuW = 320;
+      const gap = 6;
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - menuW - 8));
+      const openUp = rect.bottom + gap + 320 > window.innerHeight && rect.top > 320;
+      const top = openUp ? Math.max(8, rect.top - gap - 320) : Math.min(window.innerHeight - 8, rect.bottom + gap);
+      setMenuPos({ top, left });
+    };
+    updatePos();
+    window.addEventListener('resize', updatePos);
+    window.addEventListener('scroll', updatePos, true);
+    return () => {
+      window.removeEventListener('resize', updatePos);
+      window.removeEventListener('scroll', updatePos, true);
+    };
   }, [open]);
 
   const compactLabel = (() => {
@@ -126,8 +158,8 @@ export function EditableAssigneesCell({
         )}
       </div>
 
-      {open && (
-        <div className="absolute z-50 top-full left-0 mt-1 w-80 bg-white border border-border rounded-lg shadow-lg p-3">
+      {open && menuPos && (
+        <div className="fixed z-[260] w-80 bg-white border border-border rounded-lg shadow-lg p-3" style={{ top: menuPos.top, left: menuPos.left }}>
           <div className="flex items-center gap-2 mb-3">
             <Search size={14} className="text-text-secondary" />
             <input
@@ -144,7 +176,7 @@ export function EditableAssigneesCell({
             {mergedOptions
               .filter((p) => p.toLowerCase().includes(search.toLowerCase()))
               .map((p) => (
-                <div key={p} className="flex items-center gap-2 p-1.5 rounded hover:bg-bg-secondary">
+                <div key={p} className="group/person-row flex items-center gap-2 p-1.5 rounded hover:bg-bg-secondary">
                   <input
                     type="checkbox"
                     checked={safeValue.some((x) => x.trim().toLowerCase() === p.trim().toLowerCase())}
@@ -166,33 +198,60 @@ export function EditableAssigneesCell({
                       autoFocus
                     />
                   ) : (
-                    <span className="flex-1 text-xs text-text-primary truncate">{p}</span>
+                    <span
+                      className="flex-1 text-xs text-text-primary truncate"
+                      onDoubleClick={(e) => { e.stopPropagation(); startEdit(p); }}
+                      title="Doble clic para renombrar"
+                    >
+                      {p}
+                    </span>
                   )}
-                  <button
-                    type="button"
-                    className="p-0.5 rounded hover:bg-bg-secondary"
-                    onClick={() => startEdit(p)}
-                    title="Renombrar"
-                  >
-                    <Edit3 size={12} className="text-text-secondary" />
-                  </button>
-                  <label
-                    className="p-0.5 rounded hover:bg-bg-secondary cursor-pointer"
-                    title="Subir avatar"
-                  >
-                    <UserPlus size={12} className="text-text-secondary" />
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (!file) return;
-                        await onSetPersonAvatar(p, file);
-                        e.currentTarget.value = '';
+                  <div className="inline-flex items-center gap-1 opacity-0 group-hover/person-row:opacity-100 transition-opacity">
+                    <button
+                      type="button"
+                      className="p-0.5 rounded hover:bg-bg-secondary"
+                      onClick={() => startEdit(p)}
+                      title="Renombrar"
+                    >
+                      <Edit3 size={12} className="text-text-secondary" />
+                    </button>
+                    <label
+                      className="p-0.5 rounded hover:bg-bg-secondary cursor-pointer"
+                      title="Subir avatar"
+                    >
+                      <UserPlus size={12} className="text-text-secondary" />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          await onSetPersonAvatar(p, file);
+                          e.currentTarget.value = '';
+                        }}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="p-0.5 rounded hover:bg-red-50"
+                      title="Eliminar persona"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
                       }}
-                    />
-                  </label>
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        if (!onDeletePerson) return;
+                        const ok = window.confirm(`Se eliminara "${p}" de todo el proyecto. Continuar?`);
+                        if (!ok) return;
+                        await onDeletePerson(p);
+                      }}
+                    >
+                      <Trash2 size={12} className="text-red-600" />
+                    </button>
+                  </div>
                 </div>
               ))}
             {mergedOptions.filter((p) => p.toLowerCase().includes(search.toLowerCase())).length === 0 && (
@@ -200,25 +259,57 @@ export function EditableAssigneesCell({
             )}
           </div>
 
-          <div className="flex items-center gap-2 mb-3">
-            <input
-              type="text"
-              placeholder="Nueva persona..."
-              className="flex-1 h-8 rounded border border-border px-2 text-xs bg-white"
-              value={newAssignee}
-              onChange={(e) => setNewAssignee(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') addQuick();
-              }}
-            />
-            <button
-              type="button"
-              className="h-8 px-3 text-xs rounded border border-border hover:bg-bg-secondary disabled:opacity-40"
-              disabled={!newAssignee.trim()}
-              onClick={addQuick}
-            >
-              <Plus size={12} />
-            </button>
+          <div className="space-y-1.5 mb-3">
+            {newRows.map((rowValue, idx) => (
+              <div key={`new-person-row-${idx}`} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Nueva persona..."
+                  className="flex-1 h-8 rounded border border-border px-2 text-xs bg-white"
+                  value={rowValue}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setNewRows((prev) => {
+                      const next = [...prev];
+                      next[idx] = v;
+                      return next;
+                    });
+                  }}
+                  onBlur={() => {
+                    setNewRows((prev) => {
+                      const next = [...prev];
+                      next[idx] = next[idx].trim();
+                      return normalizeInputRows(next);
+                    });
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      addQuick(idx);
+                    }
+                    if (e.key === 'Escape') {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setNewRows((prev) => {
+                        const next = [...prev];
+                        next[idx] = '';
+                        return normalizeInputRows(next);
+                      });
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="h-8 px-3 text-xs rounded border border-border hover:bg-bg-secondary disabled:opacity-40"
+                  disabled={!rowValue.trim()}
+                  onClick={() => addQuick(idx)}
+                  title="Agregar y continuar"
+                >
+                  <Plus size={12} />
+                </button>
+              </div>
+            ))}
           </div>
 
           <details className="mt-3 rounded-lg border border-border p-3">
