@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState, useEffect } from 'react';
-import { ProjectProvider, useProject } from '@/context/ProjectContext';
+import { ProjectProvider, useProjectOptional } from '@/context/ProjectContext';
 import { AuthProvider } from '@/context/AuthContext';
 import { PersonProfilesProvider } from '@/context/PersonProfilesContext';
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -64,8 +64,16 @@ class AppErrorBoundary extends React.Component<
 }
 
 function DashboardContent() {
-  const { state, dispatch, isBoardLoading } = useProject();
+  const projectCtx = useProjectOptional();
   const { loading: authLoading, isConfigured } = useAuth();
+  if (!projectCtx) {
+    return (
+      <div className="flex-1 flex items-center justify-center bg-bg-secondary">
+        <div className="text-sm text-text-secondary">Inicializando tablero...</div>
+      </div>
+    );
+  }
+  const { state, dispatch, isBoardLoading } = projectCtx;
   const [lastFile, setLastFile] = useState<File | null>(null);
   const [fileHandle, setFileHandle] = useState<FileSystemFileHandle | null>(null);
   const [reloadToast, setReloadToast] = useState<string | null>(null);

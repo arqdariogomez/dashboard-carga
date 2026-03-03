@@ -211,7 +211,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, projects, hasUnsavedChanges: true };
     }
     case 'MARK_SAVED':
-      return { ...state, hasUnsavedChanges: false };
+      return { ...state, hasUnsavedChanges: false, lastUpdated: new Date() };
     default:
       return state;
   }
@@ -500,6 +500,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const hasUnsavedChangesRef = useRef<boolean>(false);
   const localRevisionRef = useRef<number>(0);
   const lastSyncedRevisionRef = useRef<number>(0);
+  const lastSavedFingerprintRef = useRef<string>('');
 
   const state = historyState.present;
   const canUndo = historyState.past.length > 0;
@@ -773,6 +774,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
           payload: { projects: cloud.projects, fileName: 'Supabase' },
         });
         dispatch({ type: 'REORDER_PROJECTS', payload: cloud.projectOrder });
+        lastSavedFingerprintRef.current = buildSnapshotFingerprint(cloud.projects, cloud.projectOrder);
         dispatch({ type: 'MARK_SAVED' });
         lastSyncedRevisionRef.current = localRevisionRef.current;
       } catch (err) {
@@ -838,6 +840,11 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     if (!isSupabaseConfigured || !supabase || !activeBoardId || !user) return;
     if (!canEditActiveBoard) return;
     if (!hasLoadedCloudRef.current || !state.hasUnsavedChanges) return;
+    const currentFingerprint = buildSnapshotFingerprint(state.projects, state.projectOrder);
+    if (currentFingerprint === lastSavedFingerprintRef.current) {
+      dispatch({ type: 'MARK_SAVED' });
+      return;
+    }
 
     if (saveTimerRef.current) {
       window.clearTimeout(saveTimerRef.current);
@@ -851,6 +858,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
           createVersionSnapshot('Auto-guardado');
           lastAutoSnapshotAtRef.current = Date.now();
         }
+        lastSavedFingerprintRef.current = currentFingerprint;
         dispatch({ type: 'MARK_SAVED' });
         lastSyncedRevisionRef.current = localRevisionRef.current;
       } catch (err) {
@@ -883,6 +891,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
           payload: { projects: cloud.projects, fileName: 'Supabase' },
         });
         dispatch({ type: 'REORDER_PROJECTS', payload: cloud.projectOrder });
+        lastSavedFingerprintRef.current = buildSnapshotFingerprint(cloud.projects, cloud.projectOrder);
         dispatch({ type: 'MARK_SAVED' });
         lastSyncedRevisionRef.current = localRevisionRef.current;
       } catch (err) {
@@ -1120,6 +1129,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       ignoreRealtimeUntilRef.current = Date.now() + 2000;
       await saveBoardProjects(activeBoardId, state.projects, state.projectOrder);
       createVersionSnapshot('Guardado manual');
+      lastSavedFingerprintRef.current = buildSnapshotFingerprint(state.projects, state.projectOrder);
       dispatch({ type: 'MARK_SAVED' });
       lastSyncedRevisionRef.current = localRevisionRef.current;
     },
@@ -1528,4 +1538,8 @@ export function useProject() {
   const ctx = useContext(ProjectContext);
   if (!ctx) throw new Error('useProject must be used within ProjectProvider');
   return ctx;
+}
+
+export function useProjectOptional() {
+  return useContext(ProjectContext);
 }

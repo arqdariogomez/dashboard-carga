@@ -21,10 +21,15 @@ import {
   ChevronsRight,
   Minus,
   Plus,
+  MoreHorizontal,
+  Copy,
+  Trash2,
+  Pencil,
 } from 'lucide-react';
 import type { Project } from '@/lib/types';
 import { branchLabel } from '@/lib/branchUtils';
 import React from 'react';
+import { createPortal } from 'react-dom';
 
 // ════════════════════════════════════════════════════
 //  TYPES
@@ -550,6 +555,9 @@ interface GanttRowProps {
     type: 'start' | 'end',
   ) => void;
   onStartMilestoneDrag: (e: React.MouseEvent, project: Project) => void;
+  onCreateProjectFrom: (project: Project) => void;
+  onDuplicateProjectFrom: (project: Project) => void;
+  onDeleteProjectById: (projectId: string) => void;
 }
 
 const GanttRow = React.memo(function GanttRow({
@@ -581,9 +589,61 @@ const GanttRow = React.memo(function GanttRow({
   onOpenDependencyEditor,
   onStartBarResize,
   onStartMilestoneDrag,
+  onCreateProjectFrom,
+  onDuplicateProjectFrom,
+  onDeleteProjectById,
 }: GanttRowProps) {
   const bar = getBarPropsFn(node);
   if (!bar) return null;
+  const [rowMenuOpen, setRowMenuOpen] = useState(false);
+  const rowMenuRef = useRef<HTMLDivElement | null>(null);
+  const rowMenuPopupRef = useRef<HTMLDivElement | null>(null);
+  const [rowMenuPos, setRowMenuPos] = useState<{ top: number; left: number } | null>(null);
+
+  useEffect(() => {
+    if (!rowMenuOpen) return;
+    const onDocClick = (ev: MouseEvent) => {
+      const target = ev.target as Node;
+      const clickedTrigger = rowMenuRef.current?.contains(target);
+      const clickedMenu = rowMenuPopupRef.current?.contains(target);
+      if (!clickedTrigger && !clickedMenu) {
+        setRowMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [rowMenuOpen]);
+
+  const openRowMenuAt = useCallback((x: number, y: number) => {
+    if (typeof window === 'undefined') return;
+    const menuW = 176;
+    const menuH = 224;
+    const left = Math.max(8, Math.min(x, window.innerWidth - menuW - 8));
+    const top = Math.max(8, Math.min(y, window.innerHeight - menuH - 8));
+    setRowMenuPos({ top, left });
+    setRowMenuOpen(true);
+  }, []);
+
+  const openRowMenuFromButton = useCallback((rect: DOMRect) => {
+    if (typeof window === 'undefined') return;
+    const menuW = 176;
+    const menuH = 224;
+    const gap = 6;
+
+    // Prefer opening to the right of the trigger; flip to left only if needed.
+    let left = rect.right + gap;
+    if (left + menuW > window.innerWidth - 8) {
+      left = rect.left - menuW - gap;
+    }
+
+    // Prefer below the trigger; flip upward near bottom viewport edge.
+    let top = rect.bottom + gap;
+    if (top + menuH > window.innerHeight - 8) {
+      top = rect.top - menuH - gap;
+    }
+
+    openRowMenuAt(left, top);
+  }, [openRowMenuAt]);
 
   const dragOff =
     milestoneDrag?.projectId === node.id ? milestoneDrag.offsetDays : 0;
@@ -605,10 +665,10 @@ const GanttRow = React.memo(function GanttRow({
   }
 
   return (
-    <div className="flex border-b border-border hover:bg-bg-secondary/20 transition-colors group/bar">
+    <div className="relative z-0 flex border-b border-border hover:bg-bg-secondary/20 transition-colors group group/bar">
       {/* Sidebar */}
       <div
-        className="px-3 py-2 border-r border-border sticky left-0 z-40 bg-white group-hover/bar:bg-bg-secondary/20 transition-colors"
+        className="relative px-3 py-2 border-r border-border sticky left-0 z-50 bg-white group-hover/bar:bg-bg-secondary transition-colors"
         style={{ width: sidebarWidth, minWidth: sidebarWidth }}
         onDoubleClick={() => onStartEditName(node.id, node.name)}
       >
@@ -688,15 +748,114 @@ const GanttRow = React.memo(function GanttRow({
               <Diamond size={11} />
               {ms ? 'Hito' : 'Marcar'}
             </button>
+            <div className="relative" ref={rowMenuRef}>
+              <button
+                type="button"
+                className="h-6 w-6 inline-flex items-center justify-center rounded opacity-0 group-hover:opacity-100 group-hover/bar:opacity-100 focus-visible:opacity-100 hover:bg-bg-secondary text-text-secondary transition-opacity"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                  if (rowMenuOpen) {
+                    setRowMenuOpen(false);
+                    setRowMenuPos(null);
+                  } else {
+                    openRowMenuFromButton(rect);
+                  }
+                }}
+                onDoubleClick={(e) => e.stopPropagation()}
+                title="Acciones de fila"
+              >
+                <MoreHorizontal size={12} />
+              </button>
+              {rowMenuOpen && rowMenuPos && typeof document !== 'undefined'
+                ? createPortal(
+                <div
+                  ref={rowMenuPopupRef}
+                  className="fixed z-[900] w-44 rounded-lg border border-border bg-white shadow-lg p-1 pointer-events-auto"
+                  style={{ top: rowMenuPos.top, left: rowMenuPos.left }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
+                    onClick={() => {
+                      onCreateProjectFrom(node);
+                      setRowMenuOpen(false);
+                    }}
+                  >
+                    <Plus size={12} />
+                    Nuevo
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
+                    onClick={() => {
+                      onDuplicateProjectFrom(node);
+                      setRowMenuOpen(false);
+                    }}
+                  >
+                    <Copy size={12} />
+                    Duplicar
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
+                    onClick={() => {
+                      onStartEditName(node.id, node.name);
+                      setRowMenuOpen(false);
+                    }}
+                  >
+                    <Pencil size={12} />
+                    Renombrar
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
+                    onClick={() => {
+                      onToggleMilestone(node);
+                      setRowMenuOpen(false);
+                    }}
+                  >
+                    <Diamond size={12} />
+                    {ms ? 'Quitar hito' : 'Marcar hito'}
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
+                    onClick={() => {
+                      onOpenDependencyEditor(node.id);
+                      setRowMenuOpen(false);
+                    }}
+                  >
+                    <Link2 size={12} />
+                    Dependencias
+                  </button>
+                  <div className="my-1 border-t border-border" />
+                  <button
+                    type="button"
+                    className="w-full text-left px-2 py-1.5 text-xs rounded text-red-600 hover:bg-red-50 inline-flex items-center gap-2"
+                    onClick={() => {
+                      onDeleteProjectById(node.id);
+                      setRowMenuOpen(false);
+                    }}
+                  >
+                    <Trash2 size={12} />
+                    Eliminar
+                  </button>
+                </div>,
+                document.body
+              )
+                : null}
+            </div>
           </div>
         </div>
       </div>
 
       {/* Timeline cell */}
-      <div className="flex-1 relative h-12 flex items-center overflow-hidden z-0">
+      <div className="relative z-0 flex-1 h-12 flex items-center overflow-hidden">
         {ms ? (
           <div
-            className="absolute z-10 h-3.5 w-3.5 rotate-45 rounded-[2px] border shadow-sm cursor-pointer hover:scale-125 transition-transform"
+            className="absolute z-[1] h-3.5 w-3.5 rotate-45 rounded-[2px] border shadow-sm cursor-pointer hover:scale-125 transition-transform"
             style={{
               left: bar.left - 7 + dragOff * dayWidth,
               top: 17,
@@ -713,7 +872,7 @@ const GanttRow = React.memo(function GanttRow({
           />
         ) : (
           <div
-            className="absolute z-0 h-7 rounded-md flex items-center overflow-hidden cursor-pointer group/resize hover:shadow-md hover:brightness-[0.97] transition-all duration-150"
+            className="absolute z-[1] h-7 rounded-md flex items-center overflow-hidden cursor-pointer group/resize hover:shadow-md hover:brightness-[0.97] transition-all duration-150"
             style={{
               left: visualLeft,
               width: visualWidth,
@@ -756,7 +915,7 @@ const GanttRow = React.memo(function GanttRow({
           return (
             <svg
               key={`${dep.from.id}-${dep.to.id}`}
-              className="absolute top-0 left-0 pointer-events-none"
+              className="absolute top-0 left-0 pointer-events-none z-0"
               style={{ width: timelineWidth, height: 48 }}
             >
               <path
@@ -1382,6 +1541,88 @@ export function GanttTimeline() {
     });
   }, [dispatch, state.config]);
 
+  const handleCreateProjectFrom = useCallback((source: Project) => {
+    const anchor = source.startDate || source.endDate || new Date();
+    const start = new Date(anchor);
+    const end = source.endDate ? new Date(source.endDate) : new Date(anchor);
+    const base: Project = {
+      id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: 'Nuevo proyecto',
+      branch: source.branch || [],
+      startDate: start,
+      endDate: end,
+      assignees: source.assignees || [],
+      daysRequired: Math.max(1, Number(source.daysRequired || 1)),
+      priority: source.priority || 1,
+      type: source.type || 'Proyecto',
+      blockedBy: null,
+      blocksTo: null,
+      reportedLoad: null,
+      parentId: source.parentId || null,
+      isExpanded: true,
+      hierarchyLevel: source.hierarchyLevel || 0,
+      assignedDays: 0,
+      balanceDays: 0,
+      dailyLoad: 0,
+      totalHours: 0,
+    };
+    const withComputed = computeProjectFields(base, state.config, [...state.projects, base]);
+    dispatch({
+      type: 'ADD_PROJECT',
+      payload: withComputed,
+    });
+
+    const currentOrder = (state.projectOrder && state.projectOrder.length > 0)
+      ? [...state.projectOrder]
+      : state.projects.map((p) => p.id);
+    const sourceIndex = currentOrder.indexOf(source.id);
+    const insertIndex = sourceIndex >= 0 ? sourceIndex + 1 : currentOrder.length;
+    currentOrder.splice(insertIndex, 0, withComputed.id);
+    dispatch({
+      type: 'REORDER_PROJECTS',
+      payload: currentOrder,
+    });
+  }, [dispatch, state.config, state.projects, state.projectOrder]);
+
+  const handleDuplicateProjectFrom = useCallback((source: Project) => {
+    const cloneBase: Project = {
+      ...source,
+      id: `dup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      name: `${source.name} (copia)`,
+      startDate: source.startDate ? new Date(source.startDate) : null,
+      endDate: source.endDate ? new Date(source.endDate) : null,
+      isExpanded: true,
+    };
+    const withComputed = computeProjectFields(cloneBase, state.config, [...state.projects, cloneBase]);
+    dispatch({
+      type: 'ADD_PROJECT',
+      payload: withComputed,
+    });
+
+    const currentOrder = (state.projectOrder && state.projectOrder.length > 0)
+      ? [...state.projectOrder]
+      : state.projects.map((p) => p.id);
+    const sourceIndex = currentOrder.indexOf(source.id);
+    const insertIndex = sourceIndex >= 0 ? sourceIndex + 1 : currentOrder.length;
+    currentOrder.splice(insertIndex, 0, withComputed.id);
+    dispatch({
+      type: 'REORDER_PROJECTS',
+      payload: currentOrder,
+    });
+  }, [dispatch, state.config, state.projects, state.projectOrder]);
+
+  const handleDeleteProjectById = useCallback((projectId: string) => {
+    void confirm({
+      title: 'Eliminar proyecto',
+      message: 'Esta accion no se puede deshacer.',
+      confirmText: 'Eliminar',
+      tone: 'danger',
+    }).then((ok) => {
+      if (!ok) return;
+      dispatch({ type: 'DELETE_PROJECT', payload: projectId });
+    });
+  }, [confirm, dispatch]);
+
   const handleBarHover = useCallback(
     (e: React.MouseEvent, project: Project) => {
       const rect = tooltipContainerRef.current?.getBoundingClientRect();
@@ -1698,6 +1939,9 @@ export function GanttTimeline() {
           onOpenDependencyEditor={setDependencyEditorProjectId}
           onStartBarResize={handleStartBarResize}
           onStartMilestoneDrag={handleStartMilestoneDrag}
+          onCreateProjectFrom={handleCreateProjectFrom}
+          onDuplicateProjectFrom={handleDuplicateProjectFrom}
+          onDeleteProjectById={handleDeleteProjectById}
         />,
       );
       if (n.children?.length && exp)
@@ -1786,16 +2030,16 @@ export function GanttTimeline() {
         {/* Timeline */}
         <div
           ref={tooltipContainerRef}
-          className="bg-white rounded-xl border border-border overflow-hidden flex-1 min-h-0 relative"
+          className="bg-white rounded-xl border border-border overflow-hidden flex-1 min-h-0 relative isolate"
         >
           <div ref={scrollContainerRef} className="overflow-auto h-full">
             <div style={{ minWidth: timelineWidth + sidebarWidth }}>
               {/* ── HEADER ── */}
-              <div className="sticky top-0 z-20 border-b border-border bg-white">
+              <div className="sticky top-0 z-30 border-b border-border bg-white">
                 {/* Row 1: Sidebar label + Years */}
                 <div className="flex">
                   <div
-                    className="px-3 py-1.5 bg-white border-r border-b border-border text-xs font-semibold text-text-secondary sticky left-0 z-30 relative flex items-center"
+                    className="px-3 py-1.5 bg-white border-r border-b border-border text-xs font-semibold text-text-secondary sticky left-0 z-40 relative flex items-center"
                     style={{
                       width: sidebarWidth,
                       minWidth: sidebarWidth,
@@ -1828,7 +2072,7 @@ export function GanttTimeline() {
                 {/* Row 2: Empty sidebar space + Months */}
                 <div className="flex">
                   <div
-                    className="border-r border-border bg-white sticky left-0 z-30"
+                    className="border-r border-border bg-white sticky left-0 z-40"
                     style={{
                       width: sidebarWidth,
                       minWidth: sidebarWidth,
@@ -1880,11 +2124,11 @@ export function GanttTimeline() {
                   <div key={person}>
                     {/* Person header */}
                     <div
-                      className="flex items-center border-b border-border bg-bg-secondary/40 cursor-pointer hover:bg-bg-secondary/70 transition-colors"
+                      className="flex items-center border-b border-border bg-bg-secondary cursor-pointer hover:bg-bg-secondary transition-colors"
                       onClick={() => togglePerson(person)}
                     >
                       <div
-                        className="px-3 py-2 border-r border-border flex items-center gap-2 sticky left-0 z-40 bg-bg-secondary/40"
+                        className="px-3 py-2 border-r border-border flex items-center gap-2 sticky left-0 z-30 bg-bg-secondary"
                         style={{
                           width: sidebarWidth,
                           minWidth: sidebarWidth,
