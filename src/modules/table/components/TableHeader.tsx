@@ -84,9 +84,8 @@ export function TableHeader({
   const [editingColumnId, setEditingColumnId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [typePickerFor, setTypePickerFor] = useState<string | null>(null);
-  const [optionsEditorFor, setOptionsEditorFor] = useState<string | null>(null);
-  const [optionsDraft, setOptionsDraft] = useState('');
   const [dragColumnToken, setDragColumnToken] = useState<string | null>(null);
+  const [dropColumnToken, setDropColumnToken] = useState<string | null>(null);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
 
   return (
@@ -106,14 +105,22 @@ export function TableHeader({
               onDragOver={(e) => {
                 if (!dragColumnToken) return;
                 e.preventDefault();
+                setDropColumnToken(rc.token);
               }}
               onDrop={(e) => {
                 if (!dragColumnToken) return;
                 e.preventDefault();
                 if (dragColumnToken !== rc.token) onReorderColumns(dragColumnToken, rc.token);
                 setDragColumnToken(null);
+                setDropColumnToken(null);
+              }}
+              onDragLeave={() => {
+                if (dropColumnToken === rc.token) setDropColumnToken(null);
               }}
             >
+              {dropColumnToken === rc.token && dragColumnToken && dragColumnToken !== rc.token && (
+                <div className="pointer-events-none absolute inset-y-1 left-0 w-0.5 bg-blue-500 rounded-full" />
+              )}
               <div className="flex items-center justify-between gap-2">
                 {editingColumnId === rc.id ? (
                   <input
@@ -150,8 +157,14 @@ export function TableHeader({
                 <button
                   type="button"
                   draggable
-                  onDragStart={() => setDragColumnToken(rc.token)}
-                  onDragEnd={() => setDragColumnToken(null)}
+                  onDragStart={() => {
+                    setDragColumnToken(rc.token);
+                    setDropColumnToken(null);
+                  }}
+                  onDragEnd={() => {
+                    setDragColumnToken(null);
+                    setDropColumnToken(null);
+                  }}
                   className="opacity-0 group-hover:opacity-100 h-6 w-6 inline-flex items-center justify-center rounded border border-transparent hover:border-border hover:bg-bg-secondary text-text-secondary"
                   onClick={(e) => {
                     if (columnMenuOpenFor === rc.id) {
@@ -230,7 +243,7 @@ export function TableHeader({
                       </button>
                       {typePickerFor === rc.id && (
                         <div className="mx-1 mb-1 rounded-md border border-border bg-bg-secondary/50 p-1">
-                          {(['text', 'number', 'progress', 'stars', 'date', 'select', 'tags', 'checkbox'] as DynamicDisplayType[]).map((t) => {
+                          {(['text', 'number', 'progress', 'stars', 'date', 'tags', 'checkbox'] as DynamicDisplayType[]).map((t) => {
                             const isCurrentType =
                               rc.column.type === t
                               || (t === 'progress' && rc.column.type === 'number' && rc.column.config?.display === 'progress')
@@ -252,46 +265,6 @@ export function TableHeader({
                             );
                           })}
                         </div>
-                      )}
-                      {(rc.column.type === 'select' || rc.column.type === 'tags') && (
-                        <>
-                          <button
-                            type="button"
-                            className="w-full text-left px-2.5 py-1.5 text-xs rounded-lg hover:bg-bg-secondary inline-flex items-center gap-2"
-                            onClick={() => {
-                              const current = Array.isArray(rc.column.config?.options) ? (rc.column.config.options as string[]) : [];
-                              setOptionsDraft(current.join(', '));
-                              setOptionsEditorFor(optionsEditorFor === rc.id ? null : rc.id);
-                            }}
-                          >
-                            <ChevronRight size={13} />
-                            Editar opciones
-                          </button>
-                          {optionsEditorFor === rc.id && (
-                            <div className="mx-1 mb-1 rounded-md border border-border bg-bg-secondary/50 p-2">
-                              <textarea
-                                value={optionsDraft}
-                                onChange={(e) => setOptionsDraft(e.target.value)}
-                                className="w-full h-16 rounded border border-border px-2 py-1 text-[11px] outline-none focus:ring-2 focus:ring-blue-100"
-                                placeholder="Opcion 1, Opcion 2, Opcion 3"
-                              />
-                              <div className="mt-1 flex justify-end gap-1">
-                                <button type="button" className="px-2 py-1 text-[11px] rounded border border-border hover:bg-white" onClick={() => setOptionsEditorFor(null)}>Cancelar</button>
-                                <button
-                                  type="button"
-                                  className="px-2 py-1 text-[11px] rounded border border-border bg-white hover:bg-bg-secondary"
-                                  onClick={() => {
-                                    onSaveDynamicColumnOptions(rc.id, optionsDraft);
-                                    setOptionsEditorFor(null);
-                                    onColumnMenuToggle(null);
-                                  }}
-                                >
-                                  Guardar
-                                </button>
-                              </div>
-                            </div>
-                          )}
-                        </>
                       )}
                       <button type="button" className="w-full text-left px-2.5 py-1.5 text-xs rounded-lg hover:bg-bg-secondary inline-flex items-center gap-2" onClick={() => { onDuplicateDynamicColumn(rc.id); onColumnMenuToggle(null); }}><Copy size={13} />Duplicar</button>
                       <div className="my-1 border-t border-border" />

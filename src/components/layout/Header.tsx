@@ -57,6 +57,7 @@ export function Header({ onReload, fileInputRef, onImport }: HeaderProps) {
     selectBoard,
     createBoard,
     renameBoardById,
+    duplicateActiveBoard,
     duplicateBoardById,
     deleteBoardById,
     saveActiveBoardNow,
@@ -257,6 +258,9 @@ export function Header({ onReload, fileInputRef, onImport }: HeaderProps) {
               <div className="absolute left-0 mt-1.5 w-56 rounded-xl border border-border bg-white shadow-[0_10px_24px_rgba(15,23,42,0.08)] z-[140] p-1.5">
                 <button disabled={!canEditActiveBoard} className="w-full text-left px-2.5 py-2 rounded-lg text-xs hover:bg-bg-secondary flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed" onClick={() => { void handleCreateBoard(false); }}>
                   <Plus size={14} /> Nuevo
+                </button>
+                <button disabled={!canManageBoard} className="w-full text-left px-2.5 py-2 rounded-lg text-xs hover:bg-bg-secondary flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed" onClick={async () => { if (!canManageBoard) return; const name = await promptText({ title: 'Duplicar tablero actual', label: 'Nombre de la copia (opcional)', initialValue: '' }); try { await duplicateActiveBoard(name || undefined); setMenuOpen(false); toast('success', 'Tablero actual duplicado.'); } catch (err) { toast('error', `No se pudo duplicar: ${formatUiError(err)}`); } }}>
+                  <Copy size={14} /> Duplicar actual
                 </button>
                 <button className="w-full text-left px-2.5 py-2 rounded-lg text-xs hover:bg-bg-secondary flex items-center gap-2" onClick={() => { setOpenModal(true); setMenuOpen(false); }}>
                   <FolderOpen size={14} /> Abrir...

@@ -1,5 +1,6 @@
 ﻿import { useMemo, useState, useRef, useEffect, type MouseEvent as ReactMouseEvent } from 'react';
 import { createPortal } from 'react-dom';
+import { useDroppable } from '@dnd-kit/core';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Plus, Trash2, GripVertical, Copy, MessageSquare, ArrowRightLeft, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -96,6 +97,7 @@ type RenderColumn =
 interface SortableRowProps {
   project: Project;
   allProjects: Project[];
+  visibleOrderedProjects: Project[];
   renderColumns: RenderColumn[];
   onUpdate: (id: string, updates: Partial<Project>) => void;
   onDelete: (id: string) => void;
@@ -132,6 +134,8 @@ interface SortableRowProps {
   isSelected?: boolean;
   isDropTarget?: boolean;
   dropPlacement?: 'before' | 'inside' | 'after' | null;
+  dropTargetDepth?: number;
+  dragActiveId?: string | null;
   multiSelectMode?: boolean;
   isChecked?: boolean;
   onToggleChecked?: (id: string, checked: boolean) => void;
@@ -147,6 +151,7 @@ interface SortableRowProps {
 export function SortableRow({
   project,
   allProjects,
+  visibleOrderedProjects,
   renderColumns,
   onUpdate,
   onDelete,
@@ -182,6 +187,9 @@ export function SortableRow({
   onMergePersonsGlobal,
   isSelected,
   isDropTarget,
+  dropPlacement,
+  dropTargetDepth = 0,
+  dragActiveId,
   multiSelectMode,
   isChecked,
   onToggleChecked,
@@ -214,6 +222,23 @@ export function SortableRow({
   const childCount = useMemo(() => allProjects.filter((p) => p.parentId === project.id).length, [allProjects, project.id]);
   const isOverloaded = (project.dailyLoad ?? 0) > 100;
   const isPastDue = Boolean(project.endDate && project.endDate < new Date());
+  const rowBgClass = hasChildren ? 'bg-transparent' : 'bg-white';
+  const groupReadonlyToneClass = hasChildren ? 'text-slate-600' : '';
+  const INDENT_PX = 24;
+  const lineIndent = Math.max(8, dropTargetDepth * INDENT_PX + (dropPlacement === 'inside' ? 24 : 8));
+  const pointIndent = Math.max(4, dropTargetDepth * INDENT_PX + (dropPlacement === 'inside' ? 20 : 4));
+  const showDropLine = Boolean(isDropTarget && dropPlacement);
+  const lineAtTop = dropPlacement === 'before';
+  const isAnyDragging = Boolean(dragActiveId);
+  const showDropZones = isAnyDragging && !isDragging;
+  const dropBefore = useDroppable({ id: `dz:before:${project.id}`, disabled: !isAnyDragging });
+  const dropInside = useDroppable({ id: `dz:inside:${project.id}`, disabled: !isAnyDragging });
+  const dropAfter = useDroppable({ id: `dz:after:${project.id}`, disabled: !isAnyDragging });
+  const dropLabel = dropPlacement === 'inside'
+    ? 'Como hijo'
+    : dropPlacement === 'before'
+      ? 'Como hermano arriba'
+      : 'Como hermano abajo';
 
   const disallowedParentIds = useMemo(
     () => new Set([project.id, ...getDescendants(project.id, allProjects).map((d) => d.id)]),
@@ -272,13 +297,51 @@ export function SortableRow({
         setNodeRef(node);
         rowRef?.(node);
       }}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 }}
-      className={`group select-none ${isSelected ? 'bg-[#E6F0FF] border-l-2 border-l-[#3B82F6] [&>td]:bg-[#EAF2FF] [&>td]:border-t [&>td]:border-b [&>td]:border-t-[#60A5FA] [&>td]:border-b-[#60A5FA] [&>td:first-child]:border-l-2 [&>td:first-child]:border-l-[#3B82F6] [&>td:last-child]:border-r-2 [&>td:last-child]:border-r-[#3B82F6]' : 'bg-white'} ${isDropTarget ? 'bg-accent-blue/10' : ''} ${isPastDue ? 'border-l-4 border-l-red-500' : ''} ${isOverloaded ? 'border-l-4 border-l-orange-500' : ''}`}
+      style={{
+        transform: isDragging ? CSS.Transform.toString(transform) : undefined,
+        transition: isDragging ? transition : undefined,
+        opacity: isDragging ? 0 : 1,
+      }}
+      className={`group relative select-none ${isSelected ? 'bg-[#E6F0FF] border-l-2 border-l-[#3B82F6] [&>td]:bg-[#EAF2FF] [&>td]:border-t [&>td]:border-b [&>td]:border-t-[#60A5FA] [&>td]:border-b-[#60A5FA] [&>td:first-child]:border-l-2 [&>td:first-child]:border-l-[#3B82F6] [&>td:last-child]:border-r-2 [&>td:last-child]:border-r-[#3B82F6]' : rowBgClass} ${isPastDue ? 'border-l-4 border-l-red-500' : ''} ${isOverloaded ? 'border-l-4 border-l-orange-500' : ''}`}
       onClick={(e) => onSelectRow?.(project.id, e)}
       onMouseEnter={() => onPresenceChange(project.id)}
       onMouseLeave={() => onPresenceChange(null)}
     >
-      <td className="relative w-8 px-1 py-2 border-b border-border bg-white" ref={rowMenuRef}>
+      <td className={`relative w-8 overflow-visible px-1 py-2 border-b border-border ${rowBgClass}`} ref={rowMenuRef}>
+        {showDropZones && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute z-[70] w-[calc(100vw)]"
+            style={{ top: 0, left: 0, height: '100%' }}
+          >
+            <div ref={dropBefore.setNodeRef} className={`absolute left-0 right-0 top-0 h-1/4 ${dropPlacement === 'before' ? 'bg-blue-100/45' : 'bg-blue-50/15'}`} />
+            <div ref={dropInside.setNodeRef} className={`absolute left-0 right-0 top-1/4 h-2/4 ${dropPlacement === 'inside' ? 'bg-blue-100/45' : 'bg-blue-50/10'}`} />
+            <div ref={dropAfter.setNodeRef} className={`absolute left-0 right-0 bottom-0 h-1/4 ${dropPlacement === 'after' ? 'bg-blue-100/45' : 'bg-blue-50/15'}`} />
+          </div>
+        )}
+        {showDropLine && (
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute z-[80] w-[calc(100vw)]"
+            style={lineAtTop ? { top: 0, left: 0 } : { bottom: 0, left: 0 }}
+          >
+            <div className="relative h-0">
+              <div
+                className="absolute border-t-2 border-blue-500"
+                style={{ left: `${lineIndent}px`, right: '8px', top: 0 }}
+              />
+              <div
+                className="absolute h-2.5 w-2.5 -translate-y-1/2 rounded-full border-2 border-white bg-blue-500"
+                style={{ left: `${pointIndent}px`, top: 0 }}
+              />
+              <span
+                className="absolute -top-3 right-2 rounded border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] text-blue-700"
+              >
+                {dropLabel}
+              </span>
+            </div>
+          </div>
+        )}
         {multiSelectMode ? (
           <input
             type="checkbox"
@@ -294,16 +357,16 @@ export function SortableRow({
             type="button"
             onClick={(e) => {
               e.stopPropagation();
+              const btnRect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
               setRowMenuOpen((v) => {
                 const next = !v;
                 if (next) {
-                  const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
                   const menuW = 240;
                   const menuH = 320;
                   const gap = 6;
-                  const left = Math.max(8, Math.min(rect.right + gap, window.innerWidth - menuW - 8));
-                  const openUp = rect.bottom + menuH > window.innerHeight && rect.top > menuH;
-                  const top = openUp ? Math.max(8, rect.top - menuH) : Math.min(window.innerHeight - 8, rect.top);
+                  const left = Math.max(8, Math.min(btnRect.right + gap, window.innerWidth - menuW - 8));
+                  const openUp = btnRect.bottom + menuH > window.innerHeight && btnRect.top > menuH;
+                  const top = openUp ? Math.max(8, btnRect.top - menuH) : Math.min(window.innerHeight - 8, btnRect.top);
                   setRowMenuPos({ top, left });
                 } else {
                   setRowMenuPos(null);
@@ -358,12 +421,12 @@ export function SortableRow({
           const col = rc.column;
           const cellValue = dynamicValues?.[col.id] ?? null;
           return (
-            <td key={rc.token} className="relative px-2 py-2 border-b border-border text-xs bg-white min-w-[140px]">
+            <td key={rc.token} className={`relative px-2 py-2 border-b border-border text-xs ${rowBgClass} min-w-[140px] ${groupReadonlyToneClass}`}>
               {col.type === 'checkbox' ? (
                 <input type="checkbox" checked={Boolean(cellValue)} onChange={(e) => onUpdateDynamicCell(project.id, col.id, e.target.checked)} className="h-3.5 w-3.5 accent-[#3B82F6]" />
               ) : col.type === 'number' ? (
                 isProgressColumn(col) ? (
-                  <ProgressRating value={normalizeProgressValue(cellValue) || 0} onChange={(v) => onUpdateDynamicCell(project.id, col.id, v)} />
+                  <ProgressRating value={normalizeProgressValue(cellValue)} onChange={(v) => onUpdateDynamicCell(project.id, col.id, v)} />
                 ) : isStarsColumn(col) ? (
                   <StarRating value={normalizeStarsValue(cellValue) || 0} onChange={(v) => onUpdateDynamicCell(project.id, col.id, v)} />
                 ) : (
@@ -388,7 +451,7 @@ export function SortableRow({
         switch (rc.id) {
           case 'project':
             return (
-              <td key={rc.token} className="px-0 py-1 border-b border-border bg-white min-w-[240px]">
+              <td key={rc.token} className={`px-0 py-1 border-b border-border ${rowBgClass} min-w-[240px]`}>
                 <ExpandableCell
                   project={project}
                   hasChildren={hasChildren}
@@ -407,7 +470,7 @@ export function SortableRow({
             );
           case 'branch':
             return (
-              <td key={rc.token} className="relative px-2 py-2 border-b border-border bg-white min-w-[120px]">
+              <td key={rc.token} className={`relative px-2 py-2 border-b border-border ${rowBgClass} min-w-[120px] ${groupReadonlyToneClass}`}>
                 <EditableBranchTagCell
                   value={normalizeBranchList(project.branch)}
                   options={allBranches}
@@ -425,7 +488,7 @@ export function SortableRow({
             );
           case 'start':
             return (
-              <td key={rc.token} className="relative px-2 py-2 border-b border-border bg-white">
+              <td key={rc.token} className={`relative px-2 py-2 border-b border-border ${rowBgClass} ${groupReadonlyToneClass}`}>
                 <EditableDateCell value={toInputDate(project.startDate)} onChange={(v) => onUpdate(project.id, { startDate: fromInputDate(v) })} />
                 {hasChildren && (
                   <GroupRowLockedOverlay onShowHint={onShowGroupEditHint} />
@@ -434,7 +497,7 @@ export function SortableRow({
             );
           case 'end':
             return (
-              <td key={rc.token} className="relative px-2 py-2 border-b border-border bg-white">
+              <td key={rc.token} className={`relative px-2 py-2 border-b border-border ${rowBgClass} ${groupReadonlyToneClass}`}>
                 <EditableDateCell value={toInputDate(project.endDate)} onChange={(v) => onUpdate(project.id, { endDate: fromInputDate(v) })} />
                 {hasChildren && (
                   <GroupRowLockedOverlay onShowHint={onShowGroupEditHint} />
@@ -443,7 +506,7 @@ export function SortableRow({
             );
           case 'assignees':
             return (
-              <td key={rc.token} className="relative px-2 py-2 border-b border-border bg-white">
+              <td key={rc.token} className={`relative px-2 py-2 border-b border-border ${rowBgClass} ${groupReadonlyToneClass}`}>
                 <RichEditableAssigneesCell
                   value={project.assignees || []}
                   options={allPersons}
@@ -459,7 +522,7 @@ export function SortableRow({
             );
           case 'days':
             return (
-              <td key={rc.token} className="relative px-2 py-2 border-b border-border text-center bg-white">
+              <td key={rc.token} className={`relative px-2 py-2 border-b border-border text-center ${rowBgClass} ${groupReadonlyToneClass}`}>
                 <EditableNumberCell value={project.daysRequired ?? 0} onChange={(v) => onUpdate(project.id, { daysRequired: Math.max(0, v ?? 0) })} min={0} />
                 {hasChildren && (
                   <GroupRowLockedOverlay onShowHint={onShowGroupEditHint} />
@@ -468,7 +531,7 @@ export function SortableRow({
             );
           case 'priority':
             return (
-              <td key={rc.token} className="relative px-2 py-2 border-b border-border bg-white">
+              <td key={rc.token} className={`relative px-2 py-2 border-b border-border ${rowBgClass} ${groupReadonlyToneClass}`}>
                 <StarRating value={project.priority || 0} onChange={(v) => onUpdate(project.id, { priority: v })} />
                 {hasChildren && (
                   <GroupRowLockedOverlay onShowHint={onShowGroupEditHint} />
@@ -477,7 +540,7 @@ export function SortableRow({
             );
           case 'type':
             return (
-              <td key={rc.token} className="relative px-2 py-2 border-b border-border bg-white">
+              <td key={rc.token} className={`relative px-2 py-2 border-b border-border ${rowBgClass} ${groupReadonlyToneClass}`}>
                 <EditableSelectCell value={project.type || null} onChange={(v) => onUpdate(project.id, { type: (v as Project['type']) || 'Proyecto' })} options={['Proyecto', 'Lanzamiento', 'En radar']} />
                 {hasChildren && (
                   <GroupRowLockedOverlay onShowHint={onShowGroupEditHint} />
@@ -485,10 +548,10 @@ export function SortableRow({
               </td>
             );
           case 'load':
-            return <td key={rc.token} className="px-2 py-2 border-b border-border text-center bg-white">{(project.dailyLoad ?? 0) > 0 ? <LoadBubble load={project.dailyLoad} size="sm" /> : <span className="text-xs text-text-secondary">Sin carga</span>}</td>;
+            return <td key={rc.token} className={`px-2 py-2 border-b border-border text-center ${rowBgClass} ${groupReadonlyToneClass}`}>{(project.dailyLoad ?? 0) > 0 ? <LoadBubble load={project.dailyLoad} size="sm" /> : <span className="text-xs text-text-secondary">Sin carga</span>}</td>;
           case 'status':
             return (
-              <td key={rc.token} className="px-2 py-2 border-b border-border bg-white">
+              <td key={rc.token} className={`px-2 py-2 border-b border-border ${rowBgClass} ${groupReadonlyToneClass}`}>
                 <StatusBadge status={getProjectStatus(project, dynamicValues)} />
               </td>
             );
@@ -607,6 +670,7 @@ export function SortableRow({
     </>
   );
 }
+
 
 
 

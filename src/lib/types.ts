@@ -53,6 +53,9 @@ export interface FilterState {
   persons: string[];
   branches: string[];
   types: string[];
+  customColumnId: string | null;
+  customTags: string[];
+  customStars: number[];
   dateRange: { start: Date; end: Date } | null;
   showOnlyActive: boolean;
 }

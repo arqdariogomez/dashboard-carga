@@ -69,7 +69,9 @@ export function useProjectTableState() {
     activeId: string | null;
     overId: string | null;
     placement: DropPlacement | null;
-  }>({ activeId: null, overId: null, placement: null });
+    targetDepth: number;
+    targetParentId: string | null;
+  }>({ activeId: null, overId: null, placement: null, targetDepth: 0, targetParentId: null });
   
   // Layout and scrolling
   const [activeScrollRowId, setActiveScrollRowId] = useState<string | null>(null);

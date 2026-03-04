@@ -1,4 +1,4 @@
-import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
+import { Fragment, useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { useAuth } from '@/context/AuthContext';
 import { useUiFeedback } from '@/context/UiFeedbackContext';
@@ -27,7 +27,10 @@ import { addTaskComment, deleteTaskComment, listTaskComments, type TaskComment }
 import { loadPersonProfiles, savePersonProfiles } from '@/lib/personProfiles';
 import {
   DndContext,
+  DragOverlay,
+  pointerWithin,
   closestCenter,
+  type CollisionDetection,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -48,6 +51,7 @@ import { CSS } from '@dnd-kit/utilities';
 import { TableTools } from '@/modules/table/components/TableTools';
 import { TableHeader } from '@/modules/table/components/TableHeader';
 import { SortableRow } from '@/modules/table/components/SortableRow';
+import { TableTreeOverlay } from '@/modules/table/components/TableTreeOverlay';
 import { DynamicColumnsDialog } from '@/modules/table/components/DynamicColumnsDialog';
 import { CommentsPanel } from '@/modules/table/components/CommentsPanel';
 
@@ -127,7 +131,19 @@ const dedupeTokens = <T extends string>(tokens: T[]): T[] => {
   return out;
 };
 
+const GROUP_CONVERSION_WARNING_MESSAGE = 'Al convertir este elemento en Grupo se perderán sus datos para pasar a ser resumen su interior. ¿Continuar?';
+const INDENT_SIZE_PX = 24;
+const MAX_DND_DEPTH = 8;
+
 const normalizeTagList = (tags: string[]): string[] => [...new Set(tags.map((t) => t.trim()).filter(Boolean))];
+const hasMeaningfulDynamicValue = (value: DynamicCellValue): boolean => {
+  if (value === null || value === undefined) return false;
+  if (Array.isArray(value)) return value.some((v) => String(v).trim().length > 0);
+  if (typeof value === 'string') return value.trim().length > 0;
+  if (typeof value === 'number') return Number.isFinite(value) && value !== 0;
+  if (typeof value === 'boolean') return value;
+  return true;
+};
 
 // Helper function
 const normalizePersonKey = (name: string): string => {
@@ -180,7 +196,7 @@ const isValueMismatched = (raw: DynamicCellValue, normalized: DynamicCellValue):
 
 export function ProjectTable() {
   // Core hooks - siempre al nivel superior
-  const { state, dispatch, allPersons, allBranches, activeBoardId, remoteEditingByRow, remoteEditingByColumn, announceEditingPresence } = useProject();
+  const { state, dispatch, orderedFilteredProjects, allPersons, allBranches, activeBoardId, remoteEditingByRow, remoteEditingByColumn, announceEditingPresence } = useProject();
   
   // Defensa contra state undefined
   if (!state) {
@@ -194,6 +210,7 @@ export function ProjectTable() {
   const { user } = useAuth();
   const { confirm, toast } = useUiFeedback();
   const { getAvatarUrl, setAvatar } = usePersonProfiles();
+  const tableRootRef = useRef<HTMLDivElement | null>(null);
   
   // Modular hooks - usando la estructura existente
   const tableState = useProjectTableState();
@@ -240,7 +257,6 @@ export function ProjectTable() {
     sortDir, setSortDir,
     search, setSearch,
     showRadar, setShowRadar,
-    showUnscheduled, setShowUnscheduled,
     exportToast, setExportToast,
     columnValidationToast, setColumnValidationToast,
     uiToast, setUiToast,
@@ -293,6 +309,8 @@ export function ProjectTable() {
   // Estado para edición de nombre de proyecto
   const [editingName, setEditingName] = useState<string | null>(null);
   const [editNameValue, setEditNameValue] = useState('');
+  const [treeOverlayVersion, setTreeOverlayVersion] = useState(0);
+  const treeOverlayHostRef = useRef<HTMLDivElement | null>(null);
 
   const handleStartEditName = useCallback((projectId: string, currentName: string) => {
     setEditingName(projectId);
@@ -645,11 +663,10 @@ export function ProjectTable() {
   }, [columnOrder, dynamicColumns, essentialColumnDefs]);
 
   const sortedProjects = useMemo(() => {
-    if (!state.projects || !Array.isArray(state.projects)) return { scheduled: [], unscheduled: [], radar: [] };
+    if (!orderedFilteredProjects || !Array.isArray(orderedFilteredProjects)) return { scheduled: [], unscheduled: [], radar: [] };
     
-    const filtered = state.projects.filter((project) => {
+    const filtered = orderedFilteredProjects.filter((project) => {
       if (search && !project.name.toLowerCase().includes(search.toLowerCase())) return false;
-      if (!showUnscheduled && !project.startDate && project.type !== 'En radar') return false;
       if (!showRadar && project.type === 'En radar') return false;
       return true;
     });
@@ -672,18 +689,12 @@ export function ProjectTable() {
     const radar = sorted.filter((p) => p.type === 'En radar');
 
     return { scheduled, unscheduled, radar };
-  }, [state.projects, search, sortKey, sortDir, showUnscheduled, showRadar]);
-
-  // Counts from raw projects (not filtered) for toggle buttons
-  const unscheduledCountRaw = useMemo(() => {
-    if (!state.projects || !Array.isArray(state.projects)) return 0;
-    return state.projects.filter((p) => (!p.startDate || !p.endDate) && p.type !== 'En radar').length;
-  }, [state.projects]);
+  }, [orderedFilteredProjects, search, sortKey, sortDir, showRadar]);
 
   const radarCountRaw = useMemo(() => {
-    if (!state.projects || !Array.isArray(state.projects)) return 0;
-    return state.projects.filter((p) => p.type === 'En radar').length;
-  }, [state.projects]);
+    if (!orderedFilteredProjects || !Array.isArray(orderedFilteredProjects)) return 0;
+    return orderedFilteredProjects.filter((p) => p.type === 'En radar').length;
+  }, [orderedFilteredProjects]);
 
   // Flat list for compatibility
   const flatSortedProjects = [...sortedProjects.scheduled, ...sortedProjects.unscheduled, ...sortedProjects.radar];
@@ -802,15 +813,6 @@ export function ProjectTable() {
       return next;
     });
   }, [setMultiSelectMode, setSelectedRowIds, setLastSelectedRowId]);
-
-  const handleAddColumn = useCallback(() => {
-    setNewColumnDialog({
-      open: true,
-      position: dynamicColumns.length,
-      name: buildUniqueDynamicColumnName('Nueva columna'),
-      type: 'text',
-    });
-  }, [setNewColumnDialog, dynamicColumns.length, buildUniqueDynamicColumnName]);
 
   const handleMoveColumnLeft = useCallback((token: string) => {
     setColumnOrder((prev) => {
@@ -1016,21 +1018,9 @@ export function ProjectTable() {
     if (!validateNoCircles(projectId, targetParentId, state.projects)) return;
 
     dispatch({ type: 'UPDATE_HIERARCHY', payload: { projectId, newParentId: targetParentId } });
-
-    const parentPos = order.indexOf(targetParentId);
-    const newOrder = (() => {
-      const copy = [...order];
-      const [item] = copy.splice(idx, 1);
-      copy.splice(parentPos + 1, 0, item);
-      return copy;
-    })();
-    dispatch({ type: 'REORDER_PROJECTS', payload: newOrder });
   }, [state.projectOrder, state.projects, dispatch]);
 
   const handleOutdent = useCallback((projectId: string) => {
-    const order = state.projectOrder.length > 0 ? [...state.projectOrder] : state.projects.map((p) => p.id);
-    const idx = order.indexOf(projectId);
-    if (idx === -1) return;
     const project = state.projects.find((p) => p.id === projectId);
     if (!project) return;
     const currentParentId = project.parentId;
@@ -1040,17 +1030,41 @@ export function ProjectTable() {
     if (!validateNoCircles(projectId, newParentId, state.projects)) return;
 
     dispatch({ type: 'UPDATE_HIERARCHY', payload: { projectId, newParentId } });
-
-    const parentPos = order.indexOf(currentParentId);
-    const insertPos = Math.min(parentPos + 1, order.length);
-    const newOrder = (() => {
-      const copy = [...order];
-      const [item] = copy.splice(idx, 1);
-      copy.splice(insertPos, 0, item);
-      return copy;
-    })();
-    dispatch({ type: 'REORDER_PROJECTS', payload: newOrder });
   }, [state.projectOrder, state.projects, dispatch]);
+
+  const confirmParentConversionIfNeeded = useCallback(async (targetParentId: string | null): Promise<boolean> => {
+    if (!targetParentId) return true;
+    const parent = state.projects.find((p) => p.id === targetParentId);
+    if (!parent) return true;
+    const alreadyHasChildren = state.projects.some((p) => p.parentId === targetParentId);
+    if (alreadyHasChildren) return true;
+    const parentDynamic = dynamicValues.get(targetParentId) || {};
+    const hasDynamicOwnData = Object.values(parentDynamic).some((v) => hasMeaningfulDynamicValue(v));
+    const hasOwnData = Boolean(
+      parent.startDate
+      || parent.endDate
+      || (Array.isArray(parent.assignees) && parent.assignees.length > 0)
+      || (Array.isArray(parent.branch) && parent.branch.length > 0)
+      || (Number.isFinite(parent.daysRequired) && parent.daysRequired > 0)
+      || (Number.isFinite(parent.priority) && parent.priority > 0)
+      || (Number.isFinite(parent.reportedLoad ?? 0) && (parent.reportedLoad ?? 0) > 0)
+      || hasDynamicOwnData
+    );
+    if (!hasOwnData) return true;
+
+    const ok = await confirm({
+      title: 'Convertir en grupo',
+      message: GROUP_CONVERSION_WARNING_MESSAGE,
+      confirmText: 'Continuar',
+    });
+    if (!ok) return false;
+
+    dispatch({
+      type: 'UPDATE_PROJECT',
+      payload: { id: targetParentId, updates: { startDate: null, endDate: null } },
+    });
+    return true;
+  }, [state.projects, dynamicValues, confirm, dispatch]);
 
   // Measure toolbar height for sticky header offset
   useEffect(() => {
@@ -1061,6 +1075,16 @@ export function ProjectTable() {
       }
     }
   }, [stickyToolsRef.current, state.projects.length]);
+
+  useEffect(() => {
+    const update = () => setTreeOverlayVersion((v) => v + 1);
+    const raf = requestAnimationFrame(update);
+    window.addEventListener('resize', update);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', update);
+    };
+  }, [flatSortedProjects, editingName, columnWidths.project, multiSelectMode]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1092,6 +1116,22 @@ export function ProjectTable() {
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [selectedRowId, multiSelectMode, handleIndent, handleOutdent]);
+
+  useEffect(() => {
+    const hasAnySelection = selectedRowId !== null || selectedRowIds.size > 0;
+    if (!hasAnySelection) return;
+    const onDocPointerDown = (e: MouseEvent) => {
+      const target = e.target as Node | null;
+      const insideTable = !!(target && tableRootRef.current?.contains(target));
+      if (insideTable) return;
+      setSelectedRowId(null);
+      setSelectedRowIds(new Set());
+      setLastSelectedRowId(null);
+      setMultiSelectMode(false);
+    };
+    document.addEventListener('mousedown', onDocPointerDown);
+    return () => document.removeEventListener('mousedown', onDocPointerDown);
+  }, [selectedRowId, selectedRowIds, setSelectedRowId, setSelectedRowIds, setLastSelectedRowId, setMultiSelectMode]);
 
   const handleMoveBefore = useCallback((projectId: string, beforeId: string | '__end__') => {
     const order = state.projectOrder.length > 0 ? [...state.projectOrder] : state.projects.map((p) => p.id);
@@ -1214,67 +1254,264 @@ export function ProjectTable() {
     }
   }, [activeBoardId, commentsTaskId, confirm, setComments, setUiToast]);
 
+  const getDepth = useCallback((projectId: string): number => {
+    let depth = 0;
+    let cur = state.projects.find((p) => p.id === projectId) || null;
+    while (cur?.parentId) {
+      depth += 1;
+      cur = state.projects.find((p) => p.id === cur!.parentId) || null;
+    }
+    return depth;
+  }, [state.projects]);
+
   const handleDragStart = (event: DragStartEvent) => {
-    const { active } = event;
-    setDragPreview({ activeId: active.id as string, overId: null, placement: null });
-  };
-
-  const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event;
-    if (!over) return;
-
-    const activeId = active.id as string;
-    const overId = over.id as string;
-
-    if (activeId === overId) return;
-
-    const activeProject = state.projects.find((p) => p.id === activeId);
-    const overProject = state.projects.find((p) => p.id === overId);
-
-    if (!activeProject || !overProject) return;
-
-    const newParentId = overProject.parentId;
-    if (newParentId && validateNoCircles(activeId, newParentId, state.projects)) {
-      return;
-    }
-
-    setDragPreview({ activeId, overId, placement: 'after' });
-  };
-
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
-    setDragPreview({ activeId: null, overId: null, placement: null });
-
-    if (!over) return;
-
-    const activeId = active.id as string;
-    const overId = over.id as string;
-
-    if (activeId === overId) return;
-
-    const activeProject = state.projects.find((p) => p.id === activeId);
-    const overProject = state.projects.find((p) => p.id === overId);
-
-    if (!activeProject || !overProject) return;
-
-    const newParentId = overProject.parentId;
-    if (newParentId && validateNoCircles(activeId, newParentId, state.projects)) {
-      return;
-    }
-
-    dispatch({
-      type: 'REORDER_PROJECTS',
-      payload: [activeId, overId],
+    setDragPreview({
+      activeId: String(event.active.id),
+      overId: null,
+      placement: null,
+      targetDepth: 0,
+      targetParentId: null,
     });
   };
 
+  const computeDropDecision = useCallback((
+    activeId: string,
+    overId: string,
+    deltaX: number,
+    pointerY: number,
+    overRect: { top: number; height: number }
+  ): { placement: 'before' | 'inside' | 'after'; targetDepth: number; targetParentId: string | null } => {
+    const overProject = state.projects.find((p) => p.id === overId);
+    if (!overProject) {
+      return { placement: 'after', targetDepth: 0, targetParentId: null };
+    }
+    const overDepth = getDepth(overId);
+
+    const relativeY = Math.max(0, pointerY - overRect.top);
+    const yRatio = Math.max(0, Math.min(1, relativeY / Math.max(1, overRect.height)));
+    const ZONE_TOP = 0.25;
+    const ZONE_BOTTOM = 0.75;
+    const INSIDE_INTENT_X = 20;
+    const insideDepth = overDepth + 1;
+
+    const insideAllowed = insideDepth <= MAX_DND_DEPTH && validateNoCircles(activeId, overId, state.projects);
+    // Strong horizontal intent to nest, regardless of drag direction.
+    if (insideAllowed && deltaX > INSIDE_INTENT_X) {
+      return {
+        placement: 'inside',
+        targetDepth: insideDepth,
+        targetParentId: overId,
+      };
+    }
+
+    if (yRatio < ZONE_TOP) {
+      return {
+        placement: 'before',
+        targetDepth: overDepth,
+        targetParentId: overProject.parentId ?? null,
+      };
+    }
+
+    if (yRatio > ZONE_BOTTOM) {
+      return {
+        placement: 'after',
+        targetDepth: overDepth,
+        targetParentId: overProject.parentId ?? null,
+      };
+    }
+
+    if (insideAllowed) {
+      return {
+        placement: 'inside',
+        targetDepth: insideDepth,
+        targetParentId: overId,
+      };
+    }
+
+    return {
+      placement: 'after',
+      targetDepth: overDepth,
+      targetParentId: overProject.parentId ?? null,
+    };
+  }, [getDepth, state.projects]);
+
+  const computeDropDecisionByPlacement = useCallback((
+    activeId: string,
+    overId: string,
+    placement: 'before' | 'inside' | 'after',
+  ): { placement: 'before' | 'inside' | 'after'; targetDepth: number; targetParentId: string | null } => {
+    const overProject = state.projects.find((p) => p.id === overId);
+    if (!overProject) return { placement: 'after', targetDepth: 0, targetParentId: null };
+    const overDepth = getDepth(overId);
+    if (placement === 'inside') {
+      const insideDepth = overDepth + 1;
+      const insideAllowed = insideDepth <= MAX_DND_DEPTH && validateNoCircles(activeId, overId, state.projects);
+      if (insideAllowed) {
+        return { placement: 'inside', targetDepth: insideDepth, targetParentId: overId };
+      }
+    }
+    return {
+      placement: placement === 'before' ? 'before' : 'after',
+      targetDepth: overDepth,
+      targetParentId: overProject.parentId ?? null,
+    };
+  }, [getDepth, state.projects]);
+
+  const handleDragOver = useCallback((event: DragOverEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const overIdRaw = String(over.id);
+    if (overIdRaw.startsWith('dz:')) {
+      const [, placementRaw, rowIdRaw] = overIdRaw.split(':');
+      const placement = placementRaw === 'before' || placementRaw === 'inside' || placementRaw === 'after'
+        ? placementRaw
+        : 'after';
+      const rowId = rowIdRaw || overIdRaw;
+      const decision = computeDropDecisionByPlacement(String(active.id), rowId, placement);
+      setDragPreview({
+        activeId: String(active.id),
+        overId: rowId,
+        placement: decision.placement,
+        targetDepth: decision.targetDepth,
+        targetParentId: decision.targetParentId,
+      });
+      return;
+    }
+
+    const pointerLike = event.activatorEvent as MouseEvent | PointerEvent | undefined;
+    const overRect = rowRefs.current[overIdRaw]?.getBoundingClientRect();
+    if (!overRect) return;
+    const translated = event.active.rect.current.translated;
+    const pointerY = translated
+      ? translated.top + translated.height / 2
+      : (pointerLike?.clientY ?? (overRect.top + overRect.height / 2));
+    const decision = computeDropDecision(
+      String(active.id),
+      overIdRaw,
+      event.delta?.x ?? 0,
+      pointerY,
+      { top: overRect.top, height: overRect.height }
+    );
+    setDragPreview({
+      activeId: String(active.id),
+      overId: String(over.id),
+      placement: decision.placement,
+      targetDepth: decision.targetDepth,
+      targetParentId: decision.targetParentId,
+    });
+  }, [computeDropDecision, computeDropDecisionByPlacement, rowRefs]);
+
+  const handleDragCancel = useCallback(() => {
+    setDragPreview({ activeId: null, overId: null, placement: null, targetDepth: 0, targetParentId: null });
+  }, []);
+
+  const handleDragEnd = useCallback(async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) {
+      setDragPreview({ activeId: null, overId: null, placement: null, targetDepth: 0, targetParentId: null });
+      return;
+    }
+
+    const overRawId = String(over.id);
+    const resolvedOverId = overRawId.startsWith('dz:')
+      ? (overRawId.split(':')[2] || overRawId)
+      : overRawId;
+
+    const currentOrder = state.projectOrder.length > 0
+      ? [...state.projectOrder]
+      : state.projects.map((p) => p.id);
+
+    const oldIndex = currentOrder.indexOf(String(active.id));
+    const newIndex = currentOrder.indexOf(resolvedOverId);
+    if (oldIndex === -1 || newIndex === -1) {
+      setDragPreview({ activeId: null, overId: null, placement: null, targetDepth: 0, targetParentId: null });
+      return;
+    }
+
+    const activeId = String(active.id);
+    const overId = dragPreview.overId || resolvedOverId;
+    const activeProject = state.projects.find((p) => p.id === activeId);
+    const targetProject = state.projects.find((p) => p.id === overId);
+
+    const getSubtreeIdsInOrder = (rootId: string, order: string[]) => {
+      const descendantIds = new Set(getDescendants(rootId, state.projects).map((p) => p.id));
+      return order.filter((id) => id === rootId || descendantIds.has(id));
+    };
+    const moveBlock = (arr: string[], blockIds: string[], targetIndex: number) => {
+      const blockSet = new Set(blockIds);
+      const remaining = arr.filter((id) => !blockSet.has(id));
+      const clamped = Math.max(0, Math.min(targetIndex, arr.length));
+      const removedBefore = arr.slice(0, clamped).filter((id) => blockSet.has(id)).length;
+      const insertIndex = clamped - removedBefore;
+      return [
+        ...remaining.slice(0, insertIndex),
+        ...blockIds,
+        ...remaining.slice(insertIndex),
+      ];
+    };
+    const blockIds = getSubtreeIdsInOrder(activeId, currentOrder);
+    const blockSet = new Set(blockIds);
+    if (blockSet.has(overId)) {
+      setDragPreview({ activeId: null, overId: null, placement: null, targetDepth: 0, targetParentId: null });
+      return;
+    }
+
+    const placement = dragPreview.placement;
+    if (!placement) {
+      setDragPreview({ activeId: null, overId: null, placement: null, targetDepth: 0, targetParentId: null });
+      return;
+    }
+    const targetParentId = dragPreview.targetParentId ?? null;
+
+    if (targetParentId !== null && !validateNoCircles(activeId, targetParentId, state.projects)) {
+      setDragPreview({ activeId: null, overId: null, placement: null, targetDepth: 0, targetParentId: null });
+      return;
+    }
+
+    if (activeProject && (activeProject.parentId ?? null) !== targetParentId) {
+      if (targetParentId && !(await confirmParentConversionIfNeeded(targetParentId))) {
+        setDragPreview({ activeId: null, overId: null, placement: null, targetDepth: 0, targetParentId: null });
+        return;
+      }
+      dispatch({ type: 'UPDATE_HIERARCHY', payload: { projectId: activeId, newParentId: targetParentId } });
+      if (placement === 'inside' && targetParentId) {
+        dispatch({ type: 'UPDATE_PROJECT', payload: { id: targetParentId, updates: { isExpanded: true } } });
+      }
+    }
+    if (!targetProject) {
+      setDragPreview({ activeId: null, overId: null, placement: null, targetDepth: 0, targetParentId: null });
+      return;
+    }
+    const getOverSubtreeIds = (rootId: string, order: string[]) => {
+      const descendants = new Set(getDescendants(rootId, state.projects).map((p) => p.id));
+      return order.filter((id) => id === rootId || descendants.has(id));
+    };
+    let insertAt = newIndex;
+    if (placement === 'inside') {
+      insertAt = newIndex + 1;
+    } else if (placement === 'after') {
+      const overSubtree = getOverSubtreeIds(overId, currentOrder);
+      const last = overSubtree[overSubtree.length - 1];
+      insertAt = (last ? currentOrder.indexOf(last) : newIndex) + 1;
+    }
+    dispatch({ type: 'REORDER_PROJECTS', payload: moveBlock(currentOrder, blockIds, insertAt) });
+    setDragPreview({ activeId: null, overId: null, placement: null, targetDepth: 0, targetParentId: null });
+  }, [state.projectOrder, state.projects, dispatch, dragPreview.overId, dragPreview.placement, dragPreview.targetParentId, confirmParentConversionIfNeeded]);
+
+  const dropZoneCollision = useCallback<CollisionDetection>((args) => {
+    const pointerHits = pointerWithin(args).filter((c) => String(c.id).startsWith('dz:'));
+    if (pointerHits.length > 0) return pointerHits;
+    const nearestDropZone = closestCenter(args).filter((c) => String(c.id).startsWith('dz:'));
+    return nearestDropZone;
+  }, []);
+
   return (
-    <div className="w-full flex flex-col flex-1 min-h-0">
+    <div ref={tableRootRef} className="w-full flex flex-col flex-1 min-h-0">
       <div className="sticky top-0 z-20 bg-bg-secondary pb-0 pt-0 shrink-0">
         <TableTools
           search={search}
           setSearch={setSearch}
-          projectsCount={state.projects.length}
+          projectsCount={orderedFilteredProjects.length}
           multiSelectMode={multiSelectMode}
           selectedRowId={selectedRowId}
           selectedRowIds={selectedRowIds}
@@ -1293,24 +1530,22 @@ export function ProjectTable() {
           onAddProject={tableActions.handleAddProject}
           onExportExcel={tableActions.handleExportExcel}
           onCopyCSV={tableActions.handleCopyCSV}
-          onAddColumn={handleAddColumn}
-          showUnscheduled={showUnscheduled}
-          setShowUnscheduled={setShowUnscheduled}
-          unscheduledCount={unscheduledCountRaw}
           showRadar={showRadar}
           setShowRadar={setShowRadar}
           radarCount={radarCountRaw}
         />
       </div>
 
-      <div className="flex-1 overflow-auto min-h-0 pb-4">
+      <div ref={contentScrollRef} className="flex-1 overflow-auto min-h-0 pb-4">
         <DndContext
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={dropZoneCollision}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
+        onDragCancel={handleDragCancel}
         onDragEnd={handleDragEnd}
       >
+          <div ref={treeOverlayHostRef} className="relative">
           <table className="w-full px-8 pb-6 border-separate border-spacing-0 table-fixed">
             <TableHeader
               renderColumns={renderColumns}
@@ -1358,48 +1593,53 @@ export function ProjectTable() {
               strategy={verticalListSortingStrategy}
             >
               <tbody>
-                {flatSortedProjects.map((project, index) => {
+                {flatSortedProjects.map((project) => {
                   const isDropTarget = dragPreview?.overId === project.id;
-                  const dropPlacement = dragPreview?.overId === project.id ? 'after' : null;
+                  const effectivePlacement = isDropTarget ? (dragPreview?.placement ?? null) : null;
+                  const dropTargetDepth = isDropTarget ? (dragPreview?.targetDepth ?? 0) : 0;
 
                   return (
-                    <SortableRow
-                      key={project.id}
-                      project={project}
-                      allProjects={state.projects}
-                      isDropTarget={isDropTarget}
-                      dropPlacement={dropPlacement}
-                      renderColumns={renderColumns}
-                      onUpdate={tableActions.handleUpdate}
-                      onDelete={tableActions.handleDelete}
-                      onToggleExpand={tableActions.handleToggleExpand}
-                      onAddAbove={tableActions.handleAddAbove}
-                      onAddBelow={tableActions.handleAddBelow}
-                      onAddGroupAbove={tableActions.handleAddGroupAbove}
-                      onAddGroupBelow={tableActions.handleAddGroupBelow}
-                      onAddInside={tableActions.handleAddInside}
-                      onDuplicateRow={tableActions.handleDuplicateRow}
-                      onMoveToParent={tableActions.handleMoveToParent}
-                      onMoveBefore={handleMoveBefore}
-                      onIndent={handleIndent}
-                      onOutdent={handleOutdent}
-                      onSetPersonAvatar={tableActions.handleSetPersonAvatar}
-                      onOpenComments={handleOpenComments}
-                      onPresenceChange={tableHandlers.handlePresenceChange}
-                      onShowGroupEditHint={tableHandlers.handleShowGroupEditHint}
-                      onAddBranchOption={tableActions.handleAddBranchOption}
-                      onRenameBranchOption={tableActions.handleRenameBranchOption}
-                      onDeleteBranchOption={tableActions.handleDeleteBranchOption}
-                      onMergeBranchOption={tableActions.handleMergeBranchOptions}
-                      personProfiles={personProfiles}
-                      allPersons={allPersons}
-                      allBranches={branchOptions}
-                      onRenamePersonGlobal={tableActions.handleRenamePersonGlobal}
-                      onDeletePersonGlobal={tableActions.handleDeletePersonGlobal}
-                      onMergePersonsGlobal={tableActions.handleMergePersonsGlobal}
-                      dynamicValues={dynamicValues.get(project.id)}
-                      onUpdateDynamicCell={handleUpsertDynamicCell}
-                      onAddDynamicTagOption={async (columnId, label) => {
+                    <Fragment key={project.id}>
+                      <SortableRow
+                        key={project.id}
+                        project={project}
+                        allProjects={state.projects}
+                        visibleOrderedProjects={flatSortedProjects}
+                        isDropTarget={isDropTarget}
+                        dropPlacement={effectivePlacement}
+                        dropTargetDepth={dropTargetDepth}
+                        dragActiveId={dragPreview.activeId}
+                        renderColumns={renderColumns}
+                        onUpdate={tableActions.handleUpdate}
+                        onDelete={tableActions.handleDelete}
+                        onToggleExpand={tableActions.handleToggleExpand}
+                        onAddAbove={tableActions.handleAddAbove}
+                        onAddBelow={tableActions.handleAddBelow}
+                        onAddGroupAbove={tableActions.handleAddGroupAbove}
+                        onAddGroupBelow={tableActions.handleAddGroupBelow}
+                        onAddInside={tableActions.handleAddInside}
+                        onDuplicateRow={tableActions.handleDuplicateRow}
+                        onMoveToParent={tableActions.handleMoveToParent}
+                        onMoveBefore={handleMoveBefore}
+                        onIndent={handleIndent}
+                        onOutdent={handleOutdent}
+                        onSetPersonAvatar={tableActions.handleSetPersonAvatar}
+                        onOpenComments={handleOpenComments}
+                        onPresenceChange={tableHandlers.handlePresenceChange}
+                        onShowGroupEditHint={tableHandlers.handleShowGroupEditHint}
+                        onAddBranchOption={tableActions.handleAddBranchOption}
+                        onRenameBranchOption={tableActions.handleRenameBranchOption}
+                        onDeleteBranchOption={tableActions.handleDeleteBranchOption}
+                        onMergeBranchOption={tableActions.handleMergeBranchOptions}
+                        personProfiles={personProfiles}
+                        allPersons={allPersons}
+                        allBranches={branchOptions}
+                        onRenamePersonGlobal={tableActions.handleRenamePersonGlobal}
+                        onDeletePersonGlobal={tableActions.handleDeletePersonGlobal}
+                        onMergePersonsGlobal={tableActions.handleMergePersonsGlobal}
+                        dynamicValues={dynamicValues.get(project.id)}
+                        onUpdateDynamicCell={handleUpsertDynamicCell}
+                        onAddDynamicTagOption={async (columnId, label) => {
                         const column = dynamicColumns.find((c) => c.id === columnId);
                         if (!column) return;
                         const options = Array.isArray(column.config?.options) ? (column.config.options as string[]) : [];
@@ -1436,14 +1676,37 @@ export function ProjectTable() {
                       editingNameId={editingName}
                       editNameValue={editNameValue}
                       onStartEditName={handleStartEditName}
-                      onFinishEditName={handleFinishEditName}
-                      onCancelEditName={handleCancelEditName}
-                    />
+                        onFinishEditName={handleFinishEditName}
+                        onCancelEditName={handleCancelEditName}
+                      />
+                    </Fragment>
                   );
                 })}
               </tbody>
             </SortableContext>
           </table>
+          <TableTreeOverlay
+            projects={flatSortedProjects}
+            rowRefs={rowRefs}
+            hostRef={treeOverlayHostRef}
+            version={treeOverlayVersion}
+          />
+          </div>
+          <DragOverlay dropAnimation={null}>
+            {dragPreview.activeId ? (() => {
+              const project = state.projects.find((p) => p.id === dragPreview.activeId);
+              if (!project) return null;
+              const subtreeCount = getDescendants(project.id, state.projects).length;
+              return (
+                <div className="rounded-md border border-blue-300 bg-white/95 shadow-lg px-3 py-2 text-xs text-text-primary">
+                  <span className="font-medium">{project.name}</span>
+                  {subtreeCount > 0 && (
+                    <span className="ml-2 text-[10px] text-text-secondary">+{subtreeCount} subelemento{subtreeCount > 1 ? 's' : ''}</span>
+                  )}
+                </div>
+              );
+            })() : null}
+          </DragOverlay>
         </DndContext>
 
       <DynamicColumnsDialog

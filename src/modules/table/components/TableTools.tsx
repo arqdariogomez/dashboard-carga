@@ -23,10 +23,6 @@ interface TableToolsProps {
   onAddProject: () => void;
   onExportExcel: () => void;
   onCopyCSV: () => void;
-  onAddColumn: () => void;
-  showUnscheduled?: boolean;
-  setShowUnscheduled?: (show: boolean) => void;
-  unscheduledCount?: number;
   showRadar?: boolean;
   setShowRadar?: (show: boolean) => void;
   radarCount?: number;
@@ -53,10 +49,6 @@ export function TableTools({
   onAddProject,
   onExportExcel,
   onCopyCSV,
-  onAddColumn,
-  showUnscheduled = true,
-  setShowUnscheduled,
-  unscheduledCount = 0,
   showRadar = false,
   setShowRadar,
   radarCount = 0,
@@ -78,22 +70,6 @@ export function TableTools({
       <span className="text-xs text-text-secondary">
         {projectsCount} proyectos
       </span>
-
-      {/* Unscheduled toggle */}
-      {setShowUnscheduled && unscheduledCount > 0 && (
-        <button
-          onClick={() => setShowUnscheduled(!showUnscheduled)}
-          className={`flex items-center gap-1 px-2 py-1 text-xs rounded-lg border transition-colors ${
-            showUnscheduled
-              ? 'bg-[#FEF3C7] border-[#FCD34D] text-[#92400E]'
-              : 'bg-white border-border text-text-secondary hover:text-text-primary hover:bg-bg-secondary'
-          }`}
-          title={showUnscheduled ? 'Ocultar proyectos sin fecha' : 'Mostrar proyectos sin fecha'}
-        >
-          {showUnscheduled ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-          Sin fecha ({unscheduledCount})
-        </button>
-      )}
 
       {/* Radar toggle */}
       {setShowRadar && radarCount > 0 && (
@@ -178,16 +154,6 @@ export function TableTools({
         CSV
       </button>
 
-      <div className="relative" data-column-menu-safe>
-        <button
-          onClick={onAddColumn}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-primary bg-white hover:bg-bg-secondary border border-border rounded-lg transition-all"
-          title="Agregar columna"
-        >
-          <Plus size={14} />
-          Columna
-        </button>
-      </div>
     </div>
   );
 }

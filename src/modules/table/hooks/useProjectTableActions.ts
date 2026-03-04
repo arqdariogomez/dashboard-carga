@@ -275,7 +275,17 @@ export function useProjectTableActions({
     const { id: _ignoreId, ...safeOverrides } = overrides || {};
     return computeProjectFields({
       id: `proj-new-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      name: '',
+      name: 'Nuevo proyecto',
+      branch: [],
+      startDate: null,
+      endDate: null,
+      assignees: [],
+      daysRequired: 0,
+      priority: 1,
+      type: 'Proyecto',
+      blockedBy: null,
+      blocksTo: null,
+      reportedLoad: null,
       hierarchyLevel: 0,
       parentId: null,
       isExpanded: true,
@@ -300,10 +310,15 @@ export function useProjectTableActions({
       const newProject = createProjectDraft({
         hierarchyLevel: ref.hierarchyLevel || 0,
         parentId: ref.parentId,
+        branch: Array.isArray(ref.branch) ? [...ref.branch] : [],
+        startDate: ref.startDate ?? null,
+        endDate: ref.endDate ?? null,
+        type: ref.type ?? 'Proyecto',
       });
       dispatch({ type: 'ADD_PROJECT', payload: { project: newProject, position: 'above', referenceId } });
+      setSelectedRowId(newProject.id);
     }
-  }, [state.projects, createProjectDraft, dispatch]);
+  }, [state.projects, createProjectDraft, dispatch, setSelectedRowId]);
 
   const handleAddBelow = useCallback((referenceId: string) => {
     const ref = state.projects.find((p) => p.id === referenceId);
@@ -311,10 +326,15 @@ export function useProjectTableActions({
       const newProject = createProjectDraft({
         hierarchyLevel: ref.hierarchyLevel || 0,
         parentId: ref.parentId,
+        branch: Array.isArray(ref.branch) ? [...ref.branch] : [],
+        startDate: ref.startDate ?? null,
+        endDate: ref.endDate ?? null,
+        type: ref.type ?? 'Proyecto',
       });
       dispatch({ type: 'ADD_PROJECT', payload: { project: newProject, position: 'below', referenceId } });
+      setSelectedRowId(newProject.id);
     }
-  }, [state.projects, createProjectDraft, dispatch]);
+  }, [state.projects, createProjectDraft, dispatch, setSelectedRowId]);
 
   const handleAddInside = useCallback((referenceId: string) => {
     const ref = state.projects.find((p) => p.id === referenceId);
@@ -334,10 +354,15 @@ export function useProjectTableActions({
       name: 'Nuevo grupo',
       hierarchyLevel: ref.hierarchyLevel || 0,
       parentId: ref.parentId,
+      branch: Array.isArray(ref.branch) ? [...ref.branch] : [],
+      startDate: ref.startDate ?? null,
+      endDate: ref.endDate ?? null,
+      type: ref.type ?? 'Proyecto',
       isExpanded: true,
     });
     dispatch({ type: 'ADD_PROJECT', payload: { project: newProject, position: 'above', referenceId } });
-  }, [state.projects, createProjectDraft, dispatch]);
+    setSelectedRowId(newProject.id);
+  }, [state.projects, createProjectDraft, dispatch, setSelectedRowId]);
 
   const handleAddGroupBelow = useCallback((referenceId: string) => {
     const ref = state.projects.find((p) => p.id === referenceId);
@@ -346,10 +371,15 @@ export function useProjectTableActions({
       name: 'Nuevo grupo',
       hierarchyLevel: ref.hierarchyLevel || 0,
       parentId: ref.parentId,
+      branch: Array.isArray(ref.branch) ? [...ref.branch] : [],
+      startDate: ref.startDate ?? null,
+      endDate: ref.endDate ?? null,
+      type: ref.type ?? 'Proyecto',
       isExpanded: true,
     });
     dispatch({ type: 'ADD_PROJECT', payload: { project: newProject, position: 'below', referenceId } });
-  }, [state.projects, createProjectDraft, dispatch]);
+    setSelectedRowId(newProject.id);
+  }, [state.projects, createProjectDraft, dispatch, setSelectedRowId]);
 
   const handleDuplicateRow = useCallback((referenceId: string) => {
     const ref = state.projects.find((p) => p.id === referenceId);

@@ -1,36 +1,39 @@
-import { Check, X } from 'lucide-react';
-
 interface ProgressRatingProps {
-  value: number;
-  onChange: (value: number) => void;
+  value: number | null;
+  onChange: (value: number | null) => void;
 }
 
 export function ProgressRating({ value, onChange }: ProgressRatingProps) {
+  const safe = typeof value === 'number' ? Math.max(0, Math.min(100, Math.round(value / 10) * 10)) : null;
+  const current = safe ?? 0;
+
   return (
-    <div className="flex gap-1">
-      {[0, 1, 2, 3, 4].map((progress) => (
-        <button
-          key={progress}
-          type="button"
-          onClick={() => onChange(progress)}
-          className={`w-5 h-5 rounded text-[10px] font-medium transition-colors ${
-            progress <= value
-              ? progress === 4
-                ? 'bg-green-500 text-white hover:bg-green-600'
-                : progress === 0
-                  ? 'bg-red-500 text-white hover:bg-red-600'
-                  : 'bg-orange-500 text-white hover:bg-orange-600'
-              : 'bg-gray-200 text-gray-500 hover:bg-gray-300'
-          }`}
-          title={`Progreso: ${progress * 25}%`}
-        >
-          {progress === 4 && <Check size={10} />}
-          {progress === 0 && <X size={10} />}
-          {progress === 1 && '25%'}
-          {progress === 2 && '50%'}
-          {progress === 3 && '75%'}
-        </button>
-      ))}
+    <div className="w-[96px] mx-auto">
+      <button
+        type="button"
+        className="w-full text-center text-[11px] tabular-nums text-text-secondary hover:text-text-primary"
+        onClick={() => onChange(safe === null ? 0 : null)}
+        title={safe === null ? 'Marcar 0%' : 'Limpiar avance'}
+      >
+        {safe === null ? '--' : `${safe}%`}
+      </button>
+      <div className="mt-1 flex items-end justify-center gap-[2px]">
+        {Array.from({ length: 10 }, (_, i) => {
+          const step = (i + 1) * 10;
+          const active = step <= current;
+          return (
+            <button
+              key={step}
+              type="button"
+              onClick={() => onChange(step)}
+              className={`w-[8px] rounded-sm transition-colors ${active ? 'bg-emerald-500' : 'bg-slate-200 hover:bg-slate-300'}`}
+              style={{ height: `${6 + i}px` }}
+              aria-label={`Avance ${step}%`}
+              title={`${step}%`}
+            />
+          );
+        })}
+      </div>
     </div>
   );
 }

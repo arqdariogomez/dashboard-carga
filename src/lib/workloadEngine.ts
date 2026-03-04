@@ -102,16 +102,52 @@ export function getBranches(projects: Project[]): string[] {
   return Array.from(branches).sort();
 }
 
-export function applyFilters(projects: Project[], filters: FilterState, config: AppConfig): Project[] {
+export function applyFilters(
+  projects: Project[],
+  filters: FilterState,
+  config: AppConfig,
+  dynamicValues?: Map<string, Record<string, string | number | boolean | string[] | null>>,
+  customColumnTypes?: Map<string, 'tags' | 'stars'>
+): Project[] {
+  const normalizeTags = (raw: unknown): string[] => {
+    if (Array.isArray(raw)) return raw.map((x) => String(x).trim()).filter(Boolean);
+    if (typeof raw === 'string') return raw.split(',').map((x) => x.trim()).filter(Boolean);
+    return [];
+  };
+
   // First pass: apply basic filters per-project
   const matched = projects.filter((p) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     if (filters.persons.length > 0) {
       const hasMatchingPerson = p.assignees.some(assignee => filters.persons.includes(assignee));
       if (!hasMatchingPerson) return false;
     }
     if (!branchMatches(p.branch, filters.branches)) return false;
     if (filters.types.length > 0 && !filters.types.includes(p.type)) return false;
-    if (filters.showOnlyActive && p.type === 'En radar') return false;
+    if (filters.customColumnId && customColumnTypes?.has(filters.customColumnId)) {
+      const customType = customColumnTypes.get(filters.customColumnId);
+      const raw = dynamicValues?.get(p.id)?.[filters.customColumnId];
+      if (customType === 'tags' && filters.customTags.length > 0) {
+        const selected = new Set(filters.customTags.map((x) => x.trim().toLowerCase()).filter(Boolean));
+        const values = normalizeTags(raw).map((x) => x.toLowerCase());
+        if (!values.some((x) => selected.has(x))) return false;
+      }
+      if (customType === 'stars' && filters.customStars.length > 0) {
+        const num = typeof raw === 'number' ? raw : Number(raw);
+        const rating = Number.isFinite(num) ? Math.max(0, Math.min(5, Math.round(num))) : null;
+        if (rating === null || !filters.customStars.includes(rating)) return false;
+      }
+    }
+    if (filters.showOnlyActive) {
+      if (p.type === 'En radar') return false;
+      if (!p.startDate || !p.endDate) return false;
+      const start = new Date(p.startDate);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(p.endDate);
+      end.setHours(0, 0, 0, 0);
+      if (today < start || today > end) return false;
+    }
     if (filters.dateRange && p.startDate && p.endDate) {
       if (p.endDate < filters.dateRange.start || p.startDate > filters.dateRange.end) return false;
     }

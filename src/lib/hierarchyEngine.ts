@@ -170,17 +170,18 @@ export function aggregateFromChildren(
   // Aggregate assignees: unique set of all children
   const allAssignees = new Set<string>();
   children.forEach(p => {
-    p.assignees.forEach(a => allAssignees.add(a));
+    const list = Array.isArray(p.assignees) ? p.assignees : [];
+    list.forEach(a => allAssignees.add(a));
   });
   aggregated.assignees = Array.from(allAssignees).sort();
 
   // Sum daysRequired
-  aggregated.daysRequired = children.reduce((sum, p) => sum + p.daysRequired, 0);
+  aggregated.daysRequired = children.reduce((sum, p) => sum + (Number.isFinite(p.daysRequired) ? p.daysRequired : 0), 0);
 
   // Average priority (weighted by daysRequired)
   const totalDays = aggregated.daysRequired || 1;
   aggregated.priority = Math.round(
-    children.reduce((sum, p) => sum + p.priority * p.daysRequired, 0) / totalDays
+    children.reduce((sum, p) => sum + (Number.isFinite(p.priority) ? p.priority : 0) * (Number.isFinite(p.daysRequired) ? p.daysRequired : 0), 0) / totalDays
   );
 
   return aggregated;

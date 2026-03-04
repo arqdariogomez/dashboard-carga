@@ -4,13 +4,15 @@
  */
 
 import { useLayoutEffect, useRef } from 'react';
-import { ChevronDown, ChevronRight } from 'lucide-react';
+import { ChevronDown, ChevronRight, Folder } from 'lucide-react';
 import type { Project } from '@/lib/types';
 
 interface ExpandableCellProps {
   project: Project;
   hasChildren: boolean;
-  isLastSibling?: boolean;
+  ancestorContinuations?: boolean[];
+  hasNextSiblingAtCurrentLevel?: boolean;
+  hasParentConnectorAtCurrentLevel?: boolean;
   childCount?: number; // Number of direct children
   onToggleExpand: (projectId: string) => void;
   isEditing?: boolean;
@@ -26,7 +28,9 @@ interface ExpandableCellProps {
 export function ExpandableCell({
   project,
   hasChildren,
-  isLastSibling = false,
+  ancestorContinuations = [],
+  hasNextSiblingAtCurrentLevel = false,
+  hasParentConnectorAtCurrentLevel = true,
   childCount = 0,
   onToggleExpand,
   isEditing = false,
@@ -42,8 +46,8 @@ export function ExpandableCell({
   const isExpanded = project.isExpanded ?? true;
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   
-  // Increased indent for better visual hierarchy (40px per level, like Notion)
-  const indentPx = hierarchyLevel * 40;
+  const indentStepPx = 24;
+  const indentPx = hierarchyLevel * indentStepPx;
   const chevronSize = hasChildren ? 19 : 16;
 
   const applyInlineFormat = (marker: '**' | '*') => {
@@ -132,9 +136,7 @@ export function ExpandableCell({
               }
               if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') onFinishEdit?.(editValue);
             }}
-            className={`flex-1 w-full resize-none overflow-hidden rounded px-1 py-0.5 text-sm leading-5 whitespace-pre-wrap break-words focus:outline-none focus:ring-2 focus:ring-person-1/25 ${
-              hasChildren ? 'font-semibold text-text-primary' : 'font-medium text-text-primary'
-            }`}
+            className="flex-1 w-full resize-none overflow-hidden rounded px-1 py-0.5 text-sm leading-5 whitespace-pre-wrap break-words focus:outline-none focus:ring-2 focus:ring-person-1/25 font-medium text-text-primary"
             style={{ minHeight: '24px' }}
           />
         </div>
@@ -147,30 +149,6 @@ export function ExpandableCell({
       className="flex items-center gap-1 px-2 py-2 group relative transition-all duration-150 rounded-sm"
       style={{ paddingLeft: `${indentPx}px` }}
     >
-      {/* Visual tree lines for hierarchy - connects nested items (Notion-style) */}
-      {hierarchyLevel > 0 && (
-        <>
-          {/* Vertical line extending from parent */}
-          <div
-            className="absolute border-l-2 border-[#5B7FAF]/55 group-hover:border-[#4C6E9C]/65 transition-colors"
-            style={{
-              left: `${hierarchyLevel * 40 - 20}px`,
-              top: 0,
-              bottom: isLastSibling ? '50%' : 0,
-            }}
-          />
-          {/* Horizontal connector from vertical line to chevron/bullet */}
-          <div
-            className="absolute top-1/2 border-t-2 border-[#5B7FAF]/55 group-hover:border-[#4C6E9C]/65 transition-colors"
-            style={{
-              left: `${hierarchyLevel * 40 - 20}px`,
-              width: '15px',
-              transform: 'translateY(-50%)',
-            }}
-          />
-        </>
-      )}
-
       {/* Expansion toggle - redesigned for clarity */}
       {hasChildren ? (
         <button
@@ -198,18 +176,17 @@ export function ExpandableCell({
         <div className="flex-shrink-0 w-[24px] h-[24px] opacity-0 group-hover:opacity-20 transition-opacity" />
       )}
 
-      {/* Project name - with improved styling for parent projects */}
+      {/* Project name */}
       <span
-        className={`cursor-pointer rounded px-1 py-0.5 transition-colors flex-1 text-sm ${
-          hasChildren
-            ? 'font-semibold text-text-primary'
-            : 'font-medium text-text-primary'
-        }`}
+        className="cursor-pointer rounded px-1 py-0.5 transition-colors flex-1 text-sm font-medium text-text-primary inline-flex items-center gap-2"
         onDoubleClick={() => onStartEdit?.()}
         title="Doble clic para editar nombre"
         style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
       >
-        {project.name || <span className="text-text-secondary/50 italic">—</span>}
+        {hasChildren && (
+          <Folder size={14} className="text-text-secondary/80 flex-shrink-0" aria-hidden="true" />
+        )}
+        {project.name || <span className="text-text-secondary/50 italic">-</span>}
       </span>
 
       {/* Visual indicator badges - improved design */}
@@ -276,3 +253,4 @@ export function useHierarchyDisplay(projects: Project[]) {
     getDescendantCount: (projectId: string) => countDescendants(projectId),
   };
 }
+

@@ -22,6 +22,9 @@ export const DEFAULT_FILTERS: FilterState = {
   persons: [],
   branches: [],
   types: [],
+  customColumnId: null,
+  customTags: [],
+  customStars: [],
   dateRange: null,
   showOnlyActive: false,
 };

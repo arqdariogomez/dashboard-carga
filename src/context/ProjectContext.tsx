@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useReducer, useEffect, useMemo, useRef, useState, useCallback } from 'react';
-import type { AppState, AppAction, Project } from '@/lib/types';
+import type { AppState, AppAction, Project, DynamicCellValue, DynamicColumn } from '@/lib/types';
 import { DEFAULT_STATE, DEFAULT_FILTERS } from '@/lib/constants';
 import { calculateDailyWorkload, applyFilters, getPersons, getBranches, getActiveProjects, computeProjectFields } from '@/lib/workloadEngine';
 import { getDateRange } from '@/lib/dateUtils';
@@ -9,6 +9,7 @@ import { isSupabaseConfigured, supabase } from '@/lib/supabaseClient';
 import { loadBoardProjects, saveBoardProjects } from '@/lib/cloudBoardRepository';
 import { ensureDefaultWorkspaceBoard } from '@/lib/cloudBootstrap';
 import { insertBoardVersionRow, loadBoardVersionRows } from '@/lib/versionHistoryRepository';
+import { listBoardColumns, listTaskColumnValues } from '@/lib/dynamicColumnsRepository';
 import { useAuth } from '@/context/AuthContext';
 
 const MAX_HISTORY = 50;
@@ -92,7 +93,6 @@ function appReducer(state: AppState, action: AppAction): AppState {
           projects: withLevels,
           projectOrder: incoming.map(p => p.id),
           fileName: action.payload.fileName,
-          lastUpdated: new Date(),
           hasUnsavedChanges: false,
         };
       }
@@ -157,8 +157,30 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, projects, hasUnsavedChanges: true };
     }
     case 'ADD_PROJECT': {
-      let projects = [...state.projects, action.payload];
-      const projectOrder = [...(state.projectOrder || []), action.payload.id];
+      const rawPayload = action.payload as unknown as
+        | Project
+        | { project: Project; position?: 'above' | 'below' | 'inside'; referenceId?: string };
+      const hasWrappedProject = !!rawPayload && typeof rawPayload === 'object' && 'project' in (rawPayload as Record<string, unknown>);
+      const newProject = (hasWrappedProject
+        ? (rawPayload as { project: Project }).project
+        : rawPayload) as Project;
+      const position = hasWrappedProject ? (rawPayload as { position?: 'above' | 'below' | 'inside' }).position : undefined;
+      const referenceId = hasWrappedProject ? (rawPayload as { referenceId?: string }).referenceId : undefined;
+
+      if (!newProject || typeof newProject.id !== 'string' || !newProject.id) return state;
+
+      let projects = [...state.projects, newProject];
+      let projectOrder = [...(state.projectOrder || [])].filter((id) => id !== newProject.id);
+
+      const refIdx = referenceId ? projectOrder.indexOf(referenceId) : -1;
+      if (refIdx >= 0 && position === 'above') {
+        projectOrder.splice(refIdx, 0, newProject.id);
+      } else if (refIdx >= 0 && (position === 'below' || position === 'inside')) {
+        projectOrder.splice(refIdx + 1, 0, newProject.id);
+      } else {
+        projectOrder.push(newProject.id);
+      }
+
       projects = projects.map(p => ({ ...p, hierarchyLevel: calculateHierarchyLevel(p.id, projects) }));
       return { ...state, projects, projectOrder, hasUnsavedChanges: true };
     }
@@ -211,6 +233,7 @@ function appReducer(state: AppState, action: AppAction): AppState {
       return { ...state, projects, hasUnsavedChanges: true };
     }
     case 'MARK_SAVED':
+      if (!state.hasUnsavedChanges) return state;
       return { ...state, hasUnsavedChanges: false, lastUpdated: new Date() };
     default:
       return state;
@@ -276,6 +299,19 @@ function loadPersistedState(): Partial<AppState> {
         parsedRangeStart && parsedRangeEnd && parsedRangeStart <= parsedRangeEnd
           ? { start: parsedRangeStart, end: parsedRangeEnd }
           : null;
+      const parsedCustomTags = Array.isArray(parsed?.filters?.customTags)
+        ? parsed.filters.customTags.map((x: unknown) => String(x).trim()).filter(Boolean)
+        : [];
+      const parsedCustomStars = Array.isArray(parsed?.filters?.customStars)
+        ? parsed.filters.customStars
+            .map((x: unknown) => Number(x))
+            .filter((x: number) => Number.isFinite(x) && x >= 1 && x <= 5)
+            .map((x: number) => Math.round(x))
+        : [];
+      const parsedCustomColumnId =
+        typeof parsed?.filters?.customColumnId === 'string' && parsed.filters.customColumnId.trim()
+          ? parsed.filters.customColumnId.trim()
+          : null;
       return {
         activeView: parsed.activeView === 'grid' ? 'table' : (parsed.activeView || 'table'),
         granularity: parsed.granularity || 'week',
@@ -283,6 +319,9 @@ function loadPersistedState(): Partial<AppState> {
         filters: parsed.filters ? {
           ...DEFAULT_FILTERS,
           ...parsed.filters,
+          customColumnId: parsedCustomColumnId,
+          customTags: parsedCustomTags,
+          customStars: parsedCustomStars,
           dateRange: parsedDateRange,
         } : DEFAULT_FILTERS,
         config: parsed.config ? {
@@ -414,6 +453,8 @@ interface ProjectContextValue {
   orderedFilteredProjects: Project[];
   allPersons: string[];
   allBranches: string[];
+  customFilterColumns: { id: string; name: string; type: 'tags' | 'stars' }[];
+  customFilterTagOptionsByColumn: Record<string, string[]>;
   dateRange: { start: Date; end: Date } | null;
   workloadData: Map<string, import('@/lib/types').PersonWorkload[]>;
   canUndo: boolean;
@@ -496,6 +537,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const [remoteEditingByColumn, setRemoteEditingByColumn] = useState<Record<string, { userId: string; label: string; ts: number }>>({});
   const [versionHistory, setVersionHistory] = useState<VersionSnapshotStored[]>([]);
   const [versionHistorySync, setVersionHistorySync] = useState<'cloud' | 'local'>('local');
+  const [filterDynamicColumns, setFilterDynamicColumns] = useState<DynamicColumn[]>([]);
+  const [filterDynamicValues, setFilterDynamicValues] = useState<Map<string, Record<string, DynamicCellValue>>>(new Map());
   const lastAutoSnapshotAtRef = useRef<number>(0);
   const hasUnsavedChangesRef = useRef<boolean>(false);
   const localRevisionRef = useRef<number>(0);
@@ -1422,9 +1465,73 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('keydown', handler);
   }, [canUndo, canRedo]);
 
+  useEffect(() => {
+    let cancelled = false;
+    if (!isSupabaseConfigured || !activeBoardId) {
+      setFilterDynamicColumns([]);
+      setFilterDynamicValues(new Map());
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    (async () => {
+      try {
+        const [cols, vals] = await Promise.all([
+          listBoardColumns(activeBoardId),
+          listTaskColumnValues(activeBoardId),
+        ]);
+        if (cancelled) return;
+        setFilterDynamicColumns(cols);
+        setFilterDynamicValues(vals);
+      } catch {
+        if (cancelled) return;
+        setFilterDynamicColumns([]);
+        setFilterDynamicValues(new Map());
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeBoardId]);
+
+  const customFilterColumns = useMemo(() => {
+    return filterDynamicColumns
+      .filter((c) => c.type === 'tags' || (c.type === 'number' && c.config?.display === 'stars'))
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        type: (c.type === 'tags' ? 'tags' : 'stars') as 'tags' | 'stars',
+      }));
+  }, [filterDynamicColumns]);
+
+  const customFilterTypeMap = useMemo(() => {
+    return new Map(customFilterColumns.map((c) => [c.id, c.type]));
+  }, [customFilterColumns]);
+
+  const customFilterTagOptionsByColumn = useMemo(() => {
+    const result: Record<string, string[]> = {};
+    const tagCols = customFilterColumns.filter((c) => c.type === 'tags');
+    tagCols.forEach((col) => {
+      const unique = new Set<string>();
+      state.projects.forEach((p) => {
+        const raw = filterDynamicValues.get(p.id)?.[col.id];
+        const values = Array.isArray(raw)
+          ? raw.map((x) => String(x).trim()).filter(Boolean)
+          : typeof raw === 'string'
+            ? raw.split(',').map((x) => x.trim()).filter(Boolean)
+            : [];
+        values.forEach((v) => unique.add(v));
+      });
+      result[col.id] = Array.from(unique).sort((a, b) => a.localeCompare(b));
+    });
+    return result;
+  }, [customFilterColumns, filterDynamicValues, state.projects]);
+
   const filteredProjects = useMemo(
-    () => applyFilters(state.projects, state.filters, state.config),
-    [state.projects, state.filters, state.config]
+    () => applyFilters(state.projects, state.filters, state.config, filterDynamicValues, customFilterTypeMap),
+    [state.projects, state.filters, state.config, filterDynamicValues, customFilterTypeMap]
   );
 
   // Order filtered projects by projectOrder
@@ -1458,6 +1565,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     orderedFilteredProjects,
     allPersons,
     allBranches,
+    customFilterColumns,
+    customFilterTagOptionsByColumn,
     dateRange,
     workloadData,
     canUndo,
@@ -1495,6 +1604,8 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     orderedFilteredProjects,
     allPersons,
     allBranches,
+    customFilterColumns,
+    customFilterTagOptionsByColumn,
     dateRange,
     workloadData,
     canUndo,

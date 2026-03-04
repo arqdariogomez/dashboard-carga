@@ -78,7 +78,7 @@ export function DynamicColumnsDialog({
           onChange={(e) => setNewColumnDialog((prev: any) => (prev ? { ...prev, type: e.target.value as DynamicDisplayType } : prev))}
           className="w-full h-9 rounded-md border border-border px-3 text-sm outline-none focus:ring-2 focus:ring-blue-100 bg-white"
         >
-          {(['text', 'progress', 'stars', 'number', 'date', 'select', 'tags', 'checkbox'] as DynamicDisplayType[]).map((t) => (
+          {(['text', 'progress', 'stars', 'number', 'date', 'tags', 'checkbox'] as DynamicDisplayType[]).map((t) => (
             <option key={t} value={t}>{dynamicDisplayLabelEs[t]}</option>
           ))}
         </select>
