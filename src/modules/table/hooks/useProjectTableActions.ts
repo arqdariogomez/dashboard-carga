@@ -71,7 +71,8 @@ export function useProjectTableActions({
       setPersonCatalog((prev: string[]) => {
         const current = new Set(prev.map(p => p.toLowerCase()));
         if (!current.has(clean.toLowerCase())) {
-          return [...prev, clean].sort();
+          const updated = [...prev, clean].sort();
+          return updated;
         }
         return prev;
       });
