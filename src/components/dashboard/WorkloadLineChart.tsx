@@ -145,8 +145,12 @@ export function WorkloadLineChart() {
   // Limpiar tickets al desmontar para evitar bloqueos persistentes
   useEffect(() => {
     return () => {
-      const syncManager = SyncManager.getInstance();
-      syncManager.forceReleaseAll();
+      try {
+        const syncManager = (window as any).SyncManager?.getInstance();
+        syncManager?.forceReleaseAll();
+      } catch (error) {
+        console.warn('🎫 Error limpiando tickets al desmontar', error);
+      }
     };
   }, []);
 
