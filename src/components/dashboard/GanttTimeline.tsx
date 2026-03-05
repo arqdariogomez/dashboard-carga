@@ -585,6 +585,7 @@ interface GanttRowProps {
   onMoveRowDown: (projectId: string) => void;
   canMoveUp: boolean;
   canMoveDown: boolean;
+  isSidebarCollapsed: boolean;
 }
 
 const GanttRow = React.memo(function GanttRow({
@@ -624,6 +625,7 @@ const GanttRow = React.memo(function GanttRow({
   onMoveRowDown,
   canMoveUp,
   canMoveDown,
+  isSidebarCollapsed,
 }: GanttRowProps) {
   const bar = getBarPropsFn(node);
   if (!bar) return null;
@@ -710,218 +712,192 @@ const GanttRow = React.memo(function GanttRow({
         onDoubleClick={() => onStartEditName(node.id, node.name)}
       >
         <div className="flex items-center gap-2 min-w-0">
-          <div
-            style={{ paddingLeft: level * indentStepPx }}
-            className="relative min-w-0 flex-1 flex items-center"
-          >
-            {level > 0 && (
-              <TreeConnectors
-                depth={level}
-                step={indentStepPx}
-                ancestorContinuations={ancestorContinuations}
-                hasNextSiblingAtCurrentLevel={hasNextSibling}
-                hasParentConnectorAtCurrentLevel={hasParentConnector}
-                lineClassName="stroke-neutral-300/75 group-hover/bar:stroke-neutral-400/85"
-                bleedTop={8}
-                bleedBottom={0}
-              />
-            )}
-            {hasChildren && (
-              <button
-                onClick={() => onToggleExpansion(node.id)}
-                onDoubleClick={(e) => e.stopPropagation()}
-                className="relative z-10 mr-2 text-text-secondary flex-shrink-0 hover:text-text-primary transition-colors"
-                aria-label={isExpanded ? 'Colapsar' : 'Expandir'}
-              >
-                {isExpanded ? (
-                  <ChevronDown size={14} />
-                ) : (
-                  <ChevronRight size={14} />
-                )}
-              </button>
-            )}
-            {editingProjectId === node.id ? (
-              <input
-                autoFocus
-                value={editingProjectName}
-                onChange={(e) => onEditNameChange(e.target.value)}
-                onBlur={onCommitEditName}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') onCommitEditName();
-                  if (e.key === 'Escape') onCancelEditName();
-                }}
-                className="w-full bg-transparent border border-border rounded px-1.5 py-0.5 text-xs text-text-primary outline-none focus:ring-2 focus:ring-blue-200"
-              />
-            ) : (
+          <div className="relative w-5 flex-shrink-0" ref={rowMenuRef}>
+            <button
+              type="button"
+              className="h-5 w-5 inline-flex items-center justify-center opacity-0 group-hover:opacity-100 group-hover/bar:opacity-100 focus-visible:opacity-100 text-text-secondary transition-opacity"
+              onClick={(e) => {
+                e.stopPropagation();
+                const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                if (rowMenuOpen) {
+                  setRowMenuOpen(false);
+                  setRowMenuPos(null);
+                } else {
+                  openRowMenuFromButton(rect);
+                }
+              }}
+              onDoubleClick={(e) => e.stopPropagation()}
+              title="Acciones de fila"
+            >
+              <MoreHorizontal size={12} />
+            </button>
+            {rowMenuOpen && rowMenuPos && typeof document !== 'undefined'
+              ? createPortal(
               <div
-                className="relative z-10 text-xs text-text-primary truncate cursor-text"
-                title={node.name}
+                ref={rowMenuPopupRef}
+                className="fixed z-[900] w-44 rounded-lg border border-border bg-white shadow-lg p-1 pointer-events-auto"
+                style={{ top: rowMenuPos.top, left: rowMenuPos.left }}
+                onClick={(e) => e.stopPropagation()}
               >
-                {node.name}
-              </div>
-            )}
-          </div>
-          <div className="text-[10px] text-text-secondary pl-2 flex items-center gap-1.5 flex-shrink-0">
-            <span className="max-w-[84px] truncate">
-              {branchLabel(node.branch)}
-            </span>
-            <span>Â·</span>
-            <span className="tabular-nums">{node.daysRequired}d</span>
-            <button
-              type="button"
-              className="ml-1 inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] text-text-secondary hover:text-text-primary hover:bg-bg-secondary transition-colors"
-              onDoubleClick={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onOpenDependencyEditor(node.id);
-              }}
-              aria-label="Editar dependencias"
-            >
-              <Link2 size={11} />
-              {depNames.length}
-            </button>
-            <button
-              type="button"
-              className={`inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] transition-colors ${
-                ms
-                  ? 'border-blue-300 bg-blue-50 text-blue-700'
-                  : 'border-border text-text-secondary hover:text-text-primary hover:bg-bg-secondary'
-              }`}
-              onDoubleClick={(e) => e.stopPropagation()}
-              onClick={(e) => {
-                e.stopPropagation();
-                onToggleMilestone(node);
-              }}
-              aria-label={ms ? 'Quitar hito' : 'Marcar como hito'}
-            >
-              <Diamond size={11} />
-              {ms ? 'Hito' : 'Marcar'}
-            </button>
-            <div className="relative" ref={rowMenuRef}>
-              <button
-                type="button"
-                className="h-6 w-6 inline-flex items-center justify-center rounded opacity-0 group-hover:opacity-100 group-hover/bar:opacity-100 focus-visible:opacity-100 hover:bg-bg-secondary text-text-secondary transition-opacity"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
-                  if (rowMenuOpen) {
+                <button
+                  type="button"
+                  className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
+                  onClick={() => {
+                    onCreateProjectFrom(node);
                     setRowMenuOpen(false);
-                    setRowMenuPos(null);
-                  } else {
-                    openRowMenuFromButton(rect);
-                  }
-                }}
-                onDoubleClick={(e) => e.stopPropagation()}
-                title="Acciones de fila"
-              >
-                <MoreHorizontal size={12} />
-              </button>
-              {rowMenuOpen && rowMenuPos && typeof document !== 'undefined'
-                ? createPortal(
-                <div
-                  ref={rowMenuPopupRef}
-                  className="fixed z-[900] w-44 rounded-lg border border-border bg-white shadow-lg p-1 pointer-events-auto"
-                  style={{ top: rowMenuPos.top, left: rowMenuPos.left }}
-                  onClick={(e) => e.stopPropagation()}
+                  }}
                 >
-                  <button
-                    type="button"
-                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
-                    onClick={() => {
-                      onCreateProjectFrom(node);
-                      setRowMenuOpen(false);
-                    }}
-                  >
-                    <Plus size={12} />
-                    Nuevo
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
-                    onClick={() => {
-                      onDuplicateProjectFrom(node);
-                      setRowMenuOpen(false);
-                    }}
-                  >
-                    <Copy size={12} />
-                    Duplicar
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
-                    onClick={() => {
-                      onStartEditName(node.id, node.name);
-                      setRowMenuOpen(false);
-                    }}
-                  >
-                    <Pencil size={12} />
-                    Renombrar
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
-                    onClick={() => {
-                      onToggleMilestone(node);
-                      setRowMenuOpen(false);
-                    }}
-                  >
-                    <Diamond size={12} />
-                    {ms ? 'Quitar hito' : 'Marcar hito'}
-                  </button>
-                  <button
-                    type="button"
-                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
-                    onClick={() => {
-                      onOpenDependencyEditor(node.id);
-                      setRowMenuOpen(false);
-                    }}
-                  >
-                    <Link2 size={12} />
-                    Dependencias
-                  </button>
-                  <div className="my-1 border-t border-border" />
-                  <button
-                    type="button"
-                    disabled={!canMoveUp}
-                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                    onClick={() => {
-                      onMoveRowUp(node.id);
-                      setRowMenuOpen(false);
-                    }}
-                  >
-                    <ChevronUp size={12} />
-                    Mover arriba
-                  </button>
-                  <button
-                    type="button"
-                    disabled={!canMoveDown}
-                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                    onClick={() => {
-                      onMoveRowDown(node.id);
-                      setRowMenuOpen(false);
-                    }}
-                  >
-                    <ChevronDown size={12} />
-                    Mover abajo
-                  </button>
-                  <div className="my-1 border-t border-border" />
-                  <button
-                    type="button"
-                    className="w-full text-left px-2 py-1.5 text-xs rounded text-red-600 hover:bg-red-50 inline-flex items-center gap-2"
-                    onClick={() => {
-                      onDeleteProjectById(node.id);
-                      setRowMenuOpen(false);
-                    }}
-                  >
-                    <Trash2 size={12} />
-                    Eliminar
-                  </button>
-                </div>,
-                document.body
-              )
-                : null}
-            </div>
+                  <Plus size={12} />
+                  Nuevo
+                </button>
+                <button
+                  type="button"
+                  className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
+                  onClick={() => {
+                    onDuplicateProjectFrom(node);
+                    setRowMenuOpen(false);
+                  }}
+                >
+                  <Copy size={12} />
+                  Duplicar
+                </button>
+                <button
+                  type="button"
+                  className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
+                  onClick={() => {
+                    onStartEditName(node.id, node.name);
+                    setRowMenuOpen(false);
+                  }}
+                >
+                  <Pencil size={12} />
+                  Renombrar
+                </button>
+                <button
+                  type="button"
+                  className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
+                  onClick={() => {
+                    onToggleMilestone(node);
+                    setRowMenuOpen(false);
+                  }}
+                >
+                  <Diamond size={12} />
+                  {ms ? 'Quitar hito' : 'Marcar hito'}
+                </button>
+                <button
+                  type="button"
+                  className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
+                  onClick={() => {
+                    onOpenDependencyEditor(node.id);
+                    setRowMenuOpen(false);
+                  }}
+                >
+                  <Link2 size={12} />
+                  Dependencias
+                </button>
+                <div className="my-1 border-t border-border" />
+                <button
+                  type="button"
+                  disabled={!canMoveUp}
+                  className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={() => {
+                    onMoveRowUp(node.id);
+                    setRowMenuOpen(false);
+                  }}
+                >
+                  <ChevronUp size={12} />
+                  Mover arriba
+                </button>
+                <button
+                  type="button"
+                  disabled={!canMoveDown}
+                  className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                  onClick={() => {
+                    onMoveRowDown(node.id);
+                    setRowMenuOpen(false);
+                  }}
+                >
+                  <ChevronDown size={12} />
+                  Mover abajo
+                </button>
+                <div className="my-1 border-t border-border" />
+                <button
+                  type="button"
+                  className="w-full text-left px-2 py-1.5 text-xs rounded text-red-600 hover:bg-red-50 inline-flex items-center gap-2"
+                  onClick={() => {
+                    onDeleteProjectById(node.id);
+                    setRowMenuOpen(false);
+                  }}
+                >
+                  <Trash2 size={12} />
+                  Eliminar
+                </button>
+              </div>,
+              document.body
+            )
+              : null}
           </div>
+          {!isSidebarCollapsed && (
+            <>
+              <div
+                style={{ paddingLeft: level * indentStepPx }}
+                className="relative min-w-0 flex-1 flex items-center"
+              >
+                {level > 0 && (
+                  <TreeConnectors
+                    depth={level}
+                    step={indentStepPx}
+                    ancestorContinuations={ancestorContinuations}
+                    hasNextSiblingAtCurrentLevel={hasNextSibling}
+                    hasParentConnectorAtCurrentLevel={hasParentConnector}
+                    lineClassName="stroke-neutral-300/75 group-hover/bar:stroke-neutral-400/85"
+                    bleedTop={8}
+                    bleedBottom={0}
+                  />
+                )}
+                {hasChildren && (
+                  <button
+                    onClick={() => onToggleExpansion(node.id)}
+                    onDoubleClick={(e) => e.stopPropagation()}
+                    className="relative z-10 mr-2 text-text-secondary flex-shrink-0 hover:text-text-primary transition-colors"
+                    aria-label={isExpanded ? 'Colapsar' : 'Expandir'}
+                  >
+                    {isExpanded ? (
+                      <ChevronDown size={14} />
+                    ) : (
+                      <ChevronRight size={14} />
+                    )}
+                  </button>
+                )}
+                {editingProjectId === node.id ? (
+                  <input
+                    autoFocus
+                    value={editingProjectName}
+                    onChange={(e) => onEditNameChange(e.target.value)}
+                    onBlur={onCommitEditName}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') onCommitEditName();
+                      if (e.key === 'Escape') onCancelEditName();
+                    }}
+                    className="w-full bg-transparent border border-border rounded px-1.5 py-0.5 text-xs text-text-primary outline-none focus:ring-2 focus:ring-blue-200"
+                  />
+                ) : (
+                  <div
+                    className="relative z-10 text-xs text-text-primary truncate cursor-text"
+                    title={node.name}
+                  >
+                    {node.name}
+                  </div>
+                )}
+              </div>
+              <div className="text-[10px] text-text-secondary pl-2 flex items-center gap-1.5 flex-shrink-0">
+                <span className="max-w-[84px] truncate">
+                  {branchLabel(node.branch)}
+                </span>
+                <span>·</span>
+                <span className="tabular-nums">{node.daysRequired}d</span>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
@@ -1172,26 +1148,26 @@ function GanttTooltip({
         {project.name}
       </div>
       <div className="text-[11px] text-text-secondary mb-2.5">
-        {branchLabel(project.branch)} Â· {project.type}
+        {branchLabel(project.branch)} · {project.type}
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
         <div className="text-text-secondary">Inicio</div>
         <div className="text-text-primary tabular-nums">
           {project.startDate
             ? format(project.startDate, 'dd/MM/yyyy')
-            : 'â€”'}
+            : '—'}
         </div>
         <div className="text-text-secondary">Fin</div>
         <div className="text-text-primary tabular-nums">
           {project.endDate
             ? format(project.endDate, 'dd/MM/yyyy')
-            : 'â€”'}
+            : '—'}
         </div>
-        <div className="text-text-secondary">DÃ­as req.</div>
+        <div className="text-text-secondary">Dias req.</div>
         <div className="text-text-primary font-medium">
           {project.daysRequired}
         </div>
-        <div className="text-text-secondary">DÃ­as asig.</div>
+        <div className="text-text-secondary">Dias asig.</div>
         <div className="text-text-primary">{project.assignedDays}</div>
         <div className="text-text-secondary">Balance</div>
         <div
@@ -1257,10 +1233,10 @@ export function GanttTimeline() {
   );
   const [editingProjectName, setEditingProjectName] = useState('');
   const [sidebarWidth, setSidebarWidth] = useState(500);
-  const [colorMode, setColorMode] = useState<ColorMode>('load');
+  const [colorMode, setColorMode] = useState<ColorMode>('type');
   const [customColorField, setCustomColorField] =
     useState<CustomColorField>('branch');
-  const [groupMode, setGroupMode] = useState<GroupMode>('person');
+  const [groupMode, setGroupMode] = useState<GroupMode>('none');
   const [customGroupField, setCustomGroupField] =
     useState<CustomGroupField>('branch');
   const [orderMode, setOrderMode] = useState<OrderMode>('chronological');
@@ -1276,6 +1252,7 @@ export function GanttTimeline() {
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
 
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [barResize, setBarResize] = useState<BarResizeState | null>(null);
   const [milestoneDrag, setMilestoneDrag] =
     useState<MilestoneDragState | null>(null);
@@ -1288,6 +1265,7 @@ export function GanttTimeline() {
     startX: number;
     startWidth: number;
   } | null>(null);
+  const sidebarExpandedWidthRef = useRef(500);
   const suppressScrollRef = useRef(false);
   const scrollRafRef = useRef(0);
   const barResizeRef = useRef<BarResizeState | null>(null);
@@ -1646,6 +1624,11 @@ export function GanttTimeline() {
     ],
   );
 
+  useEffect(() => {
+    if (!range || totalDays <= 0) return;
+    applyPreset('ALL');
+  }, [range, totalDays, applyPreset]);
+
   const panToDay = useCallback(
     (centerDay: number) => {
       const viewW = getTimelineViewWidth();
@@ -1711,7 +1694,7 @@ export function GanttTimeline() {
       if (!isMilestoneProject(project)) {
         const ok = await confirm({
           title: 'Convertir en hito',
-          message: 'AjustarÃ¡ fecha fin = inicio y duraciÃ³n = 0. Â¿Continuar?',
+          message: 'Ajustara fecha fin = inicio y duracion = 0. ¿Continuar?',
           confirmText: 'Convertir',
         });
         if (!ok) return;
@@ -1907,17 +1890,17 @@ export function GanttTimeline() {
 
   const resetTimelineToolbar = useCallback(() => {
     setActiveTimelineViewId('__current__');
-    setGroupMode('person');
+    setGroupMode('none');
     setCustomGroupField('branch');
     setOrderMode('chronological');
-    setColorMode('load');
+    setColorMode('type');
     setCustomColorField('branch');
     setShowMilestonesOnly(false);
   }, []);
 
   const activeToolbarChips = useMemo(() => {
     const chips: Array<{ id: string; label: string; onRemove: () => void }> = [];
-    if (groupMode !== 'person') {
+    if (groupMode !== 'none') {
       chips.push({
         id: 'group',
         label:
@@ -1927,7 +1910,7 @@ export function GanttTimeline() {
               ? 'Agrupar: Tipo'
               : 'Agrupar: Personalizado',
         onRemove: () => {
-          setGroupMode('person');
+          setGroupMode('none');
           setCustomGroupField('branch');
         },
       });
@@ -1946,7 +1929,7 @@ export function GanttTimeline() {
         onRemove: () => setOrderMode('chronological'),
       });
     }
-    if (colorMode !== 'load') {
+    if (colorMode !== 'type') {
       chips.push({
         id: 'color',
         label:
@@ -1956,7 +1939,7 @@ export function GanttTimeline() {
               ? 'Color: Tipo'
               : 'Color: Personalizado',
         onRemove: () => {
-          setColorMode('load');
+          setColorMode('type');
           setCustomColorField('branch');
         },
       });
@@ -2039,6 +2022,7 @@ export function GanttTimeline() {
 
   const startSidebarResize = useCallback(
     (e: React.MouseEvent) => {
+      if (isSidebarCollapsed) return;
       e.preventDefault();
       e.stopPropagation();
       sidebarResizeRef.current = {
@@ -2047,8 +2031,19 @@ export function GanttTimeline() {
       };
       setIsSidebarResizing(true);
     },
-    [sidebarWidth],
+    [sidebarWidth, isSidebarCollapsed],
   );
+
+  const toggleSidebarCollapse = useCallback(() => {
+    if (isSidebarCollapsed) {
+      setSidebarWidth(clamp(sidebarExpandedWidthRef.current, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH));
+      setIsSidebarCollapsed(false);
+      return;
+    }
+    sidebarExpandedWidthRef.current = sidebarWidth;
+    setSidebarWidth(56);
+    setIsSidebarCollapsed(true);
+  }, [isSidebarCollapsed, sidebarWidth]);
 
   // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   //  EFFECTS
@@ -2366,6 +2361,7 @@ export function GanttTimeline() {
           onMoveRowDown={handleMoveRowDown}
           canMoveUp={(orderIndexMap.get(n.id) ?? -1) > movableOrderRange.min}
           canMoveDown={(orderIndexMap.get(n.id) ?? -1) < movableOrderRange.max}
+          isSidebarCollapsed={isSidebarCollapsed}
         />,
       );
       if (n.children?.length && exp)
@@ -2382,13 +2378,16 @@ export function GanttTimeline() {
       {/* â”€â”€ Toolbar â”€â”€ */}
       <div className="mb-3 space-y-2">
         <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-text-secondary">Vista:</span>
           <div className="relative" ref={viewMenuRef}>
             <button
               type="button"
               onClick={() => setIsViewMenuOpen((prev) => !prev)}
               className="h-8 rounded-md border border-border bg-white px-2.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-secondary inline-flex items-center gap-1.5"
             >
-              Vista
+              {activeTimelineViewId === '__current__'
+                ? 'Sin vista'
+                : (timelineViews.find((v) => v.id === activeTimelineViewId)?.name || 'Vista')}
               <ChevronDown size={12} />
             </button>
             {isViewMenuOpen && (
@@ -2402,7 +2401,7 @@ export function GanttTimeline() {
                   }}
                   className="w-full h-8 rounded-md border border-border px-2 text-xs bg-white"
                 >
-                  <option value="__current__">Vista actual</option>
+                  <option value="__current__">Sin vista</option>
                   {timelineViews.map((view) => (
                     <option key={view.id} value={view.id}>
                       {view.name}
@@ -2446,16 +2445,17 @@ export function GanttTimeline() {
             )}
           </div>
 
+          <span className="text-xs text-text-secondary">Agrupar:</span>
           <select
             value={groupMode}
             onChange={(e) => setGroupMode(e.target.value as GroupMode)}
             className="h-8 rounded-md border border-border px-2 text-xs bg-white text-text-secondary"
             title="Agrupar"
           >
-            <option value="none">Agrupar: Ninguno</option>
-            <option value="person">Agrupar: Persona</option>
-            <option value="type">Agrupar: Tipo</option>
-            <option value="custom">Agrupar: Personalizado</option>
+            <option value="none">Ninguno</option>
+            <option value="person">Persona</option>
+            <option value="type">Tipo</option>
+            <option value="custom">Personalizado</option>
           </select>
           {groupMode === 'custom' && (
             <select
@@ -2464,31 +2464,33 @@ export function GanttTimeline() {
               className="h-8 rounded-md border border-border px-2 text-xs bg-white text-text-secondary"
               title="Campo de agrupacion"
             >
-              <option value="branch">Grupo por: Sucursal</option>
-              <option value="priority">Grupo por: Prioridad</option>
+              <option value="branch">Sucursal</option>
+              <option value="priority">Prioridad</option>
             </select>
           )}
 
+          <span className="text-xs text-text-secondary">Orden:</span>
           <select
             value={orderMode}
             onChange={(e) => setOrderMode(e.target.value as OrderMode)}
             className="h-8 rounded-md border border-border px-2 text-xs bg-white text-text-secondary"
             title="Orden"
           >
-            <option value="chronological">Orden: Cronologico</option>
-            <option value="custom">Orden: Personalizado</option>
+            <option value="chronological">Cronologico</option>
+            <option value="custom">Personalizado</option>
           </select>
 
+          <span className="text-xs text-text-secondary">Colorear:</span>
           <select
             value={colorMode}
             onChange={(e) => setColorMode(e.target.value as ColorMode)}
             className="h-8 rounded-md border border-border px-2 text-xs bg-white text-text-secondary"
             title="Color"
           >
-            <option value="load">Color: Carga</option>
-            <option value="person">Color: Persona</option>
-            <option value="type">Color: Tipo</option>
-            <option value="custom">Color: Personalizado</option>
+            <option value="load">Carga</option>
+            <option value="person">Persona</option>
+            <option value="type">Tipo</option>
+            <option value="custom">Personalizado</option>
           </select>
           {colorMode === 'custom' && (
             <select
@@ -2497,14 +2499,12 @@ export function GanttTimeline() {
               className="h-8 rounded-md border border-border px-2 text-xs bg-white text-text-secondary"
               title="Campo de color"
             >
-              <option value="branch">Color por: Sucursal</option>
-              <option value="type">Color por: Tipo</option>
+              <option value="branch">Sucursal</option>
+              <option value="type">Tipo</option>
             </select>
           )}
-        </div>
-
-        {(activeToolbarChips.length > 0 || showMilestonesOnly) && (
-          <div className="flex items-center gap-2 flex-wrap">
+          {(activeToolbarChips.length > 0 || showMilestonesOnly) && (
+          <div className="ml-auto flex items-center gap-2 flex-wrap">
             {activeToolbarChips.map((chip) => (
               <button
                 key={chip.id}
@@ -2533,6 +2533,7 @@ export function GanttTimeline() {
             </button>
           </div>
         )}
+        </div>
       </div>
 
       {/* â”€â”€ Main â”€â”€ */}
@@ -2555,10 +2556,18 @@ export function GanttTimeline() {
                       minWidth: sidebarWidth,
                     }}
                   >
-                    {groupMode === 'none' ? 'Proyecto' : 'Grupo / Proyecto'}
+                    <button
+                      type="button"
+                      onClick={toggleSidebarCollapse}
+                      className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded text-text-secondary hover:bg-bg-secondary"
+                      title={isSidebarCollapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
+                    >
+                      {isSidebarCollapsed ? <ChevronsRight size={12} /> : <ChevronsLeft size={12} />}
+                    </button>
+                    {!isSidebarCollapsed && (groupMode === 'none' ? 'Proyecto' : 'Grupo / Proyecto')}
                     <div
                       onMouseDown={startSidebarResize}
-                      className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-100/40 transition-colors"
+                      className={`absolute right-0 top-0 h-full w-2 transition-colors ${isSidebarCollapsed ? 'cursor-default' : 'cursor-col-resize hover:bg-blue-100/40'}`}
                     >
                       <div className="mx-auto h-full w-px bg-text-secondary/20" />
                     </div>
@@ -2736,18 +2745,6 @@ export function GanttTimeline() {
         {/*  NAVIGATION BAR                             */}
         {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         <div className="mt-2 flex-shrink-0 space-y-1.5">
-          {/* Minimap */}
-          <Minimap
-            projects={activeProjects}
-            rangeStart={range.start}
-            totalDays={totalDays}
-            todayOffset={todayOffset}
-            showTodayLine={showTodayLine}
-            viewStartDay={viewStartDay}
-            viewEndDay={viewEndDay}
-            onPan={panToDay}
-          />
-
           {/* Controls */}
           <div className="flex items-center gap-2">
             {/* Presets */}
@@ -2816,7 +2813,7 @@ export function GanttTimeline() {
                 addDays(range.start, Math.floor(viewStartDay)),
                 'dd MMM',
               )}
-              {' â€” '}
+              {' — '}
               {format(
                 addDays(
                   range.start,
