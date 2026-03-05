@@ -648,7 +648,7 @@ export function ProjectTable() {
     } catch {
       setPersonCatalog([]);
     }
-  }, [activeBoardId, setPersonCatalog]);
+  }, [activeBoardId]);
 
   // Save person catalog to localStorage
   useEffect(() => {
@@ -666,12 +666,14 @@ export function ProjectTable() {
     [allBranches, branchCatalog]
   );
 
+  // Use personCatalog directly as it's already persisted and includes all persons from projects
   const personOptions = useMemo(
     () => {
-      const all = new Set([...(allPersons || []), ...(personCatalog || [])]);
+      // Combine project persons with catalog for initial load before catalog is populated
+      const all = new Set([...(personCatalog || []), ...(allPersons || [])]);
       return Array.from(all).sort();
     },
-    [allPersons, personCatalog]
+    [personCatalog, allPersons]
   );
 
   const renderColumns = useMemo(() => {
