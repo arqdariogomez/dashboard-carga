@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { getPersons } from '@/lib/workloadEngine';
 import { PERSON_COLORS } from '@/lib/constants';
 import { format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { LineChart as LineChartIcon } from 'lucide-react';
+import { LineChart as LineChartIcon, ChevronsLeft, ChevronsRight } from 'lucide-react';
+import { ZoomControls, type TimePreset } from '@/components/shared/ZoomControls';
 import {
   Line,
   XAxis,
@@ -22,6 +23,10 @@ export function WorkloadLineChart() {
   const { state, filteredProjects, workloadData, dateRange } = useProject();
   const [visibleRange, setVisibleRange] = useState<{ startIndex: number; endIndex: number } | null>(null);
   const [yMode, setYMode] = useState<'auto' | '200' | '300'>('auto');
+  
+  // Estado para zoom
+  const [zoomScale, setZoomScale] = useState(1);
+  const [activePreset, setActivePreset] = useState<TimePreset | null>('ALL');
 
   const persons = useMemo(() => {
     const ps = getPersons(filteredProjects);
@@ -82,6 +87,38 @@ export function WorkloadLineChart() {
     return todayEntry?.label || null;
   }, [chartData]);
 
+  // Manejador de zoom
+  const handleZoomChange = useCallback((newZoom: number, preset: TimePreset | null) => {
+    setZoomScale(newZoom);
+    setActivePreset(preset);
+    
+    if (chartData.length === 0) return;
+    
+    // Calcular el rango visible basado en el zoom
+    let visibleDays: number;
+    if (preset === 'ALL') {
+      visibleDays = chartData.length;
+    } else if (preset) {
+      const presetDays: Record<TimePreset, number> = {
+        '2W': 14, '1M': 30, '3M': 90, '6M': 180, 'ALL': chartData.length,
+      };
+      visibleDays = Math.min(presetDays[preset], chartData.length);
+    } else {
+      // Calcular días basados en zoom (escala logarítmica invertida)
+      const logMin = Math.log(0.3);
+      const logMax = Math.log(3);
+      const t = (Math.log(newZoom) - logMin) / (logMax - logMin);
+      const minDays = 14;
+      const maxDays = Math.min(365, chartData.length);
+      const logRange = Math.log(maxDays) - Math.log(minDays);
+      visibleDays = Math.round(Math.exp(Math.log(maxDays) - t * logRange));
+    }
+    
+    const endIndex = chartData.length - 1;
+    const startIndex = Math.max(0, endIndex - visibleDays + 1);
+    setVisibleRange({ startIndex, endIndex });
+  }, [chartData]);
+
   if (chartData.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
@@ -130,6 +167,20 @@ export function WorkloadLineChart() {
             >
               Ajustar rango
             </button>
+          </div>
+          
+          {/* Zoom Controls */}
+          <div className="flex items-center gap-2">
+            <ZoomControls
+              zoom={zoomScale}
+              activePreset={activePreset}
+              onZoomChange={handleZoomChange}
+              variant="full"
+              visibleRange={visibleRange ? {
+                start: new Date(chartData[visibleRange.startIndex]?.date || ''),
+                end: new Date(chartData[visibleRange.endIndex]?.date || '')
+              } : null}
+            />
           </div>
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {persons.map((person, i) => (

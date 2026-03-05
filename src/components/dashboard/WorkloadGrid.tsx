@@ -1,14 +1,15 @@
-import { useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback, useRef, useEffect } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { usePersonProfiles } from '@/context/PersonProfilesContext';
 import { LoadBubble } from '@/components/shared/LoadBubble';
 import { Toggle } from '@/components/shared/Toggle';
 import { DateRangeSlider } from '@/components/shared/DateRangeSlider';
+import { ZoomControls, type TimePreset } from '@/components/shared/ZoomControls';
 import { aggregateByPeriod, getPersons } from '@/lib/workloadEngine';
 import { isParent, aggregateFromChildren } from '@/lib/hierarchyEngine';
-import { format, isSameDay, addMonths, addWeeks, addDays, startOfMonth, startOfWeek, isToday, eachDayOfInterval, getDay, isValid } from 'date-fns';
+import { format, isSameDay, addMonths, addWeeks, addDays, startOfMonth, startOfWeek, isToday, eachDayOfInterval, getDay, isValid, subDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Calendar, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Calendar, X, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import type { Granularity, ProjectLoad, Project } from '@/lib/types';
 import { getLoadColor, PERSON_COLORS } from '@/lib/constants';
 import { isWorkingDay } from '@/lib/dateUtils';
@@ -29,6 +30,10 @@ export function WorkloadGrid() {
   const [detailPanel, setDetailPanel] = useState<DetailPanel | null>(null);
   const [showDateSlider, setShowDateSlider] = useState(false);
   const [customRange, setCustomRange] = useState<{ start: Date; end: Date } | null>(null);
+  
+  // Estado para zoom compartido
+  const [zoomScale, setZoomScale] = useState(1); // 1 = ALL preset
+  const [activePreset, setActivePreset] = useState<TimePreset | null>('ALL');
   const isValidDate = (d: Date | null | undefined): d is Date => Boolean(d && isValid(d));
   const safeIsSameDay = (a: unknown, b: unknown) =>
     a instanceof Date && b instanceof Date && isValidDate(a) && isValidDate(b) && isSameDay(a, b);
@@ -233,6 +238,44 @@ export function WorkloadGrid() {
     });
   }, [detailPanel, filteredProjects]);
 
+  // Manejador de zoom compatible con ZoomControls
+  const handleZoomChange = useCallback((newZoom: number, preset: TimePreset | null) => {
+    setZoomScale(newZoom);
+    setActivePreset(preset);
+    
+    if (!dateRange) return;
+    
+    if (preset === 'ALL') {
+      setViewStart(dateRange.start);
+      return;
+    }
+    
+    // Calcular días basados en el preset o zoom
+    let daysToShow: number;
+    if (preset) {
+      const presetDays: Record<TimePreset, number | null> = {
+        '2W': 14, '1M': 30, '3M': 90, '6M': 180, 'ALL': null,
+      };
+      daysToShow = presetDays[preset] || 30;
+    } else {
+      // Calcular días basados en zoom (invertir la lógica de daysToZoom)
+      const logMin = Math.log(0.3);
+      const logMax = Math.log(3);
+      const t = (Math.log(newZoom) - logMin) / (logMax - logMin);
+      const minDays = 14;
+      const maxDays = 365;
+      const logRange = Math.log(maxDays) - Math.log(minDays);
+      daysToShow = Math.round(Math.exp(Math.log(maxDays) - t * logRange));
+    }
+    
+    const today = new Date();
+    const startDate = subDays(today, daysToShow);
+    
+    // No exceder el rango del proyecto
+    const effectiveStart = startDate < dateRange.start ? dateRange.start : startDate;
+    setViewStart(effectiveStart);
+  }, [dateRange]);
+
   if (persons.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
@@ -303,6 +346,15 @@ export function WorkloadGrid() {
               Fechas
             </button>
           </div>
+
+          {/* Zoom Controls compartido */}
+          <ZoomControls
+            zoom={zoomScale}
+            activePreset={activePreset}
+            onZoomChange={handleZoomChange}
+            variant="full"
+            visibleRange={visibleRange}
+          />
 
           <div className="text-xs font-medium text-text-secondary capitalize">
             {rangeLabel}
