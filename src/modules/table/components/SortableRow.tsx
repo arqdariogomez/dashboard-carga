@@ -574,7 +574,9 @@ export function SortableRow({
               </td>
             );
           case 'load':
-            return <td key={rc.token} className={`px-2 py-2 border-b border-border text-center ${rowBgClass} ${groupReadonlyToneClass}`}>{(project.dailyLoad ?? 0) > 0 ? <LoadBubble load={project.dailyLoad} size="sm" /> : <span className="text-xs text-text-secondary">Sin carga</span>}</td>;
+            const loadAssignees = project.assignees?.length ?? 0;
+            const displayLoad = loadAssignees > 0 ? project.dailyLoad / loadAssignees : project.dailyLoad;
+            return <td key={rc.token} className={`px-2 py-2 border-b border-border text-center ${rowBgClass} ${groupReadonlyToneClass}`}>{(displayLoad ?? 0) > 0 ? <LoadBubble load={displayLoad} size="sm" /> : <span className="text-xs text-text-secondary">Sin carga</span>}</td>;
           case 'status':
             return (
               <td key={rc.token} className={`px-2 py-2 border-b border-border ${rowBgClass} ${groupReadonlyToneClass}`}>
