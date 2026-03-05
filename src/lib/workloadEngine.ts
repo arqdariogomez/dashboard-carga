@@ -3,6 +3,26 @@ import { getWorkingDays, countWorkingDays, isSameDay, getWeekRanges, getMonthRan
 import { getDescendants, isParent, getAncestors } from './hierarchyEngine';
 import { normalizeBranchList, branchMatches } from './branchUtils';
 
+export function loadPersonCatalogFromStorage(boardId: string | null): string[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const key = `workload-dashboard-person-catalog:${boardId || 'local'}`;
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((x: unknown): x is string => typeof x === 'string' && x.length > 0) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function getPersonsWithCatalog(projects: Project[], boardId: string | null): string[] {
+  const projectPersons = getPersons(projects);
+  const catalogPersons = loadPersonCatalogFromStorage(boardId);
+  const combined = new Set([...projectPersons, ...catalogPersons]);
+  return Array.from(combined).sort();
+}
+
 export function computeProjectFields(project: Omit<Project, 'assignedDays' | 'balanceDays' | 'dailyLoad' | 'totalHours'>, config: AppConfig, allProjects?: Project[]): Project {
   let assignedDays = 0;
   let balanceDays = 0;

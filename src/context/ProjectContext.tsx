@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useReducer, useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import type { AppState, AppAction, Project, DynamicCellValue, DynamicColumn } from '@/lib/types';
 import { DEFAULT_STATE, DEFAULT_FILTERS } from '@/lib/constants';
-import { calculateDailyWorkload, applyFilters, getPersons, getBranches, getActiveProjects, computeProjectFields } from '@/lib/workloadEngine';
+import { calculateDailyWorkload, applyFilters, getBranches, getActiveProjects, computeProjectFields, getPersonsWithCatalog } from '@/lib/workloadEngine';
 import { getDateRange } from '@/lib/dateUtils';
 import { setDateDisplayFormat } from '@/lib/dateUtils';
 import { validateNoCircles, aggregateFromChildren, calculateHierarchyLevel } from '@/lib/hierarchyEngine';
@@ -1545,7 +1545,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     });
   }, [filteredProjects, state.projectOrder]);
 
-  const allPersons = useMemo(() => getPersons(state.projects), [state.projects]);
+  const allPersons = useMemo(() => getPersonsWithCatalog(state.projects, activeBoardId), [state.projects, activeBoardId]);
   const allBranches = useMemo(() => getBranches(state.projects), [state.projects]);
 
   const dateRange = useMemo(() => {
