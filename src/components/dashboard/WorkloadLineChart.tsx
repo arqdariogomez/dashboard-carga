@@ -6,6 +6,7 @@ import { format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { LineChart as LineChartIcon, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { ZoomControls, type TimePreset } from '@/components/shared/ZoomControls';
+import SyncManager from '@/lib/syncManager';
 import {
   Line,
   XAxis,
@@ -87,8 +88,12 @@ export function WorkloadLineChart() {
     return todayEntry?.label || null;
   }, [chartData]);
 
-  // Manejador de zoom
+  // Manejador de zoom con sistema de tickets
   const handleZoomChange = useCallback((newZoom: number, preset: TimePreset | null) => {
+    // Crear ticket para aislar esta operación de zoom
+    const syncManager = SyncManager.getInstance();
+    const ticket = syncManager.createTicket('zoom', `Zoom cambiado a ${newZoom.toFixed(2)}x, preset: ${preset || 'custom'}`, 8000);
+    
     setZoomScale(newZoom);
     setActivePreset(preset);
     
@@ -117,7 +122,20 @@ export function WorkloadLineChart() {
     const endIndex = chartData.length - 1;
     const startIndex = Math.max(0, endIndex - visibleDays + 1);
     setVisibleRange({ startIndex, endIndex });
+    
+    // Liberar el ticket después de un breve retraso para asegurar que la operación se complete
+    setTimeout(() => {
+      syncManager.releaseTicket(ticket.id);
+    }, 100);
   }, [chartData]);
+
+  // Limpiar tickets al desmontar para evitar bloqueos persistentes
+  useEffect(() => {
+    return () => {
+      const syncManager = SyncManager.getInstance();
+      syncManager.forceReleaseAll();
+    };
+  }, []);
 
   if (chartData.length === 0) {
     return (
