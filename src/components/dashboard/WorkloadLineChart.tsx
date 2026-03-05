@@ -90,8 +90,16 @@ export function WorkloadLineChart() {
   // Manejador de zoom con sistema de tickets
   const handleZoomChange = useCallback((newZoom: number, preset: TimePreset | null) => {
     // Crear ticket para aislar esta operación de zoom
-    const syncManager = (window as any).SyncManager.getInstance();
-    const ticket = syncManager.createTicket('zoom', `Zoom cambiado a ${newZoom.toFixed(2)}x, preset: ${preset || 'custom'}`, 8000);
+    let syncManager = null;
+    try {
+      syncManager = (window as any).SyncManager?.getInstance();
+    } catch (error) {
+      console.warn('🎫 SyncManager no disponible, usando zoom sin ticket', error);
+    }
+    
+    const ticket = syncManager 
+      ? syncManager.createTicket('zoom', `Zoom cambiado a ${newZoom.toFixed(2)}x, preset: ${preset || 'custom'}`, 8000)
+      : null;
     
     setZoomScale(newZoom);
     setActivePreset(preset);
@@ -123,9 +131,15 @@ export function WorkloadLineChart() {
     setVisibleRange({ startIndex, endIndex });
     
     // Liberar el ticket después de un breve retraso para asegurar que la operación se complete
-    setTimeout(() => {
-      syncManager.releaseTicket(ticket.id);
-    }, 100);
+    if (ticket) {
+      setTimeout(() => {
+        try {
+          syncManager?.releaseTicket(ticket.id);
+        } catch (error) {
+          console.warn('🎫 Error liberando ticket de zoom', error);
+        }
+      }, 100);
+    }
   }, [chartData]);
 
   // Limpiar tickets al desmontar para evitar bloqueos persistentes
