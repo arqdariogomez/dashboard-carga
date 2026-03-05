@@ -218,6 +218,7 @@ export function ProjectTable() {
     state,
     dispatch,
     setBranchCatalog: tableState.setBranchCatalog,
+    setPersonCatalog: tableState.setPersonCatalog,
     setPersonProfiles: tableState.setPersonProfiles,
     setMultiSelectMode: tableState.setMultiSelectMode,
     setSelectedRowIds: tableState.setSelectedRowIds,
@@ -287,6 +288,7 @@ export function ProjectTable() {
     linkUrlDraft, setLinkUrlDraft,
     linkTitleDraft, setLinkTitleDraft,
     branchCatalog, setBranchCatalog,
+    personCatalog, setPersonCatalog,
     personProfiles, setPersonProfiles,
     columnWidths, setColumnWidths,
     defaultColumnWidths,
@@ -630,9 +632,46 @@ export function ProjectTable() {
     }
   }, [activeBoardId, branchCatalog]);
 
+  // Load person catalog from localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const key = `workload-dashboard-person-catalog:${activeBoardId || 'local'}`;
+    try {
+      const raw = window.localStorage.getItem(key);
+      if (!raw) {
+        setPersonCatalog([]);
+        return;
+      }
+      const parsed = JSON.parse(raw);
+      const safe = Array.isArray(parsed) ? parsed.map((x: unknown) => String(x)).filter(Boolean) : [];
+      setPersonCatalog(safe);
+    } catch {
+      setPersonCatalog([]);
+    }
+  }, [activeBoardId, setPersonCatalog]);
+
+  // Save person catalog to localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const key = `workload-dashboard-person-catalog:${activeBoardId || 'local'}`;
+    try {
+      window.localStorage.setItem(key, JSON.stringify(personCatalog));
+    } catch {
+      // ignore storage errors
+    }
+  }, [activeBoardId, personCatalog]);
+
   const branchOptions = useMemo(
     () => normalizeTagList([...(allBranches || []), ...(branchCatalog || [])]),
     [allBranches, branchCatalog]
+  );
+
+  const personOptions = useMemo(
+    () => {
+      const all = new Set([...(allPersons || []), ...(personCatalog || [])]);
+      return Array.from(all).sort();
+    },
+    [allPersons, personCatalog]
   );
 
   const renderColumns = useMemo(() => {
@@ -1663,11 +1702,12 @@ export function ProjectTable() {
                         onDeleteBranchOption={tableActions.handleDeleteBranchOption}
                         onMergeBranchOption={tableActions.handleMergeBranchOptions}
                         personProfiles={personProfiles}
-                        allPersons={allPersons}
+                        allPersons={personOptions}
                         allBranches={branchOptions}
                         onRenamePersonGlobal={tableActions.handleRenamePersonGlobal}
                         onDeletePersonGlobal={tableActions.handleDeletePersonGlobal}
                         onMergePersonsGlobal={tableActions.handleMergePersonsGlobal}
+                        onAddPersonOption={tableActions.handleAddPersonOption}
                         dynamicValues={dynamicValues.get(project.id)}
                         onUpdateDynamicCell={handleUpsertDynamicCell}
                         onAddDynamicTagOption={async (columnId, label) => {

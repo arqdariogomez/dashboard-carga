@@ -119,6 +119,7 @@ export function useProjectTableState() {
   
   // Catalogs and profiles
   const [branchCatalog, setBranchCatalog] = useState<string[]>([]);
+  const [personCatalog, setPersonCatalog] = useState<string[]>([]);
   const [personProfiles, setPersonProfiles] = useState<Record<string, { avatarUrl?: string }>>({});
   
   // Column widths
@@ -246,6 +247,7 @@ export function useProjectTableState() {
     
     // Catalogs
     branchCatalog, setBranchCatalog,
+    personCatalog, setPersonCatalog,
     personProfiles, setPersonProfiles,
     
     // Column widths

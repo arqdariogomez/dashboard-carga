@@ -11,6 +11,7 @@ interface UseProjectTableActionsProps {
   };
   dispatch: (action: any) => void;
   setBranchCatalog: (catalog: string[]) => void;
+  setPersonCatalog: (catalog: string[]) => void;
   setPersonProfiles: (profiles: Record<string, { avatarUrl?: string }>) => void;
   setMultiSelectMode: (mode: boolean) => void;
   setSelectedRowIds: (ids: Set<string>) => void;
@@ -61,6 +62,20 @@ export function useProjectTableActions({
       setBranchCatalog(prev => normalizeTagList([...prev, clean]));
     }
   }, [setBranchCatalog]);
+
+  // Person catalog operations
+  const handleAddPersonOption = useCallback((name: string) => {
+    const clean = name.trim();
+    if (clean) {
+      setPersonCatalog(prev => {
+        const current = new Set(prev.map(p => p.toLowerCase()));
+        if (!current.has(clean.toLowerCase())) {
+          return [...prev, clean].sort();
+        }
+        return prev;
+      });
+    }
+  }, [setPersonCatalog]);
 
   const handleRenameBranchOption = useCallback((from: string, to: string) => {
     const fromClean = from.trim();
@@ -447,6 +462,7 @@ export function useProjectTableActions({
     handleMergeBranchOptions,
     
     // Person operations
+    handleAddPersonOption,
     handleRenamePersonGlobal,
     handleDeletePersonGlobal,
     handleMergePersonsGlobal,

@@ -131,6 +131,7 @@ interface SortableRowProps {
   onRenamePersonGlobal?: (from: string, to: string) => Promise<void>;
   onDeletePersonGlobal?: (name: string) => Promise<void>;
   onMergePersonsGlobal?: (left: string, right: string, keep: string) => Promise<void>;
+  onAddPersonOption?: (name: string) => void;
   isSelected?: boolean;
   isDropTarget?: boolean;
   dropPlacement?: 'before' | 'inside' | 'after' | null;
@@ -185,6 +186,7 @@ export function SortableRow({
   onRenamePersonGlobal,
   onDeletePersonGlobal,
   onMergePersonsGlobal,
+  onAddPersonOption,
   isSelected,
   isDropTarget,
   dropPlacement,
@@ -536,7 +538,17 @@ export function SortableRow({
                 <RichEditableAssigneesCell
                   value={project.assignees || []}
                   options={allPersons}
-                  onChange={(v) => onUpdate(project.id, { assignees: v })}
+                  onChange={(v) => {
+                    onUpdate(project.id, { assignees: v });
+                    if (onAddPersonOption) {
+                      const currentSet = new Set((project.assignees || []).map(p => p.toLowerCase()));
+                      v.forEach(person => {
+                        if (!currentSet.has(person.toLowerCase())) {
+                          onAddPersonOption(person);
+                        }
+                      });
+                    }
+                  }}
                   onRenamePerson={onRenamePersonGlobal || (async () => {})}
                   onDeletePerson={onDeletePersonGlobal || (async () => {})}
                   onSetPersonAvatar={onSetPersonAvatar}
