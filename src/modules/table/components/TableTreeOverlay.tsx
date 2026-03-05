@@ -43,7 +43,7 @@ export function TableTreeOverlay({
       const rowRect = rowEl.getBoundingClientRect();
       const cellRect = projectCell.getBoundingClientRect();
       const depth = project.hierarchyLevel ?? 0;
-      const projectCellLeft = cellRect.left - hostRect.left + 8; // match px-2 of ExpandableCell
+      const projectCellLeft = cellRect.left - hostRect.left;
       const y = rowRect.top - hostRect.top + rowRect.height / 2;
       byId.set(project.id, { y, depth, projectCellLeft });
       maxY = Math.max(maxY, rowRect.bottom - hostRect.top);
@@ -63,7 +63,7 @@ export function TableTreeOverlay({
 
   if (!geometry) return null;
 
-  const elbowArm = Math.max(6, step - 6);
+  const elbowArm = Math.max(4, step - 10);
   const segments = new Set<string>();
   const byParent = new Map<string, Project[]>();
   const indexById = new Map(projects.map((p, idx) => [p.id, idx]));
@@ -154,7 +154,7 @@ export function TableTreeOverlay({
   return (
     <svg
       aria-hidden="true"
-      className="pointer-events-none absolute left-0 top-0 z-[1]"
+      className="pointer-events-none absolute left-0 top-0 z-[5]"
       width={geometry.width}
       height={geometry.height}
       viewBox={`0 0 ${geometry.width} ${geometry.height}`}

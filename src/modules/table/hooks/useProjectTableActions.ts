@@ -323,6 +323,28 @@ export function useProjectTableActions({
   const handleAddBelow = useCallback((referenceId: string) => {
     const ref = state.projects.find((p) => p.id === referenceId);
     if (ref) {
+      const order = state.projectOrder.length > 0 ? state.projectOrder : state.projects.map((p) => p.id);
+      const descendants = new Set<string>();
+      const queue: string[] = [referenceId];
+      while (queue.length > 0) {
+        const parentId = queue.shift() as string;
+        for (const project of state.projects) {
+          if (project.parentId === parentId && !descendants.has(project.id)) {
+            descendants.add(project.id);
+            queue.push(project.id);
+          }
+        }
+      }
+      let insertAfterId = referenceId;
+      let maxIdx = order.indexOf(referenceId);
+      for (const id of descendants) {
+        const idx = order.indexOf(id);
+        if (idx > maxIdx) {
+          maxIdx = idx;
+          insertAfterId = id;
+        }
+      }
+
       const newProject = createProjectDraft({
         hierarchyLevel: ref.hierarchyLevel || 0,
         parentId: ref.parentId,
@@ -331,10 +353,10 @@ export function useProjectTableActions({
         endDate: ref.endDate ?? null,
         type: ref.type ?? 'Proyecto',
       });
-      dispatch({ type: 'ADD_PROJECT', payload: { project: newProject, position: 'below', referenceId } });
+      dispatch({ type: 'ADD_PROJECT', payload: { project: newProject, position: 'below', referenceId: insertAfterId } });
       setSelectedRowId(newProject.id);
     }
-  }, [state.projects, createProjectDraft, dispatch, setSelectedRowId]);
+  }, [state.projects, state.projectOrder, createProjectDraft, dispatch, setSelectedRowId]);
 
   const handleAddInside = useCallback((referenceId: string) => {
     const ref = state.projects.find((p) => p.id === referenceId);

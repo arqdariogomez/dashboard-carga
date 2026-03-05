@@ -1013,7 +1013,23 @@ export function ProjectTable() {
     const order = state.projectOrder.length > 0 ? [...state.projectOrder] : state.projects.map((p) => p.id);
     const idx = order.indexOf(projectId);
     if (idx <= 0) return;
-    const targetParentId = order[idx - 1];
+    const currentProject = state.projects.find((p) => p.id === projectId);
+    if (!currentProject) return;
+    const currentLevel = currentProject.hierarchyLevel ?? 0;
+
+    // Indent should increase only one level at a time:
+    // choose nearest previous row at the same current level as new parent.
+    let targetParentId: string | null = null;
+    for (let i = idx - 1; i >= 0; i -= 1) {
+      const candidateId = order[i];
+      const candidate = state.projects.find((p) => p.id === candidateId);
+      if (!candidate) continue;
+      const candidateLevel = candidate.hierarchyLevel ?? 0;
+      if (candidateLevel === currentLevel) {
+        targetParentId = candidateId;
+        break;
+      }
+    }
     if (!targetParentId) return;
     if (!validateNoCircles(projectId, targetParentId, state.projects)) return;
 
@@ -1078,13 +1094,16 @@ export function ProjectTable() {
 
   useEffect(() => {
     const update = () => setTreeOverlayVersion((v) => v + 1);
-    const raf = requestAnimationFrame(update);
+    const raf1 = requestAnimationFrame(() => {
+      update();
+      requestAnimationFrame(update);
+    });
     window.addEventListener('resize', update);
     return () => {
-      cancelAnimationFrame(raf);
+      cancelAnimationFrame(raf1);
       window.removeEventListener('resize', update);
     };
-  }, [flatSortedProjects, editingName, columnWidths.project, multiSelectMode]);
+  }, [flatSortedProjects, state.projectOrder, editingName, columnWidths.project, multiSelectMode]);
 
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -1105,6 +1124,18 @@ export function ProjectTable() {
       const editable = target.getAttribute('contenteditable');
       if (tag === 'input' || tag === 'textarea' || tag === 'select' || editable === 'true') return;
 
+      // Add row below:
+      // Windows/Linux: Ctrl + "+" (usually Ctrl + Shift + "=")
+      // macOS: Cmd + Shift + "+"
+      const isAddBelowShortcut =
+        (e.ctrlKey && !e.metaKey && (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd')) ||
+        (e.metaKey && e.shiftKey && (e.key === '+' || e.key === '='));
+      if (isAddBelowShortcut) {
+        e.preventDefault();
+        tableActions.handleAddBelow(selectedRowId);
+        return;
+      }
+
       e.preventDefault();
       if (e.shiftKey) {
         handleOutdent(selectedRowId);
@@ -1115,7 +1146,7 @@ export function ProjectTable() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedRowId, multiSelectMode, handleIndent, handleOutdent]);
+  }, [selectedRowId, multiSelectMode, handleIndent, handleOutdent, tableActions]);
 
   useEffect(() => {
     const hasAnySelection = selectedRowId !== null || selectedRowIds.size > 0;

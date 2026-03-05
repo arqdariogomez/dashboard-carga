@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
+﻿import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { useUiFeedback } from '@/context/UiFeedbackContext';
 import { usePersonProfiles } from '@/context/PersonProfilesContext';
@@ -13,6 +13,7 @@ import { differenceInCalendarDays, addDays } from 'date-fns';
 import { getLoadColor, PERSON_COLORS } from '@/lib/constants';
 import {
   ChevronDown,
+  ChevronUp,
   ChevronRight,
   CalendarRange,
   Link2,
@@ -28,15 +29,20 @@ import {
 } from 'lucide-react';
 import type { Project } from '@/lib/types';
 import { branchLabel } from '@/lib/branchUtils';
+import { computeTreeConnectors } from '@/lib/useTreeConnectors';
+import { TreeConnectors } from '@/components/dashboard/TreeConnectors';
 import React from 'react';
 import { createPortal } from 'react-dom';
 
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  TYPES
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 type ColorMode = 'load' | 'person' | 'type' | 'custom';
 type CustomColorField = 'branch' | 'type';
+type GroupMode = 'none' | 'person' | 'type' | 'custom';
+type CustomGroupField = 'branch' | 'priority';
+type OrderMode = 'chronological' | 'custom';
 type TimePreset = '2W' | '1M' | '3M' | '6M' | 'ALL';
 
 interface TooltipData {
@@ -80,9 +86,26 @@ interface HierarchyNode extends Project {
   children?: HierarchyNode[];
 }
 
-// ════════════════════════════════════════════════════
+interface TimelineGroup {
+  id: string;
+  label: string;
+  projects: Project[];
+}
+
+interface TimelineViewPreset {
+  id: string;
+  name: string;
+  groupMode: GroupMode;
+  customGroupField: CustomGroupField;
+  orderMode: OrderMode;
+  colorMode: ColorMode;
+  customColorField: CustomColorField;
+  showMilestonesOnly: boolean;
+}
+
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  CONSTANTS
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 const MIN_SIDEBAR_WIDTH = 320;
 const MAX_SIDEBAR_WIDTH = 760;
@@ -120,9 +143,9 @@ const PRESET_LABELS: Record<TimePreset, string> = {
   ALL: 'Todo',
 };
 
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  PURE UTILITIES
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function isMilestoneProject(project: Project): boolean {
   if (!project.startDate || !project.endDate) return false;
@@ -265,9 +288,9 @@ function computeBarProps(
   };
 }
 
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  ZOOM SLIDER COMPONENT
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function ZoomSlider({
   zoom,
@@ -386,9 +409,9 @@ function ZoomSlider({
   );
 }
 
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  MINIMAP COMPONENT
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function Minimap({
   projects,
@@ -517,9 +540,9 @@ function Minimap({
   );
 }
 
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  GANTT ROW (memoized)
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 interface GanttRowProps {
   node: HierarchyNode;
@@ -558,10 +581,15 @@ interface GanttRowProps {
   onCreateProjectFrom: (project: Project) => void;
   onDuplicateProjectFrom: (project: Project) => void;
   onDeleteProjectById: (projectId: string) => void;
+  onMoveRowUp: (projectId: string) => void;
+  onMoveRowDown: (projectId: string) => void;
+  canMoveUp: boolean;
+  canMoveDown: boolean;
 }
 
 const GanttRow = React.memo(function GanttRow({
   node,
+  pList,
   level,
   sidebarWidth,
   dayWidth,
@@ -592,6 +620,10 @@ const GanttRow = React.memo(function GanttRow({
   onCreateProjectFrom,
   onDuplicateProjectFrom,
   onDeleteProjectById,
+  onMoveRowUp,
+  onMoveRowDown,
+  canMoveUp,
+  canMoveDown,
 }: GanttRowProps) {
   const bar = getBarPropsFn(node);
   if (!bar) return null;
@@ -647,6 +679,11 @@ const GanttRow = React.memo(function GanttRow({
 
   const dragOff =
     milestoneDrag?.projectId === node.id ? milestoneDrag.offsetDays : 0;
+  const indentStepPx = 12;
+  const { ancestorContinuations, hasNextSibling, hasParentConnector } = useMemo(
+    () => computeTreeConnectors(node, pList),
+    [node, pList],
+  );
 
   // Visual resize preview
   const resizeState = barResize?.projectId === node.id ? barResize : null;
@@ -674,14 +711,26 @@ const GanttRow = React.memo(function GanttRow({
       >
         <div className="flex items-center gap-2 min-w-0">
           <div
-            style={{ paddingLeft: level * 12 }}
-            className="min-w-0 flex-1 flex items-center"
+            style={{ paddingLeft: level * indentStepPx }}
+            className="relative min-w-0 flex-1 flex items-center"
           >
+            {level > 0 && (
+              <TreeConnectors
+                depth={level}
+                step={indentStepPx}
+                ancestorContinuations={ancestorContinuations}
+                hasNextSiblingAtCurrentLevel={hasNextSibling}
+                hasParentConnectorAtCurrentLevel={hasParentConnector}
+                lineClassName="stroke-neutral-300/75 group-hover/bar:stroke-neutral-400/85"
+                bleedTop={8}
+                bleedBottom={0}
+              />
+            )}
             {hasChildren && (
               <button
                 onClick={() => onToggleExpansion(node.id)}
                 onDoubleClick={(e) => e.stopPropagation()}
-                className="mr-2 text-text-secondary flex-shrink-0 hover:text-text-primary transition-colors"
+                className="relative z-10 mr-2 text-text-secondary flex-shrink-0 hover:text-text-primary transition-colors"
                 aria-label={isExpanded ? 'Colapsar' : 'Expandir'}
               >
                 {isExpanded ? (
@@ -705,7 +754,7 @@ const GanttRow = React.memo(function GanttRow({
               />
             ) : (
               <div
-                className="text-xs text-text-primary truncate cursor-text"
+                className="relative z-10 text-xs text-text-primary truncate cursor-text"
                 title={node.name}
               >
                 {node.name}
@@ -716,7 +765,7 @@ const GanttRow = React.memo(function GanttRow({
             <span className="max-w-[84px] truncate">
               {branchLabel(node.branch)}
             </span>
-            <span>·</span>
+            <span>Â·</span>
             <span className="tabular-nums">{node.daysRequired}d</span>
             <button
               type="button"
@@ -829,6 +878,31 @@ const GanttRow = React.memo(function GanttRow({
                   >
                     <Link2 size={12} />
                     Dependencias
+                  </button>
+                  <div className="my-1 border-t border-border" />
+                  <button
+                    type="button"
+                    disabled={!canMoveUp}
+                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                    onClick={() => {
+                      onMoveRowUp(node.id);
+                      setRowMenuOpen(false);
+                    }}
+                  >
+                    <ChevronUp size={12} />
+                    Mover arriba
+                  </button>
+                  <button
+                    type="button"
+                    disabled={!canMoveDown}
+                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                    onClick={() => {
+                      onMoveRowDown(node.id);
+                      setRowMenuOpen(false);
+                    }}
+                  >
+                    <ChevronDown size={12} />
+                    Mover abajo
                   </button>
                   <div className="my-1 border-t border-border" />
                   <button
@@ -946,9 +1020,9 @@ const GanttRow = React.memo(function GanttRow({
   );
 });
 
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  DEPENDENCIES MODAL
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function DependenciesModal({
   projectId,
@@ -1053,9 +1127,9 @@ function DependenciesModal({
   );
 }
 
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  GANTT TOOLTIP
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 function GanttTooltip({
   project,
@@ -1098,26 +1172,26 @@ function GanttTooltip({
         {project.name}
       </div>
       <div className="text-[11px] text-text-secondary mb-2.5">
-        {branchLabel(project.branch)} · {project.type}
+        {branchLabel(project.branch)} Â· {project.type}
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
         <div className="text-text-secondary">Inicio</div>
         <div className="text-text-primary tabular-nums">
           {project.startDate
             ? format(project.startDate, 'dd/MM/yyyy')
-            : '—'}
+            : 'â€”'}
         </div>
         <div className="text-text-secondary">Fin</div>
         <div className="text-text-primary tabular-nums">
           {project.endDate
             ? format(project.endDate, 'dd/MM/yyyy')
-            : '—'}
+            : 'â€”'}
         </div>
-        <div className="text-text-secondary">Días req.</div>
+        <div className="text-text-secondary">DÃ­as req.</div>
         <div className="text-text-primary font-medium">
           {project.daysRequired}
         </div>
-        <div className="text-text-secondary">Días asig.</div>
+        <div className="text-text-secondary">DÃ­as asig.</div>
         <div className="text-text-primary">{project.assignedDays}</div>
         <div className="text-text-secondary">Balance</div>
         <div
@@ -1160,9 +1234,9 @@ function GanttTooltip({
   );
 }
 
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  MAIN COMPONENT
-// ════════════════════════════════════════════════════
+// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
 export function GanttTimeline() {
   const {
@@ -1170,14 +1244,13 @@ export function GanttTimeline() {
     dispatch,
     filteredProjects,
     dateRange: globalRange,
+    activeBoardId,
   } = useProject();
   const { confirm } = useUiFeedback();
   const { getAvatarUrl } = usePersonProfiles();
 
-  // ── State ──
-  const [collapsedPersons, setCollapsedPersons] = useState<Set<string>>(
-    new Set(),
-  );
+  // â”€â”€ State â”€â”€
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(
     null,
@@ -1187,6 +1260,10 @@ export function GanttTimeline() {
   const [colorMode, setColorMode] = useState<ColorMode>('load');
   const [customColorField, setCustomColorField] =
     useState<CustomColorField>('branch');
+  const [groupMode, setGroupMode] = useState<GroupMode>('person');
+  const [customGroupField, setCustomGroupField] =
+    useState<CustomGroupField>('branch');
+  const [orderMode, setOrderMode] = useState<OrderMode>('chronological');
   const [dependencyEditorProjectId, setDependencyEditorProjectId] = useState<
     string | null
   >(null);
@@ -1194,15 +1271,19 @@ export function GanttTimeline() {
   const [scrollX, setScrollX] = useState(0);
   const [zoomScale, setZoomScale] = useState(1);
   const [activePreset, setActivePreset] = useState<TimePreset | null>('ALL');
+  const [timelineViews, setTimelineViews] = useState<TimelineViewPreset[]>([]);
+  const [activeTimelineViewId, setActiveTimelineViewId] = useState<string>('__current__');
+  const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
 
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
   const [barResize, setBarResize] = useState<BarResizeState | null>(null);
   const [milestoneDrag, setMilestoneDrag] =
     useState<MilestoneDragState | null>(null);
 
-  // ── Refs ──
+  // â”€â”€ Refs â”€â”€
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const tooltipContainerRef = useRef<HTMLDivElement>(null);
+  const viewMenuRef = useRef<HTMLDivElement | null>(null);
   const sidebarResizeRef = useRef<{
     startX: number;
     startWidth: number;
@@ -1220,7 +1301,19 @@ export function GanttTimeline() {
     milestoneDragRef.current = milestoneDrag;
   }, [milestoneDrag]);
 
-  // ── Memoized data ──
+  useEffect(() => {
+    if (!isViewMenuOpen) return;
+    const onDocClick = (ev: MouseEvent) => {
+      const target = ev.target as Node;
+      if (!viewMenuRef.current?.contains(target)) {
+        setIsViewMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, [isViewMenuOpen]);
+
+  // â”€â”€ Memoized data â”€â”€
   const activeProjects = useMemo(() => {
     const f = getActiveProjects(filteredProjects);
     return showMilestonesOnly ? f.filter(isMilestoneProject) : f;
@@ -1246,23 +1339,146 @@ export function GanttTimeline() {
     return m;
   }, [persons]);
 
-  const personRootsMap = useMemo(() => {
-    const m = new Map<string, HierarchyNode[]>();
-    persons.forEach((person) => {
-      const list = activeProjects
-        .filter((p) => p.assignees.includes(person))
-        .sort((a, b) => a.startDate!.getTime() - b.startDate!.getTime());
-      m.set(person, buildHierarchy(list) as HierarchyNode[]);
+  const orderIndexMap = useMemo(() => {
+    const fallbackOrder = state.projects.map((p) => p.id);
+    const orderedIds =
+      state.projectOrder && state.projectOrder.length > 0
+        ? state.projectOrder
+        : fallbackOrder;
+    const map = new Map<string, number>();
+    orderedIds.forEach((id, idx) => map.set(id, idx));
+    return map;
+  }, [state.projectOrder, state.projects]);
+
+  const sortProjectsByOrderMode = useCallback(
+    (a: Project, b: Project) => {
+      if (orderMode === 'custom') {
+        const aIdx = orderIndexMap.get(a.id) ?? Number.MAX_SAFE_INTEGER;
+        const bIdx = orderIndexMap.get(b.id) ?? Number.MAX_SAFE_INTEGER;
+        if (aIdx !== bIdx) return aIdx - bIdx;
+      }
+      const aTime = a.startDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      const bTime = b.startDate?.getTime() ?? Number.MAX_SAFE_INTEGER;
+      if (aTime !== bTime) return aTime - bTime;
+      return (a.name || '').localeCompare(b.name || '');
+    },
+    [orderMode, orderIndexMap],
+  );
+
+  const groupedTimeline = useMemo(() => {
+    const groups: TimelineGroup[] = [];
+
+    if (groupMode === 'person') {
+      persons.forEach((person) => {
+        const list = activeProjects
+          .filter((p) => p.assignees.includes(person))
+          .sort(sortProjectsByOrderMode);
+        groups.push({
+          id: `person:${person}`,
+          label: person,
+          projects: list,
+        });
+      });
+      return groups.filter((g) => g.projects.length > 0);
+    }
+
+    if (groupMode === 'type') {
+      const byType = new Map<string, Project[]>();
+      activeProjects.forEach((p) => {
+        const key = (p.type || 'Sin tipo').trim() || 'Sin tipo';
+        const list = byType.get(key) || [];
+        list.push(p);
+        byType.set(key, list);
+      });
+      [...byType.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .forEach(([key, list]) => {
+          groups.push({
+            id: `type:${key}`,
+            label: key,
+            projects: list.sort(sortProjectsByOrderMode),
+          });
+        });
+      return groups;
+    }
+
+    if (groupMode === 'custom') {
+      const byCustom = new Map<string, Project[]>();
+      activeProjects.forEach((p) => {
+        const key =
+          customGroupField === 'branch'
+            ? branchLabel(p.branch)
+            : `Prioridad ${p.priority ?? 0}`;
+        const normalized = (key || 'Sin valor').trim() || 'Sin valor';
+        const list = byCustom.get(normalized) || [];
+        list.push(p);
+        byCustom.set(normalized, list);
+      });
+      [...byCustom.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .forEach(([key, list]) => {
+          groups.push({
+            id: `custom:${key}`,
+            label: key,
+            projects: list.sort(sortProjectsByOrderMode),
+          });
+        });
+      return groups;
+    }
+
+    return [
+      {
+        id: 'all',
+        label: 'Todos',
+        projects: [...activeProjects].sort(sortProjectsByOrderMode),
+      },
+    ];
+  }, [
+    groupMode,
+    customGroupField,
+    persons,
+    activeProjects,
+    sortProjectsByOrderMode,
+  ]);
+
+  const groupRootsMap = useMemo(() => {
+    const map = new Map<string, HierarchyNode[]>();
+    groupedTimeline.forEach((group) => {
+      map.set(group.id, buildHierarchy(group.projects) as HierarchyNode[]);
     });
-    return m;
-  }, [activeProjects, persons]);
+    return map;
+  }, [groupedTimeline]);
 
   const range = useMemo(
     () => globalRange || getDateRange(activeProjects),
     [activeProjects, globalRange],
   );
 
-  // ── Derived ──
+  const timelineViewsStorageKey = useMemo(
+    () => `workload-dashboard-timeline-views-${activeBoardId || 'default'}`,
+    [activeBoardId],
+  );
+
+  const currentViewSnapshot = useMemo(
+    () => ({
+      groupMode,
+      customGroupField,
+      orderMode,
+      colorMode,
+      customColorField,
+      showMilestonesOnly,
+    }),
+    [
+      groupMode,
+      customGroupField,
+      orderMode,
+      colorMode,
+      customColorField,
+      showMilestonesOnly,
+    ],
+  );
+
+  // â”€â”€ Derived â”€â”€
   const totalDays = range
     ? differenceInCalendarDays(range.end, range.start) + 1
     : 0;
@@ -1335,9 +1551,9 @@ export function GanttTimeline() {
     [range, totalDays, dayWidth, colorMode, customColorField, personColorMap],
   );
 
-  // ════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   //  SCROLL / ZOOM HELPERS
-  // ════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   const applyScrollToDOM = useCallback((value: number) => {
     const el = scrollContainerRef.current;
@@ -1444,14 +1660,14 @@ export function GanttTimeline() {
     [dayWidth, timelineWidth, getTimelineViewWidth, applyScrollToDOM],
   );
 
-  // ════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   //  CALLBACKS
-  // ════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
-  const togglePerson = useCallback((p: string) => {
-    setCollapsedPersons((prev) => {
+  const toggleGroup = useCallback((groupId: string) => {
+    setCollapsedGroups((prev) => {
       const n = new Set(prev);
-      n.has(p) ? n.delete(p) : n.add(p);
+      n.has(groupId) ? n.delete(groupId) : n.add(groupId);
       return n;
     });
   }, []);
@@ -1495,7 +1711,7 @@ export function GanttTimeline() {
       if (!isMilestoneProject(project)) {
         const ok = await confirm({
           title: 'Convertir en hito',
-          message: 'Ajustará fecha fin = inicio y duración = 0. ¿Continuar?',
+          message: 'AjustarÃ¡ fecha fin = inicio y duraciÃ³n = 0. Â¿Continuar?',
           confirmText: 'Convertir',
         });
         if (!ok) return;
@@ -1516,30 +1732,6 @@ export function GanttTimeline() {
     },
     [dispatch, confirm],
   );
-
-  const handleAddMilestone = useCallback(() => {
-    const d = new Date();
-    dispatch({
-      type: 'ADD_PROJECT',
-      payload: computeProjectFields(
-        {
-          id: `ms-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          name: 'Nuevo hito',
-          branch: [],
-          startDate: d,
-          endDate: d,
-          assignees: [],
-          daysRequired: 0,
-          priority: 1,
-          type: 'Proyecto',
-          blockedBy: null,
-          blocksTo: null,
-          reportedLoad: null,
-        },
-        state.config,
-      ),
-    });
-  }, [dispatch, state.config]);
 
   const handleCreateProjectFrom = useCallback((source: Project) => {
     const anchor = source.startDate || source.endDate || new Date();
@@ -1623,6 +1815,178 @@ export function GanttTimeline() {
     });
   }, [confirm, dispatch]);
 
+  const moveProjectByStep = useCallback((projectId: string, step: -1 | 1) => {
+    const baseOrder =
+      state.projectOrder && state.projectOrder.length > 0
+        ? [...state.projectOrder]
+        : state.projects.map((p) => p.id);
+    const idx = baseOrder.indexOf(projectId);
+    if (idx < 0) return;
+    const target = idx + step;
+    if (target < 0 || target >= baseOrder.length) return;
+    const [moved] = baseOrder.splice(idx, 1);
+    baseOrder.splice(target, 0, moved);
+    dispatch({ type: 'REORDER_PROJECTS', payload: baseOrder });
+    setOrderMode('custom');
+  }, [dispatch, state.projectOrder, state.projects]);
+
+  const handleMoveRowUp = useCallback((projectId: string) => {
+    moveProjectByStep(projectId, -1);
+  }, [moveProjectByStep]);
+
+  const handleMoveRowDown = useCallback((projectId: string) => {
+    moveProjectByStep(projectId, 1);
+  }, [moveProjectByStep]);
+
+  const applyTimelineView = useCallback((view: TimelineViewPreset) => {
+    setGroupMode(view.groupMode);
+    setCustomGroupField(view.customGroupField);
+    setOrderMode(view.orderMode);
+    setColorMode(view.colorMode);
+    setCustomColorField(view.customColorField);
+    setShowMilestonesOnly(view.showMilestonesOnly);
+  }, []);
+
+  const handleSelectTimelineView = useCallback((viewId: string) => {
+    setActiveTimelineViewId(viewId);
+    if (viewId === '__current__') return;
+    const view = timelineViews.find((v) => v.id === viewId);
+    if (view) applyTimelineView(view);
+  }, [timelineViews, applyTimelineView]);
+
+  const handleSaveTimelineView = useCallback(() => {
+    if (activeTimelineViewId === '__current__') {
+      const name = window.prompt('Nombre de la vista:');
+      const trimmed = (name || '').trim();
+      if (!trimmed) return;
+      const id = `tv-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const next: TimelineViewPreset = {
+        id,
+        name: trimmed,
+        ...currentViewSnapshot,
+      };
+      setTimelineViews((prev) => [...prev, next]);
+      setActiveTimelineViewId(id);
+      return;
+    }
+    setTimelineViews((prev) =>
+      prev.map((v) =>
+        v.id === activeTimelineViewId ? { ...v, ...currentViewSnapshot } : v,
+      ),
+    );
+  }, [activeTimelineViewId, currentViewSnapshot]);
+
+  const handleSaveTimelineViewAs = useCallback(() => {
+    const name = window.prompt('Guardar vista como:');
+    const trimmed = (name || '').trim();
+    if (!trimmed) return;
+    const id = `tv-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const next: TimelineViewPreset = {
+      id,
+      name: trimmed,
+      ...currentViewSnapshot,
+    };
+    setTimelineViews((prev) => [...prev, next]);
+    setActiveTimelineViewId(id);
+  }, [currentViewSnapshot]);
+
+  const handleDeleteTimelineView = useCallback(async () => {
+    if (activeTimelineViewId === '__current__') return;
+    const selected = timelineViews.find((v) => v.id === activeTimelineViewId);
+    if (!selected) return;
+    const ok = await confirm({
+      title: 'Eliminar vista',
+      message: `Se eliminara "${selected.name}".`,
+      confirmText: 'Eliminar',
+      tone: 'danger',
+    });
+    if (!ok) return;
+    setTimelineViews((prev) => prev.filter((v) => v.id !== activeTimelineViewId));
+    setActiveTimelineViewId('__current__');
+  }, [activeTimelineViewId, timelineViews, confirm]);
+
+  const resetTimelineToolbar = useCallback(() => {
+    setActiveTimelineViewId('__current__');
+    setGroupMode('person');
+    setCustomGroupField('branch');
+    setOrderMode('chronological');
+    setColorMode('load');
+    setCustomColorField('branch');
+    setShowMilestonesOnly(false);
+  }, []);
+
+  const activeToolbarChips = useMemo(() => {
+    const chips: Array<{ id: string; label: string; onRemove: () => void }> = [];
+    if (groupMode !== 'person') {
+      chips.push({
+        id: 'group',
+        label:
+          groupMode === 'none'
+            ? 'Sin agrupar'
+            : groupMode === 'type'
+              ? 'Agrupar: Tipo'
+              : 'Agrupar: Personalizado',
+        onRemove: () => {
+          setGroupMode('person');
+          setCustomGroupField('branch');
+        },
+      });
+    }
+    if (groupMode === 'custom') {
+      chips.push({
+        id: 'group-custom',
+        label: `Grupo por: ${customGroupField === 'branch' ? 'Sucursal' : 'Prioridad'}`,
+        onRemove: () => setCustomGroupField('branch'),
+      });
+    }
+    if (orderMode !== 'chronological') {
+      chips.push({
+        id: 'order',
+        label: 'Orden: Personalizado',
+        onRemove: () => setOrderMode('chronological'),
+      });
+    }
+    if (colorMode !== 'load') {
+      chips.push({
+        id: 'color',
+        label:
+          colorMode === 'person'
+            ? 'Color: Persona'
+            : colorMode === 'type'
+              ? 'Color: Tipo'
+              : 'Color: Personalizado',
+        onRemove: () => {
+          setColorMode('load');
+          setCustomColorField('branch');
+        },
+      });
+    }
+    if (colorMode === 'custom') {
+      chips.push({
+        id: 'color-custom',
+        label: `Color por: ${customColorField === 'branch' ? 'Sucursal' : 'Tipo'}`,
+        onRemove: () => setCustomColorField('branch'),
+      });
+    }
+    if (activeTimelineViewId !== '__current__') {
+      const selected = timelineViews.find((v) => v.id === activeTimelineViewId);
+      chips.push({
+        id: 'view',
+        label: `Vista: ${selected?.name || 'Guardada'}`,
+        onRemove: () => setActiveTimelineViewId('__current__'),
+      });
+    }
+    return chips;
+  }, [
+    groupMode,
+    customGroupField,
+    orderMode,
+    colorMode,
+    customColorField,
+    activeTimelineViewId,
+    timelineViews,
+  ]);
+
   const handleBarHover = useCallback(
     (e: React.MouseEvent, project: Project) => {
       const rect = tooltipContainerRef.current?.getBoundingClientRect();
@@ -1686,9 +2050,9 @@ export function GanttTimeline() {
     [sidebarWidth],
   );
 
-  // ════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   //  EFFECTS
-  // ════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   // Drag cursor + prevent text selection
   useEffect(() => {
@@ -1703,12 +2067,12 @@ export function GanttTimeline() {
     }
   }, [barResize, milestoneDrag, isSidebarResizing]);
 
-  // Sync state → DOM
+  // Sync state â†’ DOM
   useEffect(() => {
     applyScrollToDOM(scrollX);
   }, [scrollX, applyScrollToDOM]);
 
-  // Native scroll → state
+  // Native scroll â†’ state
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -1841,9 +2205,57 @@ export function GanttTimeline() {
     };
   }, [isSidebarResizing]);
 
-  // ════════════════════════════════════════════════════
+  // Timeline views persistence by board
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(timelineViewsStorageKey);
+      if (!raw) {
+        setTimelineViews([]);
+        setActiveTimelineViewId('__current__');
+        return;
+      }
+      const parsed = JSON.parse(raw) as {
+        views?: TimelineViewPreset[];
+        activeId?: string;
+      };
+      const views = Array.isArray(parsed?.views) ? parsed.views : [];
+      const activeId = parsed?.activeId || '__current__';
+      setTimelineViews(views);
+      setActiveTimelineViewId(activeId);
+      const activeView = views.find((v) => v.id === activeId);
+      if (activeView) {
+        setGroupMode(activeView.groupMode);
+        setCustomGroupField(activeView.customGroupField);
+        setOrderMode(activeView.orderMode);
+        setColorMode(activeView.colorMode);
+        setCustomColorField(activeView.customColorField);
+        setShowMilestonesOnly(activeView.showMilestonesOnly);
+      }
+    } catch {
+      setTimelineViews([]);
+      setActiveTimelineViewId('__current__');
+    }
+  }, [timelineViewsStorageKey]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      window.localStorage.setItem(
+        timelineViewsStorageKey,
+        JSON.stringify({
+          views: timelineViews,
+          activeId: activeTimelineViewId,
+        }),
+      );
+    } catch {
+      // Ignore persistence failures
+    }
+  }, [timelineViewsStorageKey, timelineViews, activeTimelineViewId]);
+
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   //  EARLY RETURN
-  // ════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   if (!range || activeProjects.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
@@ -1858,7 +2270,7 @@ export function GanttTimeline() {
     );
   }
 
-  // ── Year and Month headers ──
+  // â”€â”€ Year and Month headers â”€â”€
   const years: { label: string; startOffset: number; width: number }[] = [];
   const months: { label: string; startOffset: number; width: number }[] = [];
   let curYear = -1,
@@ -1888,9 +2300,17 @@ export function GanttTimeline() {
   if (years.length) years[years.length - 1].width = totalDays - yStart;
   if (months.length) months[months.length - 1].width = totalDays - mStart;
 
-  // ════════════════════════════════════════════════════
+  const movableOrderRange = (() => {
+    const indices = activeProjects
+      .map((p) => orderIndexMap.get(p.id))
+      .filter((v): v is number => typeof v === 'number');
+    if (indices.length === 0) return { min: 0, max: 0 };
+    return { min: Math.min(...indices), max: Math.max(...indices) };
+  })();
+
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   //  RENDER HELPERS
-  // ════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
   const renderTree = (
     nodes: HierarchyNode[],
@@ -1942,6 +2362,10 @@ export function GanttTimeline() {
           onCreateProjectFrom={handleCreateProjectFrom}
           onDuplicateProjectFrom={handleDuplicateProjectFrom}
           onDeleteProjectById={handleDeleteProjectById}
+          onMoveRowUp={handleMoveRowUp}
+          onMoveRowDown={handleMoveRowDown}
+          canMoveUp={(orderIndexMap.get(n.id) ?? -1) > movableOrderRange.min}
+          canMoveDown={(orderIndexMap.get(n.id) ?? -1) < movableOrderRange.max}
         />,
       );
       if (n.children?.length && exp)
@@ -1950,82 +2374,168 @@ export function GanttTimeline() {
     return items;
   };
 
-  // ════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   //  JSX
-  // ════════════════════════════════════════════════════
+  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
   return (
     <div className="p-4 flex-1 overflow-hidden flex flex-col">
-      {/* ── Toolbar ── */}
-      <div className="mb-3 flex items-center gap-3 flex-wrap">
-        {/* Actions group */}
-        <div className="flex items-center gap-1.5">
-          <button
-            onClick={handleAddMilestone}
-            className="px-2.5 h-8 rounded-md text-xs border bg-white border-border text-text-secondary hover:text-text-primary hover:bg-bg-secondary inline-flex items-center gap-1.5 transition-colors"
-          >
-            <Diamond size={12} />
-            Agregar hito
-          </button>
-          <button
-            onClick={() => setShowMilestonesOnly(!showMilestonesOnly)}
-            className={`px-2.5 h-8 rounded-md text-xs border inline-flex items-center gap-1.5 transition-colors ${
-              showMilestonesOnly
-                ? 'bg-blue-50 border-blue-300 text-blue-700'
-                : 'bg-white border-border text-text-secondary hover:text-text-primary hover:bg-bg-secondary'
-            }`}
-          >
-            <Diamond
-              size={12}
-              className={showMilestonesOnly ? 'fill-blue-500' : ''}
-            />
-            {showMilestonesOnly ? 'Hitos' : 'Todos'}
-          </button>
-        </div>
-
-        <div className="w-px h-6 bg-border" />
-
-        {/* Color group */}
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-text-secondary font-medium">
-            Color:
-          </span>
-          <div className="flex items-center bg-gray-50 rounded-lg border border-gray-200 p-0.5">
-            {(['load', 'person', 'type', 'custom'] as const).map((m) => (
-              <button
-                key={m}
-                onClick={() => setColorMode(m)}
-                className={`px-2.5 h-7 rounded-md text-xs font-medium transition-all ${
-                  colorMode === m
-                    ? 'bg-white text-text-primary shadow-sm border border-gray-200'
-                    : 'text-text-secondary hover:text-text-primary'
-                }`}
-              >
-                {m === 'load'
-                  ? 'Carga'
-                  : m === 'person'
-                    ? 'Persona'
-                    : m === 'type'
-                      ? 'Tipo'
-                      : 'Custom'}
-              </button>
-            ))}
+      {/* â”€â”€ Toolbar â”€â”€ */}
+      <div className="mb-3 space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="relative" ref={viewMenuRef}>
+            <button
+              type="button"
+              onClick={() => setIsViewMenuOpen((prev) => !prev)}
+              className="h-8 rounded-md border border-border bg-white px-2.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-secondary inline-flex items-center gap-1.5"
+            >
+              Vista
+              <ChevronDown size={12} />
+            </button>
+            {isViewMenuOpen && (
+              <div className="absolute left-0 top-9 z-[120] w-64 rounded-lg border border-border bg-white shadow-lg p-2">
+                <div className="text-[11px] text-text-secondary mb-1">Vista activa</div>
+                <select
+                  value={activeTimelineViewId}
+                  onChange={(e) => {
+                    handleSelectTimelineView(e.target.value);
+                    setIsViewMenuOpen(false);
+                  }}
+                  className="w-full h-8 rounded-md border border-border px-2 text-xs bg-white"
+                >
+                  <option value="__current__">Vista actual</option>
+                  {timelineViews.map((view) => (
+                    <option key={view.id} value={view.id}>
+                      {view.name}
+                    </option>
+                  ))}
+                </select>
+                <div className="mt-2 grid grid-cols-2 gap-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSaveTimelineView();
+                      setIsViewMenuOpen(false);
+                    }}
+                    className="h-7 rounded border border-border px-2 text-[11px] text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
+                  >
+                    Guardar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleSaveTimelineViewAs();
+                      setIsViewMenuOpen(false);
+                    }}
+                    className="h-7 rounded border border-border px-2 text-[11px] text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
+                  >
+                    Guardar como
+                  </button>
+                  <button
+                    type="button"
+                    disabled={activeTimelineViewId === '__current__'}
+                    onClick={() => {
+                      void handleDeleteTimelineView();
+                      setIsViewMenuOpen(false);
+                    }}
+                    className="col-span-2 h-7 rounded border border-border px-2 text-[11px] text-text-secondary hover:text-text-primary hover:bg-bg-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    Eliminar vista
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
+
+          <select
+            value={groupMode}
+            onChange={(e) => setGroupMode(e.target.value as GroupMode)}
+            className="h-8 rounded-md border border-border px-2 text-xs bg-white text-text-secondary"
+            title="Agrupar"
+          >
+            <option value="none">Agrupar: Ninguno</option>
+            <option value="person">Agrupar: Persona</option>
+            <option value="type">Agrupar: Tipo</option>
+            <option value="custom">Agrupar: Personalizado</option>
+          </select>
+          {groupMode === 'custom' && (
+            <select
+              value={customGroupField}
+              onChange={(e) => setCustomGroupField(e.target.value as CustomGroupField)}
+              className="h-8 rounded-md border border-border px-2 text-xs bg-white text-text-secondary"
+              title="Campo de agrupacion"
+            >
+              <option value="branch">Grupo por: Sucursal</option>
+              <option value="priority">Grupo por: Prioridad</option>
+            </select>
+          )}
+
+          <select
+            value={orderMode}
+            onChange={(e) => setOrderMode(e.target.value as OrderMode)}
+            className="h-8 rounded-md border border-border px-2 text-xs bg-white text-text-secondary"
+            title="Orden"
+          >
+            <option value="chronological">Orden: Cronologico</option>
+            <option value="custom">Orden: Personalizado</option>
+          </select>
+
+          <select
+            value={colorMode}
+            onChange={(e) => setColorMode(e.target.value as ColorMode)}
+            className="h-8 rounded-md border border-border px-2 text-xs bg-white text-text-secondary"
+            title="Color"
+          >
+            <option value="load">Color: Carga</option>
+            <option value="person">Color: Persona</option>
+            <option value="type">Color: Tipo</option>
+            <option value="custom">Color: Personalizado</option>
+          </select>
           {colorMode === 'custom' && (
             <select
               value={customColorField}
-              onChange={(e) =>
-                setCustomColorField(e.target.value as CustomColorField)
-              }
-              className="h-7 rounded-md border border-border px-2 text-xs bg-white"
+              onChange={(e) => setCustomColorField(e.target.value as CustomColorField)}
+              className="h-8 rounded-md border border-border px-2 text-xs bg-white text-text-secondary"
+              title="Campo de color"
             >
-              <option value="branch">Sucursal</option>
-              <option value="type">Tipo</option>
+              <option value="branch">Color por: Sucursal</option>
+              <option value="type">Color por: Tipo</option>
             </select>
           )}
         </div>
+
+        {(activeToolbarChips.length > 0 || showMilestonesOnly) && (
+          <div className="flex items-center gap-2 flex-wrap">
+            {activeToolbarChips.map((chip) => (
+              <button
+                key={chip.id}
+                type="button"
+                onClick={chip.onRemove}
+                className="h-6 rounded-full border border-border bg-white px-2 text-[11px] text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
+              >
+                {chip.label} ×
+              </button>
+            ))}
+            {showMilestonesOnly && (
+              <button
+                type="button"
+                onClick={() => setShowMilestonesOnly(false)}
+                className="h-6 rounded-full border border-border bg-white px-2 text-[11px] text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
+              >
+                Solo hitos ×
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={resetTimelineToolbar}
+              className="h-6 rounded-full border border-border px-2 text-[11px] text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
+            >
+              Limpiar todo
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* ── Main ── */}
+      {/* â”€â”€ Main â”€â”€ */}
       <div className="flex flex-col flex-1 min-h-0">
         {/* Timeline */}
         <div
@@ -2034,7 +2544,7 @@ export function GanttTimeline() {
         >
           <div ref={scrollContainerRef} className="overflow-auto h-full">
             <div style={{ minWidth: timelineWidth + sidebarWidth }}>
-              {/* ── HEADER ── */}
+              {/* â”€â”€ HEADER â”€â”€ */}
               <div className="sticky top-0 z-30 border-b border-border bg-white">
                 {/* Row 1: Sidebar label + Years */}
                 <div className="flex">
@@ -2045,7 +2555,7 @@ export function GanttTimeline() {
                       minWidth: sidebarWidth,
                     }}
                   >
-                    Persona / Proyecto
+                    {groupMode === 'none' ? 'Proyecto' : 'Grupo / Proyecto'}
                     <div
                       onMouseDown={startSidebarResize}
                       className="absolute right-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-100/40 transition-colors"
@@ -2108,24 +2618,22 @@ export function GanttTimeline() {
                 </div>
               </div>
 
-              {/* ── PERSONS ── */}
-              {persons.map((person, pi) => {
-                const pList = activeProjects
-                  .filter((p) => p.assignees.includes(person))
-                  .sort(
-                    (a, b) => a.startDate!.getTime() - b.startDate!.getTime(),
-                  );
-                const collapsed = collapsedPersons.has(person);
-                const pColor = PERSON_COLORS[pi % PERSON_COLORS.length];
-                const roots = (personRootsMap.get(person) ||
-                  []) as HierarchyNode[];
+              {/* â”€â”€ GROUPS â”€â”€ */}
+              {groupedTimeline.map((group, gi) => {
+                const pList = group.projects;
+                const collapsed = collapsedGroups.has(group.id);
+                const pColor = PERSON_COLORS[gi % PERSON_COLORS.length];
+                const roots = (groupRootsMap.get(group.id) || []) as HierarchyNode[];
+
+                if (groupMode === 'none') {
+                  return <div key={group.id}>{renderTree(roots, pList)}</div>;
+                }
 
                 return (
-                  <div key={person}>
-                    {/* Person header */}
+                  <div key={group.id}>
                     <div
                       className="flex items-center border-b border-border bg-bg-secondary cursor-pointer hover:bg-bg-secondary transition-colors"
-                      onClick={() => togglePerson(person)}
+                      onClick={() => toggleGroup(group.id)}
                     >
                       <div
                         className="px-3 py-2 border-r border-border flex items-center gap-2 sticky left-0 z-30 bg-bg-secondary"
@@ -2135,35 +2643,38 @@ export function GanttTimeline() {
                         }}
                       >
                         {collapsed ? (
-                          <ChevronRight
-                            size={14}
-                            className="text-text-secondary"
-                          />
+                          <ChevronRight size={14} className="text-text-secondary" />
                         ) : (
-                          <ChevronDown
-                            size={14}
-                            className="text-text-secondary"
-                          />
+                          <ChevronDown size={14} className="text-text-secondary" />
                         )}
-                        <div
-                          className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 overflow-hidden"
-                          style={{ backgroundColor: pColor }}
-                        >
-                          {(() => {
-                            const avatarUrl = getAvatarUrl(person);
-                            return avatarUrl ? (
-                              <img
-                                src={avatarUrl}
-                                alt={person}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              person.charAt(0)
-                            );
-                          })()}
-                        </div>
+                        {groupMode === 'person' ? (
+                          <div
+                            className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 overflow-hidden"
+                            style={{ backgroundColor: pColor }}
+                          >
+                            {(() => {
+                              const avatarUrl = getAvatarUrl(group.label);
+                              return avatarUrl ? (
+                                <img
+                                  src={avatarUrl}
+                                  alt={group.label}
+                                  className="w-full h-full object-cover"
+                                />
+                              ) : (
+                                group.label.charAt(0)
+                              );
+                            })()}
+                          </div>
+                        ) : (
+                          <div
+                            className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
+                            style={{ backgroundColor: '#E2E8F0', color: '#475569' }}
+                          >
+                            {group.label.charAt(0)}
+                          </div>
+                        )}
                         <span className="text-sm font-semibold text-text-primary truncate flex-1">
-                          {person}
+                          {group.label}
                         </span>
                         <span className="text-[10px] text-text-secondary bg-white px-1.5 py-0.5 rounded-full ml-auto">
                           {pList.length}
@@ -2196,8 +2707,6 @@ export function GanttTimeline() {
                         )}
                       </div>
                     </div>
-
-                    {/* Expanded rows */}
                     {!collapsed && renderTree(roots, pList)}
                   </div>
                 );
@@ -2223,9 +2732,9 @@ export function GanttTimeline() {
           )}
         </div>
 
-        {/* ════════════════════════════════════════════ */}
+        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         {/*  NAVIGATION BAR                             */}
-        {/* ════════════════════════════════════════════ */}
+        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
         <div className="mt-2 flex-shrink-0 space-y-1.5">
           {/* Minimap */}
           <Minimap
@@ -2307,7 +2816,7 @@ export function GanttTimeline() {
                 addDays(range.start, Math.floor(viewStartDay)),
                 'dd MMM',
               )}
-              {' — '}
+              {' â€” '}
               {format(
                 addDays(
                   range.start,

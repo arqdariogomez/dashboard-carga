@@ -222,7 +222,7 @@ export function SortableRow({
   const childCount = useMemo(() => allProjects.filter((p) => p.parentId === project.id).length, [allProjects, project.id]);
   const isOverloaded = (project.dailyLoad ?? 0) > 100;
   const isPastDue = Boolean(project.endDate && project.endDate < new Date());
-  const rowBgClass = hasChildren ? 'bg-transparent' : 'bg-white';
+  const rowBgClass = hasChildren ? 'bg-bg-secondary' : 'bg-white';
   const groupReadonlyToneClass = hasChildren ? 'text-slate-600' : '';
   const INDENT_PX = 24;
   const lineIndent = Math.max(8, dropTargetDepth * INDENT_PX + (dropPlacement === 'inside' ? 24 : 8));
@@ -308,6 +308,20 @@ export function SortableRow({
       onMouseLeave={() => onPresenceChange(null)}
     >
       <td className={`relative w-8 overflow-visible px-1 py-2 border-b border-border ${rowBgClass}`} ref={rowMenuRef}>
+        {!multiSelectMode && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onAddBelow(project.id);
+            }}
+            className="absolute -left-[21px] top-1/2 -translate-y-1/2 z-[90] opacity-0 group-hover:opacity-100 p-0.5 rounded text-text-secondary/30 hover:text-text-secondary transition-opacity focus:outline-none"
+            title="Agregar fila"
+            aria-label="Agregar fila"
+          >
+            <Plus size={15} strokeWidth={2.6} />
+          </button>
+        )}
         {showDropZones && (
           <div
             aria-hidden="true"
@@ -451,7 +465,19 @@ export function SortableRow({
         switch (rc.id) {
           case 'project':
             return (
-              <td key={rc.token} className={`px-0 py-1 border-b border-border ${rowBgClass} min-w-[240px]`}>
+              <td key={rc.token} className={`relative px-0 py-1 border-b border-border ${rowBgClass} min-w-[240px]`}>
+                {(() => {
+                  const hierarchyLevel = project.hierarchyLevel ?? 0;
+                  if (hierarchyLevel <= 0) return null;
+                  const treeGutterPx = 70;
+                  return (
+                    <div
+                      aria-hidden="true"
+                      className={`pointer-events-none absolute bottom-0 left-0 h-px ${isSelected ? 'bg-[#EAF2FF]' : rowBgClass}`}
+                      style={{ width: treeGutterPx }}
+                    />
+                  );
+                })()}
                 <ExpandableCell
                   project={project}
                   hasChildren={hasChildren}

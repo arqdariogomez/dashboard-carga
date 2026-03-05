@@ -157,7 +157,7 @@ export function ExpandableCell({
             e.stopPropagation();
             onToggleExpand(project.id);
           }}
-          className={`flex-shrink-0 p-0.5 rounded transition-all duration-200 ${
+          className={`relative z-10 flex-shrink-0 p-0.5 rounded transition-all duration-200 ${
             isExpanded
               ? 'hover:bg-accent-blue/30 text-[#245EA8]'
               : 'hover:bg-accent-blue/20 text-[#57779E]'
@@ -178,7 +178,7 @@ export function ExpandableCell({
 
       {/* Project name */}
       <span
-        className="cursor-pointer rounded px-1 py-0.5 transition-colors flex-1 text-sm font-medium text-text-primary inline-flex items-center gap-2"
+        className="relative z-10 cursor-pointer rounded px-1 py-0.5 transition-colors flex-1 text-sm font-medium text-text-primary inline-flex items-center gap-2"
         onDoubleClick={() => onStartEdit?.()}
         title="Doble clic para editar nombre"
         style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
