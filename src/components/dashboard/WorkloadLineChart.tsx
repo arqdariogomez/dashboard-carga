@@ -13,7 +13,6 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
-  Area,
   ComposedChart,
   Brush,
 } from 'recharts';
@@ -74,7 +73,6 @@ export function WorkloadLineChart() {
 
   const visibleDays = visibleRange ? visibleRange.endIndex - visibleRange.startIndex + 1 : chartData.length;
   const canRenderDots = visibleDays <= 70;
-  const canRenderAreas = persons.length <= 6 && visibleDays <= 120;
   const yDomain = yMode === 'auto' ? [0, 'auto'] as const : [0, Number(yMode)] as const;
 
   const todayLabel = useMemo(() => {
@@ -186,18 +184,6 @@ export function WorkloadLineChart() {
                 label={{ value: 'HOY', position: 'top', fontSize: 9, fill: '#F87171', fontWeight: 'bold' }}
               />
             )}
-            {canRenderAreas &&
-              persons.map((person, i) => (
-                <Area
-                  key={`area-${person}`}
-                  type="monotone"
-                  dataKey={person}
-                  fill={PERSON_COLORS[i % PERSON_COLORS.length]}
-                  fillOpacity={0.07}
-                  stroke="none"
-                  isAnimationActive={false}
-                />
-              ))}
             {persons.map((person, i) => (
               <Line
                 key={person}
