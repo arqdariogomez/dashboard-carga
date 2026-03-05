@@ -18,6 +18,7 @@ import {
   FolderOpen,
   MoreHorizontal,
   History,
+  Upload,
 } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -326,9 +327,20 @@ export function Header({ onReload, fileInputRef, onImport }: HeaderProps) {
           <button
             onClick={() => (onReload ? onReload() : fileInputRef?.current?.click())}
             className="h-8 w-8 inline-flex items-center justify-center text-text-secondary hover:text-text-primary bg-bg-secondary/90 hover:bg-white border border-border rounded-lg transition-all"
-            title="Recargar"
+            title="Recargar archivo importado"
           >
             <RefreshCw size={14} />
+          </button>
+        )}
+
+        {onImport && (
+          <button
+            onClick={onImport}
+            className="h-8 px-2.5 inline-flex items-center gap-1.5 text-text-secondary hover:text-text-primary bg-bg-secondary/90 hover:bg-white border border-border rounded-lg transition-all text-xs font-medium"
+            title="Importar Excel"
+          >
+            <Upload size={14} />
+            <span className="hidden sm:inline">Importar</span>
           </button>
         )}
 
