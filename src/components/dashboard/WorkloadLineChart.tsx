@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { getPersons } from '@/lib/workloadEngine';
 import { PERSON_COLORS } from '@/lib/constants';
-import { format, isToday, isWithinInterval } from 'date-fns';
+import { format, isToday, isWithinInterval, startOfDay, endOfDay, subDays, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { LineChart as LineChartIcon, X, ChevronLeft, ChevronRight, Users, Building, Tag, Clock } from 'lucide-react';
 import {
@@ -98,11 +98,38 @@ export function WorkloadLineChart() {
     return todayEntry?.label || null;
   }, [chartData]);
 
+  // Navegación rápida a fechas predefinidas
+  const navigateToDate = useCallback((targetDate: Date) => {
+    // Buscar la fecha más cercana en chartData
+    const targetDateStr = format(targetDate, 'yyyy-MM-dd');
+    const closestIndex = chartData.findIndex(d => d.date === targetDateStr);
+    
+    if (closestIndex >= 0) {
+      setSelectedDate(new Date(chartData[closestIndex].date));
+    } else {
+      // Si no hay fecha exacta, encontrar la más cercana
+      let closestDiff = Infinity;
+      let closestIdx = -1;
+      
+      chartData.forEach((d, idx) => {
+        const diff = Math.abs(new Date(d.date).getTime() - targetDate.getTime());
+        if (diff < closestDiff) {
+          closestDiff = diff;
+          closestIdx = idx;
+        }
+      });
+      
+      if (closestIdx >= 0) {
+        setSelectedDate(new Date(chartData[closestIdx].date));
+      }
+    }
+  }, [chartData]);
+
   // Calcular detalles del día seleccionado
   const dayDetails = useMemo((): DayDetails | null => {
     if (!selectedDate || !filteredProjects.length) return null;
 
-    console.log('🔍 Debug - Fecha seleccionada:', selectedDate);
+    console.log('🔍 Debug - Fecha seleccionada:', selectedDate.toISOString().split('T')[0]);
     console.log('🔍 Debug - Proyectos filtrados:', filteredProjects.length);
 
     const projects = filteredProjects
@@ -114,17 +141,21 @@ export function WorkloadLineChart() {
         
         const projectStart = new Date(project.startDate);
         const projectEnd = new Date(project.endDate);
+        const selected = new Date(selectedDate);
         
-        // Normalizar fechas para comparación (ignorar hora)
-        const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+        // Normalizar todas las fechas a medianoche para comparación precisa
+        const selectedDateOnly = new Date(selected.getFullYear(), selected.getMonth(), selected.getDate());
         const projectStartOnly = new Date(projectStart.getFullYear(), projectStart.getMonth(), projectStart.getDate());
         const projectEndOnly = new Date(projectEnd.getFullYear(), projectEnd.getMonth(), projectEnd.getDate());
         
-        const isActive = isWithinInterval(selectedDateOnly, { start: projectStartOnly, end: projectEndOnly });
+        // Usar comparación simple de fechas
+        const isActive = selectedDateOnly >= projectStartOnly && selectedDateOnly <= projectEndOnly;
         
-        if (isActive) {
-          console.log('✅ Proyecto activo:', project.name, 'Fechas:', projectStartOnly, 'a', projectEndOnly);
-        }
+        console.log('📅 Proyecto:', project.name);
+        console.log('   - Inicio:', projectStartOnly.toISOString().split('T')[0]);
+        console.log('   - Fin:', projectEndOnly.toISOString().split('T')[0]);
+        console.log('   - Seleccionado:', selectedDateOnly.toISOString().split('T')[0]);
+        console.log('   - Activo:', isActive);
         
         return isActive;
       })
@@ -337,13 +368,47 @@ export function WorkloadLineChart() {
           <div className="p-4 border-b border-border">
             <div className="flex items-center justify-between mb-3">
               <h3 className="font-semibold text-text-primary">
-                {format(selectedDate, 'd [de] MMMM [de] yyyy', { locale: es })}
+                {format(selectedDate, "d 'de' MMMM 'de' yyyy", { locale: es })}
               </h3>
               <button
                 onClick={() => setSelectedDate(null)}
                 className="p-1 hover:bg-bg-secondary rounded-md transition-colors"
               >
                 <X size={16} className="text-text-secondary" />
+              </button>
+            </div>
+            
+            {/* Botones de navegación rápida */}
+            <div className="grid grid-cols-5 gap-1 mb-3">
+              <button
+                onClick={() => navigateToDate(new Date())}
+                className="px-2 py-1 text-[10px] bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+              >
+                Hoy
+              </button>
+              <button
+                onClick={() => navigateToDate(subDays(new Date(), 14))}
+                className="px-2 py-1 text-[10px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+              >
+                2S
+              </button>
+              <button
+                onClick={() => navigateToDate(subMonths(new Date(), 1))}
+                className="px-2 py-1 text-[10px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+              >
+                1M
+              </button>
+              <button
+                onClick={() => navigateToDate(subMonths(new Date(), 3))}
+                className="px-2 py-1 text-[10px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+              >
+                3M
+              </button>
+              <button
+                onClick={() => navigateToDate(chartData.length > 0 ? new Date(chartData[0].date) : new Date())}
+                className="px-2 py-1 text-[10px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+              >
+                Todo
               </button>
             </div>
             
