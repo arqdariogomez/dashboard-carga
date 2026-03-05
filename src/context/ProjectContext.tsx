@@ -920,6 +920,18 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     () => async () => {
       if (!isSupabaseConfigured || !supabase || !activeBoardId || !user) return;
       if (Date.now() < ignoreRealtimeUntilRef.current) return;
+      
+      // Verificar si hay tickets activos que bloquean la sincronización
+      // Nota: SyncManager debería estar disponible globalmente o inyectado
+      const syncManager = (typeof window !== 'undefined' && window.SyncManager) 
+        ? window.SyncManager.getInstance() 
+        : null;
+      
+      if (syncManager && syncManager.isLocked()) {
+        console.log('🎫 SyncManager: Sincronización bloqueada por ticket activo', syncManager.getCurrentTicket());
+        return;
+      }
+      
       // Never pull remote snapshots over local in-progress edits.
       if (hasUnsavedChangesRef.current) return;
       // If local revision has not been acknowledged by a successful save yet, skip remote apply.

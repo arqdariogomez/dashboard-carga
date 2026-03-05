@@ -121,5 +121,10 @@ class SyncManager {
   }
 }
 
+// Hacer disponible globalmente para que otros módulos puedan acceder
+if (typeof window !== 'undefined') {
+  (window as any).SyncManager = SyncManager;
+}
+
 export default SyncManager;
 export type { SyncTicket, SyncState };

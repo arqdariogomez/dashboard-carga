@@ -6,7 +6,6 @@ import { format, isToday } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { LineChart as LineChartIcon, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import { ZoomControls, type TimePreset } from '@/components/shared/ZoomControls';
-import SyncManager from '@/lib/syncManager';
 import {
   Line,
   XAxis,
@@ -91,7 +90,7 @@ export function WorkloadLineChart() {
   // Manejador de zoom con sistema de tickets
   const handleZoomChange = useCallback((newZoom: number, preset: TimePreset | null) => {
     // Crear ticket para aislar esta operación de zoom
-    const syncManager = SyncManager.getInstance();
+    const syncManager = (window as any).SyncManager.getInstance();
     const ticket = syncManager.createTicket('zoom', `Zoom cambiado a ${newZoom.toFixed(2)}x, preset: ${preset || 'custom'}`, 8000);
     
     setZoomScale(newZoom);
