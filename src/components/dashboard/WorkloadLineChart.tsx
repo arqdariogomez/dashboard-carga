@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { getPersons } from '@/lib/workloadEngine';
 import { PERSON_COLORS } from '@/lib/constants';
-import { format, isToday, isWithinInterval, startOfDay, endOfDay, subDays, subMonths } from 'date-fns';
+import { format, isToday, startOfDay, endOfDay, subDays, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { LineChart as LineChartIcon, X, ChevronLeft, ChevronRight, Users, Building, Tag, Clock } from 'lucide-react';
 import {
@@ -255,6 +255,41 @@ export function WorkloadLineChart() {
               Ajustar rango
             </button>
           </div>
+          
+          {/* Botones de navegación rápida */}
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => navigateToDate(new Date())}
+              className="px-2 py-1 text-[11px] bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
+            >
+              Hoy
+            </button>
+            <button
+              onClick={() => navigateToDate(subDays(new Date(), 14))}
+              className="px-2 py-1 text-[11px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+            >
+              2S
+            </button>
+            <button
+              onClick={() => navigateToDate(subMonths(new Date(), 1))}
+              className="px-2 py-1 text-[11px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+            >
+              1M
+            </button>
+            <button
+              onClick={() => navigateToDate(subMonths(new Date(), 3))}
+              className="px-2 py-1 text-[11px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+            >
+              3M
+            </button>
+            <button
+              onClick={() => navigateToDate(chartData.length > 0 ? new Date(chartData[0].date) : new Date())}
+              className="px-2 py-1 text-[11px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+            >
+              Todo
+            </button>
+          </div>
+          
           <div className="flex items-center gap-2 flex-wrap justify-end">
             {persons.map((person, i) => (
               <span key={person} className="inline-flex items-center gap-1 text-[11px] text-text-secondary">
@@ -375,40 +410,6 @@ export function WorkloadLineChart() {
                 className="p-1 hover:bg-bg-secondary rounded-md transition-colors"
               >
                 <X size={16} className="text-text-secondary" />
-              </button>
-            </div>
-            
-            {/* Botones de navegación rápida */}
-            <div className="grid grid-cols-5 gap-1 mb-3">
-              <button
-                onClick={() => navigateToDate(new Date())}
-                className="px-2 py-1 text-[10px] bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-              >
-                Hoy
-              </button>
-              <button
-                onClick={() => navigateToDate(subDays(new Date(), 14))}
-                className="px-2 py-1 text-[10px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
-              >
-                2S
-              </button>
-              <button
-                onClick={() => navigateToDate(subMonths(new Date(), 1))}
-                className="px-2 py-1 text-[10px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
-              >
-                1M
-              </button>
-              <button
-                onClick={() => navigateToDate(subMonths(new Date(), 3))}
-                className="px-2 py-1 text-[10px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
-              >
-                3M
-              </button>
-              <button
-                onClick={() => navigateToDate(chartData.length > 0 ? new Date(chartData[0].date) : new Date())}
-                className="px-2 py-1 text-[10px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
-              >
-                Todo
               </button>
             </div>
             
