@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { getPersons } from '@/lib/workloadEngine';
 import { PERSON_COLORS } from '@/lib/constants';
-import { format, isToday } from 'date-fns';
+import { format, isToday, isWithinInterval } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { LineChart as LineChartIcon } from 'lucide-react';
+import { LineChart as LineChartIcon, X, ChevronLeft, ChevronRight, Users, Building, Tag, Clock } from 'lucide-react';
 import {
   Line,
   XAxis,
@@ -17,10 +17,28 @@ import {
   Brush,
 } from 'recharts';
 
+type GroupByOption = 'person' | 'branch' | 'type' | 'status';
+
+interface DayDetails {
+  date: Date;
+  projects: Array<{
+    id: string;
+    name: string;
+    assignee: string;
+    branch?: string;
+    type?: string;
+    priority: 'low' | 'medium' | 'high';
+    startDate: Date;
+    endDate: Date;
+  }>;
+}
+
 export function WorkloadLineChart() {
   const { state, filteredProjects, workloadData, dateRange } = useProject();
   const [visibleRange, setVisibleRange] = useState<{ startIndex: number; endIndex: number } | null>(null);
   const [yMode, setYMode] = useState<'auto' | '200' | '300'>('auto');
+  const [selectedDate, setSelectedDate] = useState<Date | null>(null);
+  const [groupBy, setGroupBy] = useState<GroupByOption>('person');
 
   const persons = useMemo(() => {
     const ps = getPersons(filteredProjects);
@@ -79,6 +97,62 @@ export function WorkloadLineChart() {
     const todayEntry = chartData.find((d) => 'isToday' in d && d.isToday);
     return todayEntry?.label || null;
   }, [chartData]);
+
+  // Calcular detalles del día seleccionado
+  const dayDetails = useMemo((): DayDetails | null => {
+    if (!selectedDate || !filteredProjects.length) return null;
+
+    const projects = filteredProjects
+      .filter(project => {
+        if (!project.startDate || !project.endDate) return false;
+        const projectStart = new Date(project.startDate);
+        const projectEnd = new Date(project.endDate);
+        return isWithinInterval(selectedDate, { start: projectStart, end: projectEnd });
+      })
+      .map(project => ({
+        id: project.id,
+        name: project.name,
+        assignee: Array.isArray(project.assignees) && project.assignees.length > 0 
+          ? project.assignees[0] 
+          : 'Sin asignar',
+        branch: Array.isArray(project.branch) ? project.branch[0] : project.branch,
+        type: project.type,
+        priority: project.priority === 1 ? 'low' : project.priority === 2 ? 'medium' : 'high' as 'low' | 'medium' | 'high',
+        startDate: new Date(project.startDate!),
+        endDate: new Date(project.endDate!),
+      }));
+
+    return { date: selectedDate, projects };
+  }, [selectedDate, filteredProjects]);
+
+  // Manejador de clic en el gráfico
+  const handleChartClick = useCallback((data: any) => {
+    if (data && data.activeLabel) {
+      const dateStr = data.activeLabel;
+      const date = new Date(dateStr);
+      if (!isNaN(date.getTime())) {
+        setSelectedDate(date);
+      }
+    }
+  }, []);
+
+  // Navegación entre días
+  const navigateDay = useCallback((direction: 'prev' | 'next') => {
+    if (!selectedDate || !chartData.length) return;
+    
+    const currentIndex = chartData.findIndex(d => d.date === format(selectedDate, 'yyyy-MM-dd'));
+    let newIndex = currentIndex;
+    
+    if (direction === 'prev' && currentIndex > 0) {
+      newIndex = currentIndex - 1;
+    } else if (direction === 'next' && currentIndex < chartData.length - 1) {
+      newIndex = currentIndex + 1;
+    }
+    
+    if (newIndex !== currentIndex && newIndex >= 0 && newIndex < chartData.length) {
+      setSelectedDate(new Date(chartData[newIndex].date));
+    }
+  }, [selectedDate, chartData]);
 
   if (chartData.length === 0) {
     return (
@@ -140,7 +214,11 @@ export function WorkloadLineChart() {
         </div>
         <div className="flex-1 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
-          <ComposedChart data={chartData} margin={{ top: 8, right: 12, left: 0, bottom: 8 }}>
+          <ComposedChart 
+            data={chartData} 
+            margin={{ top: 8, right: 12, left: 0, bottom: 8 }}
+            onClick={handleChartClick}
+          >
             <CartesianGrid strokeDasharray="3 3" stroke="#E9E9E7" />
             <XAxis
               dataKey="label"
@@ -184,6 +262,21 @@ export function WorkloadLineChart() {
                 label={{ value: 'HOY', position: 'top', fontSize: 9, fill: '#F87171', fontWeight: 'bold' }}
               />
             )}
+            {selectedDate && (
+              <ReferenceLine
+                x={format(selectedDate, 'dd MMM', { locale: es })}
+                stroke="#3B82F6"
+                strokeWidth={2}
+                strokeDasharray="6 3"
+                label={{ 
+                  value: 'Seleccionado', 
+                  position: 'top', 
+                  fontSize: 9, 
+                  fill: '#3B82F6', 
+                  fontWeight: 'bold' 
+                }}
+              />
+            )}
             {persons.map((person, i) => (
               <Line
                 key={person}
@@ -215,6 +308,122 @@ export function WorkloadLineChart() {
         </ResponsiveContainer>
         </div>
       </div>
+      
+      {/* Sidebar de detalles del día */}
+      {selectedDate && dayDetails && (
+        <div className="w-80 bg-white border-l border-border flex flex-col">
+          {/* Header del sidebar */}
+          <div className="p-4 border-b border-border">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-semibold text-text-primary">
+                {format(selectedDate, 'd [de] MMMM [de] yyyy', { locale: es })}
+              </h3>
+              <button
+                onClick={() => setSelectedDate(null)}
+                className="p-1 hover:bg-bg-secondary rounded-md transition-colors"
+              >
+                <X size={16} className="text-text-secondary" />
+              </button>
+            </div>
+            
+            {/* Navegación entre días */}
+            <div className="flex items-center justify-center gap-2 mb-3">
+              <button
+                onClick={() => navigateDay('prev')}
+                className="p-1 hover:bg-bg-secondary rounded-md transition-colors disabled:opacity-50"
+                disabled={!chartData.find(d => d.date === format(selectedDate, 'yyyy-MM-dd')) || chartData.findIndex(d => d.date === format(selectedDate, 'yyyy-MM-dd')) === 0}
+              >
+                <ChevronLeft size={16} className="text-text-secondary" />
+              </button>
+              <span className="text-xs text-text-secondary">
+                {dayDetails.projects.length} proyecto{dayDetails.projects.length !== 1 ? 's' : ''}
+              </span>
+              <button
+                onClick={() => navigateDay('next')}
+                className="p-1 hover:bg-bg-secondary rounded-md transition-colors disabled:opacity-50"
+                disabled={!chartData.find(d => d.date === format(selectedDate, 'yyyy-MM-dd')) || chartData.findIndex(d => d.date === format(selectedDate, 'yyyy-MM-dd')) === chartData.length - 1}
+              >
+                <ChevronRight size={16} className="text-text-secondary" />
+              </button>
+            </div>
+            
+            {/* Toggle de agrupación */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-text-secondary">Agrupar por:</span>
+              <select
+                value={groupBy}
+                onChange={(e) => setGroupBy(e.target.value as GroupByOption)}
+                className="text-xs px-2 py-1 border border-border rounded-md bg-white text-text-primary"
+              >
+                <option value="person">Persona</option>
+                <option value="branch">Sucursal</option>
+                <option value="type">Tipo</option>
+              </select>
+            </div>
+          </div>
+          
+          {/* Lista de proyectos */}
+          <div className="flex-1 overflow-y-auto p-4">
+            {dayDetails.projects.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-sm text-text-secondary">No hay proyectos para este día</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {dayDetails.projects.map((project) => (
+                  <div
+                    key={project.id}
+                    className="p-3 bg-bg-secondary rounded-lg border border-border"
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <h4 className="font-medium text-text-primary text-sm leading-tight">
+                        {project.name}
+                      </h4>
+                      <span className={`px-2 py-1 text-[10px] rounded-full ${
+                        project.priority === 'high' 
+                          ? 'bg-red-100 text-red-700'
+                          : project.priority === 'medium'
+                          ? 'bg-yellow-100 text-yellow-700'
+                          : 'bg-green-100 text-green-700'
+                      }`}>
+                        {project.priority === 'high' ? 'Alta' : project.priority === 'medium' ? 'Media' : 'Baja'}
+                      </span>
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-xs text-text-secondary">
+                        <Users size={12} />
+                        <span>{project.assignee}</span>
+                      </div>
+                      
+                      {project.branch && (
+                        <div className="flex items-center gap-2 text-xs text-text-secondary">
+                          <Building size={12} />
+                          <span>{project.branch}</span>
+                        </div>
+                      )}
+                      
+                      {project.type && (
+                        <div className="flex items-center gap-2 text-xs text-text-secondary">
+                          <Tag size={12} />
+                          <span>{project.type}</span>
+                        </div>
+                      )}
+                      
+                      <div className="flex items-center gap-2 text-xs text-text-secondary">
+                        <Clock size={12} />
+                        <span>
+                          {format(project.startDate, 'd MMM', { locale: es })} - {format(project.endDate, 'd MMM', { locale: es })}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
