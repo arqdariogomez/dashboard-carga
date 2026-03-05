@@ -552,6 +552,7 @@ export function SortableRow({
                   onRenamePerson={onRenamePersonGlobal || (async () => {})}
                   onDeletePerson={onDeletePersonGlobal || (async () => {})}
                   onSetPersonAvatar={onSetPersonAvatar}
+                  onMergePersons={onMergePersonsGlobal ? (left, right, keep) => onMergePersonsGlobal(left, right, keep as 'left' | 'right') : undefined}
                 />
                 {hasChildren && (
                   <GroupRowLockedOverlay onShowHint={onShowGroupEditHint} />

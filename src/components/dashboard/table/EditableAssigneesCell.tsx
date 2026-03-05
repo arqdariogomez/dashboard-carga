@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Plus, Edit3, UserPlus, ArrowRightLeft, Trash2 } from 'lucide-react';
+import { Search, Plus, Edit3, UserPlus, ArrowRightLeft, Trash2, Check } from 'lucide-react';
 import { usePersonProfiles } from '@/context/PersonProfilesContext';
 
 interface EditableAssigneesCellProps {
@@ -9,6 +9,7 @@ interface EditableAssigneesCellProps {
   onRenamePerson: (from: string, to: string) => Promise<void>;
   onDeletePerson?: (name: string) => Promise<void>;
   onSetPersonAvatar: (name: string, file: File) => Promise<void>;
+  onMergePersons?: (left: string, right: string, keep: 'left' | 'right') => void;
 }
 
 export function EditableAssigneesCell({
@@ -18,6 +19,7 @@ export function EditableAssigneesCell({
   onRenamePerson,
   onDeletePerson,
   onSetPersonAvatar,
+  onMergePersons,
 }: EditableAssigneesCellProps) {
   const { getAvatarUrl } = usePersonProfiles();
   const safeValue = Array.isArray(value) ? value : [];
@@ -337,10 +339,27 @@ export function EditableAssigneesCell({
                   setMergeRight('');
                   setMergeKeep('left');
                 }}
+                title="Limpiar selección"
               >
                 <ArrowRightLeft size={12} />
               </button>
             </div>
+            <button
+              type="button"
+              className="mt-2 w-full h-8 px-3 text-xs rounded bg-accent-blue text-white hover:bg-accent-blue/90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+              disabled={!mergeLeft || !mergeRight || mergeLeft === mergeRight || !onMergePersons}
+              onClick={() => {
+                if (onMergePersons && mergeLeft && mergeRight) {
+                  onMergePersons(mergeLeft, mergeRight, mergeKeep);
+                  setMergeLeft('');
+                  setMergeRight('');
+                  setMergeKeep('left');
+                }
+              }}
+            >
+              <Check size={12} />
+              Fusionar
+            </button>
           </details>
         </div>
       )}
