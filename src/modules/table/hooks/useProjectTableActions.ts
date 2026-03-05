@@ -11,7 +11,7 @@ interface UseProjectTableActionsProps {
   };
   dispatch: (action: any) => void;
   setBranchCatalog: (catalog: string[]) => void;
-  setPersonCatalog: (catalog: string[]) => void;
+  setPersonCatalog?: (catalog: string[]) => void;
   setPersonProfiles: (profiles: Record<string, { avatarUrl?: string }>) => void;
   setMultiSelectMode: (mode: boolean) => void;
   setSelectedRowIds: (ids: Set<string>) => void;
@@ -33,6 +33,7 @@ export function useProjectTableActions({
   state,
   dispatch,
   setBranchCatalog,
+  setPersonCatalog,
   setPersonProfiles,
   setMultiSelectMode,
   setSelectedRowIds,
@@ -66,8 +67,8 @@ export function useProjectTableActions({
   // Person catalog operations
   const handleAddPersonOption = useCallback((name: string) => {
     const clean = name.trim();
-    if (clean) {
-      setPersonCatalog(prev => {
+    if (clean && setPersonCatalog) {
+      setPersonCatalog((prev: string[]) => {
         const current = new Set(prev.map(p => p.toLowerCase()));
         if (!current.has(clean.toLowerCase())) {
           return [...prev, clean].sort();
