@@ -102,12 +102,31 @@ export function WorkloadLineChart() {
   const dayDetails = useMemo((): DayDetails | null => {
     if (!selectedDate || !filteredProjects.length) return null;
 
+    console.log('🔍 Debug - Fecha seleccionada:', selectedDate);
+    console.log('🔍 Debug - Proyectos filtrados:', filteredProjects.length);
+
     const projects = filteredProjects
       .filter(project => {
-        if (!project.startDate || !project.endDate) return false;
+        if (!project.startDate || !project.endDate) {
+          console.log('⚠️ Proyecto sin fechas:', project.name);
+          return false;
+        }
+        
         const projectStart = new Date(project.startDate);
         const projectEnd = new Date(project.endDate);
-        return isWithinInterval(selectedDate, { start: projectStart, end: projectEnd });
+        
+        // Normalizar fechas para comparación (ignorar hora)
+        const selectedDateOnly = new Date(selectedDate.getFullYear(), selectedDate.getMonth(), selectedDate.getDate());
+        const projectStartOnly = new Date(projectStart.getFullYear(), projectStart.getMonth(), projectStart.getDate());
+        const projectEndOnly = new Date(projectEnd.getFullYear(), projectEnd.getMonth(), projectEnd.getDate());
+        
+        const isActive = isWithinInterval(selectedDateOnly, { start: projectStartOnly, end: projectEndOnly });
+        
+        if (isActive) {
+          console.log('✅ Proyecto activo:', project.name, 'Fechas:', projectStartOnly, 'a', projectEndOnly);
+        }
+        
+        return isActive;
       })
       .map(project => ({
         id: project.id,
@@ -121,6 +140,8 @@ export function WorkloadLineChart() {
         startDate: new Date(project.startDate!),
         endDate: new Date(project.endDate!),
       }));
+
+    console.log('🔍 Debug - Proyectos encontrados para el día:', projects.length);
 
     return { date: selectedDate, projects };
   }, [selectedDate, filteredProjects]);
@@ -167,7 +188,7 @@ export function WorkloadLineChart() {
   }
 
   return (
-    <div className="p-3 flex-1 min-h-0 flex flex-col">
+    <div className="p-3 flex-1 min-h-0 flex">
       <div className="bg-white rounded-xl border border-border p-3 flex-1 min-h-0 flex flex-col">
         <div className="mb-2 flex items-center justify-between gap-2">
           <div className="flex items-center gap-1">
@@ -239,8 +260,8 @@ export function WorkloadLineChart() {
                 backgroundColor: '#fff',
                 border: '1px solid #E9E9E7',
                 borderRadius: '8px',
-                fontSize: '12px',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
+                fontSize: '11px',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
                 padding: '10px 14px',
               }}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
