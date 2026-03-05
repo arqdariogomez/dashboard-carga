@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState, useRef } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { useAuth } from '@/context/AuthContext';
 import { usePersonProfiles } from '@/context/PersonProfilesContext';
-import { getPersons, getPersonSummary } from '@/lib/workloadEngine';
+import { getPersonSummary, getPersonsWithCatalog, addPersonToCatalog } from '@/lib/workloadEngine';
 import { buildHierarchy, isParent, aggregateFromChildren } from '@/lib/hierarchyEngine';
 import { LoadBubble } from '@/components/shared/LoadBubble';
 import { PERSON_COLORS, getLoadColor } from '@/lib/constants';
 import { formatDateShort, format, isValidDateValue } from '@/lib/dateUtils';
-import { Briefcase, TrendingUp, Zap, Calendar, Users, Pencil, Upload, Trash2 } from 'lucide-react';
+import { Briefcase, TrendingUp, Zap, Calendar, Users, Pencil, Upload, Trash2, Plus } from 'lucide-react';
 import { listBoardColumns, listTaskColumnValues } from '@/lib/dynamicColumnsRepository';
 import {
   ResponsiveContainer,
@@ -23,12 +23,25 @@ export function PersonSummaryCards() {
   const [progressByTaskId, setProgressByTaskId] = useState<Map<string, number>>(new Map());
   const [hoveredPerson, setHoveredPerson] = useState<string | null>(null);
   const [showPersonMenu, setShowPersonMenu] = useState<string | null>(null);
+  const [showAddPerson, setShowAddPerson] = useState(false);
+  const [newPersonName, setNewPersonName] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
 
   const persons = useMemo(() => {
-    const ps = getPersons(filteredProjects);
+    const ps = getPersonsWithCatalog(filteredProjects, activeBoardId);
     return state.filters.persons.length > 0 ? ps.filter(p => state.filters.persons.includes(p)) : ps;
-  }, [filteredProjects, state.filters.persons]);
+  }, [filteredProjects, state.filters.persons, activeBoardId]);
+
+  const handleAddPerson = () => {
+    const clean = newPersonName.trim();
+    if (clean && activeBoardId) {
+      addPersonToCatalog(clean, activeBoardId);
+      setNewPersonName('');
+      setShowAddPerson(false);
+      // Force refresh by triggering a state update - we'll reload the page or use a context
+      window.location.reload();
+    }
+  };
 
   const summaries = useMemo(() => {
     return persons.map((person) => {
@@ -99,6 +112,40 @@ export function PersonSummaryCards() {
         </div>
         <p className="text-sm font-medium">No hay personas para mostrar</p>
         <p className="text-xs mt-1">Carga datos o ajusta los filtros.</p>
+        {showAddPerson ? (
+          <div className="mt-4 flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Nombre de persona"
+              value={newPersonName}
+              onChange={(e) => setNewPersonName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleAddPerson(); if (e.key === 'Escape') setShowAddPerson(false); }}
+              className="px-3 py-1.5 text-sm border border-border rounded-lg w-48"
+              autoFocus
+            />
+            <button
+              onClick={handleAddPerson}
+              disabled={!newPersonName.trim()}
+              className="px-3 py-1.5 text-sm bg-accent-blue text-white rounded-lg hover:bg-accent-blue/90 disabled:opacity-50"
+            >
+              Agregar
+            </button>
+            <button
+              onClick={() => { setShowAddPerson(false); setNewPersonName(''); }}
+              className="px-3 py-1.5 text-sm border border-border rounded-lg hover:bg-bg-secondary"
+            >
+              Cancelar
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => setShowAddPerson(true)}
+            className="mt-4 px-4 py-2 text-sm bg-accent-blue text-white rounded-lg hover:bg-accent-blue/90 flex items-center gap-2"
+          >
+            <Plus size={16} />
+            Agregar persona
+          </button>
+        )}
       </div>
     );
   }

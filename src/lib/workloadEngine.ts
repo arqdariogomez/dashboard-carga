@@ -16,6 +16,30 @@ export function loadPersonCatalogFromStorage(boardId: string | null): string[] {
   }
 }
 
+export function savePersonCatalogToStorage(boardId: string | null, persons: string[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const key = `workload-dashboard-person-catalog:${boardId || 'local'}`;
+    window.localStorage.setItem(key, JSON.stringify(persons));
+  } catch {
+    // ignore
+  }
+}
+
+export function addPersonToCatalog(name: string, boardId: string | null): string[] {
+  const current = loadPersonCatalogFromStorage(boardId);
+  const clean = name.trim();
+  if (!clean) return current;
+  
+  const lowerCurrent = new Set(current.map(p => p.toLowerCase()));
+  if (!lowerCurrent.has(clean.toLowerCase())) {
+    const updated = [...current, clean].sort();
+    savePersonCatalogToStorage(boardId, updated);
+    return updated;
+  }
+  return current;
+}
+
 export function getPersonsWithCatalog(projects: Project[], boardId: string | null): string[] {
   const projectPersons = getPersons(projects);
   const catalogPersons = loadPersonCatalogFromStorage(boardId);
