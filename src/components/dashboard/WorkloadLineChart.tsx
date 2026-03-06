@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useEffect, useMemo, useState, useCallback, useRef } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { getPersons } from '@/lib/workloadEngine';
 import { PERSON_COLORS } from '@/lib/constants';
@@ -245,6 +245,18 @@ export function WorkloadLineChart() {
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [groupBy, setGroupBy] = useState<GroupByOption>('person');
 
+  // Ref para el contenedor del gráfico
+  const chartContainerNodeRef = useRef<HTMLDivElement | null>(null);
+
+  const chartContainerRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      if (node) {
+        chartContainerNodeRef.current = node;
+      }
+    },
+    []
+  );
+
   const persons = useMemo(() => {
     const ps = getPersons(filteredProjects);
     return state.filters.persons.length > 0
@@ -376,20 +388,23 @@ export function WorkloadLineChart() {
 
   const handleChartClick = useCallback(
     (data: any) => {
-      if (!data || !data.activePayload || data.activePayload.length === 0) {
-        return;
+      // Intento 1: usar el payload de Recharts (más preciso)
+      if (data?.activePayload?.[0]?.payload?.date) {
+        const payloadDate = data.activePayload[0].payload.date;
+        const match = chartData.find((d) => d.date === payloadDate);
+        if (match) {
+          setSelectedDate(new Date(match.date + 'T12:00:00'));
+          return;
+        }
       }
 
-      const payload = data.activePayload[0]?.payload;
-      if (!payload?.date) {
-        return;
-      }
-
-      // payload.date ya es "yyyy-MM-dd", lo usamos directamente
-      // para buscar el match en chartData (evita cualquier issue de timezone)
-      const match = chartData.find((d) => d.date === payload.date);
-      if (match) {
-        setSelectedDate(new Date(match.date + 'T12:00:00'));
+      // Intento 2: usar activeLabel (Recharts lo provee con el label del eje X)
+      if (data?.activeLabel) {
+        const match = chartData.find((d) => d.label === data.activeLabel);
+        if (match) {
+          setSelectedDate(new Date(match.date + 'T12:00:00'));
+          return;
+        }
       }
     },
     [chartData]
@@ -652,6 +667,7 @@ export function WorkloadLineChart() {
 
         {/* ─── Chart container ─── */}
         <div
+          ref={chartContainerRef}
           className="workload-chart-container"
           style={{
             flex: 1,
@@ -660,6 +676,42 @@ export function WorkloadLineChart() {
             border: `1px solid ${COLORS.borderLight}`,
             background: COLORS.bg,
             padding: '16px 12px 8px 4px',
+          }}
+          onClick={(e) => {
+            // Solo actúa como fallback si Recharts no capturó el clic
+            const target = e.target as HTMLElement;
+            const tagName = target.tagName?.toLowerCase();
+
+            // Si el clic fue en el SVG directamente (área vacía del gráfico)
+            // Recharts no lo habrá capturado
+            if (tagName === 'svg' || target.classList.contains('recharts-surface')) {
+              const node = chartContainerNodeRef.current;
+              if (!node || chartData.length === 0 || !visibleRange) return;
+
+              const rect = node.getBoundingClientRect();
+              const clickX = e.clientX - rect.left;
+
+              // Descontar márgenes del gráfico (margin.left + yAxis width aprox)
+              const marginLeft = 56; // 8 (margin) + 48 (yAxis width)
+              const marginRight = 20;
+              const plotWidth = rect.width - marginLeft - marginRight;
+
+              if (clickX < marginLeft || clickX > rect.width - marginRight) return;
+
+              const relativeX = clickX - marginLeft;
+              const ratio = relativeX / plotWidth;
+
+              // Calcular índice dentro del rango visible
+              const visibleCount = visibleRange.endIndex - visibleRange.startIndex + 1;
+              const visibleIndex = Math.round(ratio * (visibleCount - 1));
+              const dataIndex = visibleRange.startIndex + visibleIndex;
+              const clampedIndex = Math.max(0, Math.min(dataIndex, chartData.length - 1));
+
+              const selected = chartData[clampedIndex];
+              if (selected?.date) {
+                setSelectedDate(new Date(selected.date + 'T12:00:00'));
+              }
+            }
           }}
         >
           <ResponsiveContainer width="100%" height="100%">
