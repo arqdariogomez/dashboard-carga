@@ -34,6 +34,11 @@ import { TreeConnectors } from '@/components/dashboard/TreeConnectors';
 import React from 'react';
 import { createPortal } from 'react-dom';
 
+// ────────────────────────────────────────────
+//  DESIGN TOKENS (Nuevo Sistema Evolucionado)
+// ────────────────────────────────────────────
+import { COLORS, TYPOGRAPHY, DIMENSIONS, SHADOWS, TRANSITIONS } from '@/lib/designTokens';
+
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 //  TYPES
 // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
@@ -2741,30 +2746,62 @@ export function GanttTimeline() {
           )}
         </div>
 
-        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
-        {/*  NAVIGATION BAR                             */}
-        {/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */}
-        <div className="mt-2 flex-shrink-0 space-y-1.5">
+        {/* ─── NAVIGATION BAR (Apple/shadcn/ui Style) ─── */}
+        <div style={{
+          marginTop: '8px',
+          flexShrink: 0,
+        }}>
           {/* Controls */}
-          <div className="flex items-center gap-2">
-            {/* Presets */}
-            <div className="flex items-center bg-gray-50 rounded-lg border border-gray-200 p-0.5">
-              {(Object.keys(PRESET_DAYS) as TimePreset[]).map((preset) => (
-                <button
-                  key={preset}
-                  onClick={() => applyPreset(preset)}
-                  className={`px-2 h-6 rounded-md text-[11px] font-medium transition-all ${
-                    activePreset === preset
-                      ? 'bg-white text-text-primary shadow-sm border border-gray-200'
-                      : 'text-text-secondary hover:text-text-primary hover:bg-white/50'
-                  }`}
-                >
-                  {PRESET_LABELS[preset]}
-                </button>
-              ))}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}>
+            {/* Presets - PillGroup Style */}
+            <div style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '2px',
+              padding: '3px',
+              background: COLORS.bgMuted,
+              borderRadius: DIMENSIONS.radius.sm,
+              border: `1px solid ${COLORS.border}`,
+            }}>
+              {(Object.keys(PRESET_DAYS) as TimePreset[]).map((preset) => {
+                const isActive = activePreset === preset;
+                return (
+                  <button
+                    key={preset}
+                    onClick={() => applyPreset(preset)}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: '4px 8px',
+                      borderRadius: '6px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: `all ${TRANSITIONS.hover}`,
+                      background: isActive ? COLORS.bg : 'transparent',
+                      boxShadow: isActive ? SHADOWS.sm : 'none',
+                      color: isActive ? COLORS.text : COLORS.textTertiary,
+                      fontSize: '11px',
+                      fontWeight: isActive ? 500 : 400,
+                      fontFamily: TYPOGRAPHY.fontFamily,
+                      minWidth: '28px',
+                    }}
+                  >
+                    {PRESET_LABELS[preset]}
+                  </button>
+                );
+              })}
             </div>
 
-            <div className="w-px h-5 bg-border" />
+            <div style={{
+              width: '1px',
+              height: '20px',
+              background: COLORS.border,
+            }} />
 
             {/* Navigation */}
             <button
@@ -2773,14 +2810,58 @@ export function GanttTimeline() {
                   viewStartDay - (viewEndDay - viewStartDay) * 0.5,
                 )
               }
-              className="h-7 w-7 rounded-md border border-gray-200 bg-white flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-gray-50 transition-colors"
+              style={{
+                height: DIMENSIONS.iconButtonSizeSm,
+                width: DIMENSIONS.iconButtonSizeSm,
+                borderRadius: DIMENSIONS.radius.sm,
+                border: `1px solid ${COLORS.border}`,
+                background: COLORS.bg,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: COLORS.textSecondary,
+                cursor: 'pointer',
+                transition: `all ${TRANSITIONS.hover}`,
+                fontFamily: TYPOGRAPHY.fontFamily,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = COLORS.bgMuted;
+                e.currentTarget.style.color = COLORS.text;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = COLORS.bg;
+                e.currentTarget.style.color = COLORS.textSecondary;
+              }}
               title="Retroceder"
             >
-              <ChevronsLeft size={14} />
+              <ChevronsLeft size={14} strokeWidth={1.5} />
             </button>
             <button
               onClick={() => panToDay(todayOffset)}
-              className="px-2.5 h-7 rounded-md border border-gray-200 bg-white text-xs font-medium text-text-secondary hover:text-text-primary hover:bg-gray-50 inline-flex items-center gap-1.5 transition-colors"
+              style={{
+                padding: '0 10px',
+                height: DIMENSIONS.iconButtonSizeSm,
+                borderRadius: DIMENSIONS.radius.sm,
+                border: `1px solid ${COLORS.border}`,
+                background: COLORS.bg,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                color: COLORS.textSecondary,
+                fontSize: '11px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                transition: `all ${TRANSITIONS.hover}`,
+                fontFamily: TYPOGRAPHY.fontFamily,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = COLORS.bgMuted;
+                e.currentTarget.style.color = COLORS.text;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = COLORS.bg;
+                e.currentTarget.style.color = COLORS.textSecondary;
+              }}
               title="Ir a hoy"
             >
               Hoy
@@ -2791,24 +2872,62 @@ export function GanttTimeline() {
                   viewEndDay + (viewEndDay - viewStartDay) * 0.5,
                 )
               }
-              className="h-7 w-7 rounded-md border border-gray-200 bg-white flex items-center justify-center text-text-secondary hover:text-text-primary hover:bg-gray-50 transition-colors"
+              style={{
+                height: DIMENSIONS.iconButtonSizeSm,
+                width: DIMENSIONS.iconButtonSizeSm,
+                borderRadius: DIMENSIONS.radius.sm,
+                border: `1px solid ${COLORS.border}`,
+                background: COLORS.bg,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: COLORS.textSecondary,
+                cursor: 'pointer',
+                transition: `all ${TRANSITIONS.hover}`,
+                fontFamily: TYPOGRAPHY.fontFamily,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = COLORS.bgMuted;
+                e.currentTarget.style.color = COLORS.text;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = COLORS.bg;
+                e.currentTarget.style.color = COLORS.textSecondary;
+              }}
               title="Avanzar"
             >
-              <ChevronsRight size={14} />
+              <ChevronsRight size={14} strokeWidth={1.5} />
             </button>
 
-            <div className="w-px h-5 bg-border" />
+            <div style={{
+              width: '1px',
+              height: '20px',
+              background: COLORS.border,
+            }} />
 
             {/* Zoom Slider */}
             <ZoomSlider zoom={zoomScale} onChange={zoomCentered} />
 
             {/* Zoom percentage */}
-            <span className="text-[11px] text-text-secondary tabular-nums min-w-[40px] text-center">
+            <span style={{
+              fontSize: '11px',
+              color: COLORS.textTertiary,
+              fontVariantNumeric: 'tabular-nums',
+              minWidth: '40px',
+              textAlign: 'center',
+              fontFamily: TYPOGRAPHY.fontFamily,
+            }}>
               {Math.round(zoomScale * 100)}%
             </span>
 
             {/* Date range */}
-            <div className="ml-auto text-[11px] text-text-secondary tabular-nums hidden sm:block">
+            <span style={{
+              marginLeft: 'auto',
+              fontSize: '11px',
+              color: COLORS.textTertiary,
+              fontVariantNumeric: 'tabular-nums',
+              fontFamily: TYPOGRAPHY.fontFamily,
+            }}>
               {format(
                 addDays(range.start, Math.floor(viewStartDay)),
                 'dd MMM',
@@ -2817,11 +2936,11 @@ export function GanttTimeline() {
               {format(
                 addDays(
                   range.start,
-                  Math.min(Math.floor(viewEndDay), totalDays - 1),
+                  Math.floor(viewEndDay)
                 ),
-                'dd MMM yyyy',
+                'dd MMM',
               )}
-            </div>
+            </span>
           </div>
         </div>
       </div>
