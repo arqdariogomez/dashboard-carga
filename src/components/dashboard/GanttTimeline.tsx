@@ -77,6 +77,8 @@ interface BarStyle {
   text: string;
   border: string;
   preview: string;
+  progress?: number;
+  assignee?: string | null;
 }
 
 interface BarProps {
@@ -85,6 +87,9 @@ interface BarProps {
   style: BarStyle;
   startOff: number;
   endOff: number;
+  progress?: number;
+  assignee?: string | null;
+  assigneeCount?: number;
 }
 
 interface HierarchyNode extends Project {
@@ -270,18 +275,32 @@ function computeBarProps(
         : colorMode === 'custom'
           ? cc
           : null;
+  
+  // ── Calcular progreso del proyecto (basado en días transcurridos vs totales)
+  const today = new Date();
+  const totalProjectDays = differenceInCalendarDays(project.endDate, project.startDate) + 1;
+  const elapsedDays = Math.max(0, Math.min(
+    differenceInCalendarDays(today, project.startDate) + 1,
+    totalProjectDays
+  ));
+  const progressPercentage = Math.max(0, Math.min(100, (elapsedDays / totalProjectDays) * 100));
+  
   const style: BarStyle = solid
     ? {
         bg: hexToRgba(solid, 0.2),
         text: solid,
         border: hexToRgba(solid, 0.42),
         preview: hexToRgba(solid, 0.28),
+        progress: progressPercentage,
+        assignee: project.assignees[0] || null,
       }
     : {
         bg: lc.bg,
         text: lc.text,
         border: `${lc.text}35`,
         preview: `${lc.text}30`,
+        progress: progressPercentage,
+        assignee: project.assignees[0] || null,
       };
 
   return {
@@ -290,6 +309,9 @@ function computeBarProps(
     style,
     startOff: sOff,
     endOff: eOff,
+    progress: progressPercentage,
+    assignee: project.assignees[0] || null,
+    assigneeCount: project.assignees.length,
   };
 }
 
@@ -927,33 +949,166 @@ const GanttRow = React.memo(function GanttRow({
           />
         ) : (
           <div
-            className="absolute z-[1] h-7 rounded-md flex items-center overflow-hidden cursor-pointer group/resize hover:shadow-md hover:brightness-[0.97] transition-all duration-150"
             style={{
+              position: 'absolute',
+              zIndex: 1,
+              height: '28px',
+              borderRadius: DIMENSIONS.radius.sm,
+              display: 'flex',
+              alignItems: 'center',
+              overflow: 'hidden',
+              cursor: 'pointer',
+              transition: `all ${TRANSITIONS.hover}`,
               left: visualLeft,
               width: visualWidth,
               background: bar.style.bg,
               border: `1px solid ${bar.style.border}`,
+              boxShadow: SHADOWS.sm,
             }}
-            onMouseEnter={(ev) => onBarHover(ev, node)}
-            onMouseLeave={onBarLeave}
+            onMouseEnter={(ev) => {
+              ev.currentTarget.style.boxShadow = SHADOWS.md;
+              ev.currentTarget.style.transform = 'translateY(-1px)';
+              onBarHover(ev, node);
+            }}
+            onMouseLeave={(ev) => {
+              ev.currentTarget.style.boxShadow = SHADOWS.sm;
+              ev.currentTarget.style.transform = 'translateY(0)';
+              onBarLeave();
+            }}
           >
+            {/* ── Avatar del asignado ── */}
+            {bar.assignee && (
+              <div
+                style={{
+                  position: 'absolute',
+                  right: '4px',
+                  width: '20px',
+                  height: '20px',
+                  borderRadius: DIMENSIONS.radius.full,
+                  background: COLORS.accent,
+                  color: '#fff',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  fontFamily: TYPOGRAPHY.fontFamily,
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                  zIndex: 2,
+                }}
+              >
+                {bar.assignee.charAt(0).toUpperCase()}
+              </div>
+            )}
+            
+            {/* ── Indicador de progreso ── */}
+            {bar.progress !== undefined && bar.progress > 0 && bar.progress < 100 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 0,
+                  top: 0,
+                  bottom: 0,
+                  width: `${bar.progress}%`,
+                  background: 'rgba(255, 255, 255, 0.15)',
+                  borderRadius: DIMENSIONS.radius.sm,
+                  pointerEvents: 'none',
+                }}
+              />
+            )}
+            
+            {/* ── Resize handle ── */}
             <div
-              className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 opacity-0 group-hover/resize:opacity-100 transition-opacity"
+              style={{
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                bottom: 0,
+                width: '8px',
+                cursor: 'ew-resize',
+                background: 'transparent',
+                opacity: 0,
+                transition: `opacity ${TRANSITIONS.hover}`,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.opacity = '1';
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.opacity = '0';
+                e.currentTarget.style.background = 'transparent';
+              }}
               onMouseDown={(e) => onStartBarResize(e, node, 'start')}
             />
-            {visualWidth > 40 && (
+            
+            {/* ── Texto del proyecto ── */}
+            {visualWidth > 60 && (
               <span
-                className="text-[10px] font-semibold truncate px-2 whitespace-nowrap leading-none"
                 style={{
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  paddingLeft: '8px',
+                  paddingRight: bar.assignee ? '32px' : '8px',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                   color: bar.style.text,
-                  textShadow: '0 0 3px rgba(255,255,255,0.8)',
+                  textShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                  lineHeight: '28px',
+                  fontFamily: TYPOGRAPHY.fontFamily,
                 }}
               >
                 {node.name}
               </span>
             )}
+            
+            {/* ── Indicador de múltiples asignados ── */}
+            {bar.assigneeCount && bar.assigneeCount > 1 && (
+              <div
+                style={{
+                  position: 'absolute',
+                  right: '4px',
+                  top: '2px',
+                  width: '16px',
+                  height: '16px',
+                  borderRadius: DIMENSIONS.radius.full,
+                  background: COLORS.textTertiary,
+                  color: COLORS.bg,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '9px',
+                  fontWeight: 600,
+                  fontFamily: TYPOGRAPHY.fontFamily,
+                  boxShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                  zIndex: 2,
+                }}
+              >
+                +{bar.assigneeCount - 1}
+              </div>
+            )}
+            
+            {/* ── Resize handle derecho ── */}
             <div
-              className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 opacity-0 group-hover/resize:opacity-100 transition-opacity"
+              style={{
+                position: 'absolute',
+                right: 0,
+                top: 0,
+                bottom: 0,
+                width: '8px',
+                cursor: 'ew-resize',
+                background: 'transparent',
+                opacity: 0,
+                transition: `opacity ${TRANSITIONS.hover}`,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.opacity = '1';
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.2)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.opacity = '0';
+                e.currentTarget.style.background = 'transparent';
+              }}
               onMouseDown={(e) => onStartBarResize(e, node, 'end')}
             />
           </div>
@@ -2382,100 +2537,29 @@ export function GanttTimeline() {
     <div className="p-4 flex-1 overflow-hidden flex flex-col">
       {/* â”€â”€ Toolbar â”€â”€ */}
       <div className="mb-3 space-y-2">
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          flexWrap: 'wrap',
-        }}>
-          <span style={{
-            fontSize: '11px',
-            color: COLORS.textTertiary,
-            fontFamily: TYPOGRAPHY.fontFamily,
-            fontWeight: 500,
-          }}>Vista:</span>
-          <div style={{ position: 'relative' }} ref={viewMenuRef}>
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs text-text-secondary">Vista:</span>
+          <div className="relative" ref={viewMenuRef}>
             <button
               type="button"
               onClick={() => setIsViewMenuOpen((prev) => !prev)}
-              style={{
-                height: DIMENSIONS.inputHeight,
-                borderRadius: DIMENSIONS.radius.sm,
-                border: `1px solid ${COLORS.border}`,
-                background: COLORS.bg,
-                padding: '0 10px',
-                fontSize: '11px',
-                color: COLORS.textSecondary,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                transition: `all ${TRANSITIONS.hover}`,
-                fontFamily: TYPOGRAPHY.fontFamily,
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = COLORS.bgMuted;
-                e.currentTarget.style.color = COLORS.text;
-                e.currentTarget.style.borderColor = COLORS.accentBorder;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = COLORS.bg;
-                e.currentTarget.style.color = COLORS.textSecondary;
-                e.currentTarget.style.borderColor = COLORS.border;
-              }}
+              className="h-8 rounded-md border border-border bg-white px-2.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-secondary inline-flex items-center gap-1.5"
             >
               {activeTimelineViewId === '__current__'
                 ? 'Sin vista'
                 : (timelineViews.find((v) => v.id === activeTimelineViewId)?.name || 'Vista')}
-              <ChevronDown size={12} strokeWidth={1.5} />
+              <ChevronDown size={12} />
             </button>
             {isViewMenuOpen && (
-              <div style={{
-                position: 'absolute',
-                left: 0,
-                top: '36px',
-                zIndex: 120,
-                width: '256px',
-                borderRadius: DIMENSIONS.radius.md,
-                border: `1px solid ${COLORS.border}`,
-                background: COLORS.bg,
-                boxShadow: SHADOWS.lg,
-                padding: '8px',
-              }}>
-                <div style={{
-                  fontSize: '11px',
-                  color: COLORS.textTertiary,
-                  marginBottom: '4px',
-                  fontFamily: TYPOGRAPHY.fontFamily,
-                  fontWeight: 500,
-                }}>Vista activa</div>
+              <div className="absolute left-0 top-9 z-[120] w-64 rounded-lg border border-border bg-white shadow-lg p-2">
+                <div className="text-[11px] text-text-secondary mb-1">Vista activa</div>
                 <select
                   value={activeTimelineViewId}
                   onChange={(e) => {
                     handleSelectTimelineView(e.target.value);
                     setIsViewMenuOpen(false);
                   }}
-                  style={{
-                    width: '100%',
-                    height: DIMENSIONS.inputHeight,
-                    borderRadius: DIMENSIONS.radius.sm,
-                    border: `1px solid ${COLORS.border}`,
-                    padding: '0 8px',
-                    fontSize: '11px',
-                    background: COLORS.bg,
-                    color: COLORS.textSecondary,
-                    fontFamily: TYPOGRAPHY.fontFamily,
-                    cursor: 'pointer',
-                    transition: `all ${TRANSITIONS.hover}`,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = COLORS.accentBorder;
-                    e.currentTarget.style.boxShadow = `0 0 0 1px ${COLORS.accentBorder}`;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = COLORS.border;
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
+                  className="w-full h-8 rounded-md border border-border px-2 text-xs bg-white"
                 >
                   <option value="__current__">Sin vista</option>
                   {timelineViews.map((view) => (
@@ -2484,41 +2568,14 @@ export function GanttTimeline() {
                     </option>
                   ))}
                 </select>
-                <div style={{
-                  marginTop: '8px',
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '4px',
-                }}>
+                <div className="mt-2 grid grid-cols-2 gap-1">
                   <button
                     type="button"
                     onClick={() => {
                       handleSaveTimelineView();
                       setIsViewMenuOpen(false);
                     }}
-                    style={{
-                      height: '28px',
-                      borderRadius: DIMENSIONS.radius.sm,
-                      border: `1px solid ${COLORS.border}`,
-                      background: COLORS.bg,
-                      padding: '0 8px',
-                      fontSize: '11px',
-                      color: COLORS.textSecondary,
-                      cursor: 'pointer',
-                      transition: `all ${TRANSITIONS.hover}`,
-                      fontFamily: TYPOGRAPHY.fontFamily,
-                      fontWeight: 500,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = COLORS.bgMuted;
-                      e.currentTarget.style.color = COLORS.text;
-                      e.currentTarget.style.borderColor = COLORS.accentBorder;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = COLORS.bg;
-                      e.currentTarget.style.color = COLORS.textSecondary;
-                      e.currentTarget.style.borderColor = COLORS.border;
-                    }}
+                    className="h-7 rounded border border-border px-2 text-[11px] text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
                   >
                     Guardar
                   </button>
@@ -2528,29 +2585,7 @@ export function GanttTimeline() {
                       handleSaveTimelineViewAs();
                       setIsViewMenuOpen(false);
                     }}
-                    style={{
-                      height: '28px',
-                      borderRadius: DIMENSIONS.radius.sm,
-                      border: `1px solid ${COLORS.border}`,
-                      background: COLORS.bg,
-                      padding: '0 8px',
-                      fontSize: '11px',
-                      color: COLORS.textSecondary,
-                      cursor: 'pointer',
-                      transition: `all ${TRANSITIONS.hover}`,
-                      fontFamily: TYPOGRAPHY.fontFamily,
-                      fontWeight: 500,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = COLORS.bgMuted;
-                      e.currentTarget.style.color = COLORS.text;
-                      e.currentTarget.style.borderColor = COLORS.accentBorder;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = COLORS.bg;
-                      e.currentTarget.style.color = COLORS.textSecondary;
-                      e.currentTarget.style.borderColor = COLORS.border;
-                    }}
+                    className="h-7 rounded border border-border px-2 text-[11px] text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
                   >
                     Guardar como
                   </button>
@@ -2561,33 +2596,7 @@ export function GanttTimeline() {
                       void handleDeleteTimelineView();
                       setIsViewMenuOpen(false);
                     }}
-                    style={{
-                      height: '28px',
-                      borderRadius: DIMENSIONS.radius.sm,
-                      border: `1px solid ${COLORS.danger}`,
-                      background: COLORS.bg,
-                      padding: '0 8px',
-                      fontSize: '11px',
-                      color: activeTimelineViewId === '__current__' ? COLORS.textDisabled : COLORS.danger,
-                      cursor: activeTimelineViewId === '__current__' ? 'not-allowed' : 'pointer',
-                      transition: `all ${TRANSITIONS.hover}`,
-                      fontFamily: TYPOGRAPHY.fontFamily,
-                      fontWeight: 500,
-                      gridColumn: '1 / -1',
-                      opacity: activeTimelineViewId === '__current__' ? 0.4 : 1,
-                    }}
-                    onMouseEnter={(e) => {
-                      if (activeTimelineViewId !== '__current__') {
-                        e.currentTarget.style.background = COLORS.dangerSoft;
-                        e.currentTarget.style.borderColor = COLORS.danger;
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (activeTimelineViewId !== '__current__') {
-                        e.currentTarget.style.background = COLORS.bg;
-                        e.currentTarget.style.borderColor = COLORS.danger;
-                      }
-                    }}
+                    className="col-span-2 h-7 rounded border border-border px-2 text-[11px] text-text-secondary hover:text-text-primary hover:bg-bg-secondary disabled:opacity-40 disabled:cursor-not-allowed"
                   >
                     Eliminar vista
                   </button>
