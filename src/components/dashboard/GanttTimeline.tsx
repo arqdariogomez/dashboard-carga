@@ -2450,11 +2450,35 @@ export function GanttTimeline() {
             )}
           </div>
 
-          <span className="text-xs text-text-secondary">Agrupar:</span>
+          <span style={{
+            fontSize: '11px',
+            color: COLORS.textTertiary,
+            fontFamily: TYPOGRAPHY.fontFamily,
+            fontWeight: 500,
+          }}>Agrupar:</span>
           <select
             value={groupMode}
             onChange={(e) => setGroupMode(e.target.value as GroupMode)}
-            className="h-8 rounded-md border border-border px-2 text-xs bg-white text-text-secondary"
+            style={{
+              height: DIMENSIONS.inputHeight,
+              borderRadius: DIMENSIONS.radius.sm,
+              border: `1px solid ${COLORS.border}`,
+              padding: '0 8px',
+              fontSize: '11px',
+              background: COLORS.bg,
+              color: COLORS.textSecondary,
+              fontFamily: TYPOGRAPHY.fontFamily,
+              cursor: 'pointer',
+              transition: `all ${TRANSITIONS.hover}`,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = COLORS.accentBorder;
+              e.currentTarget.style.boxShadow = `0 0 0 1px ${COLORS.accentBorder}`;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = COLORS.border;
+              e.currentTarget.style.boxShadow = 'none';
+            }}
             title="Agrupar"
           >
             <option value="none">Ninguno</option>
@@ -2466,7 +2490,26 @@ export function GanttTimeline() {
             <select
               value={customGroupField}
               onChange={(e) => setCustomGroupField(e.target.value as CustomGroupField)}
-              className="h-8 rounded-md border border-border px-2 text-xs bg-white text-text-secondary"
+              style={{
+                height: DIMENSIONS.inputHeight,
+                borderRadius: DIMENSIONS.radius.sm,
+                border: `1px solid ${COLORS.border}`,
+                padding: '0 8px',
+                fontSize: '11px',
+                background: COLORS.bg,
+                color: COLORS.textSecondary,
+                fontFamily: TYPOGRAPHY.fontFamily,
+                cursor: 'pointer',
+                transition: `all ${TRANSITIONS.hover}`,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = COLORS.accentBorder;
+                e.currentTarget.style.boxShadow = `0 0 0 1px ${COLORS.accentBorder}`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = COLORS.border;
+                e.currentTarget.style.boxShadow = 'none';
+              }}
               title="Campo de agrupacion"
             >
               <option value="branch">Sucursal</option>
@@ -2474,22 +2517,70 @@ export function GanttTimeline() {
             </select>
           )}
 
-          <span className="text-xs text-text-secondary">Orden:</span>
+          <span style={{
+            fontSize: '11px',
+            color: COLORS.textTertiary,
+            fontFamily: TYPOGRAPHY.fontFamily,
+            fontWeight: 500,
+          }}>Orden:</span>
           <select
             value={orderMode}
             onChange={(e) => setOrderMode(e.target.value as OrderMode)}
-            className="h-8 rounded-md border border-border px-2 text-xs bg-white text-text-secondary"
+            style={{
+              height: DIMENSIONS.inputHeight,
+              borderRadius: DIMENSIONS.radius.sm,
+              border: `1px solid ${COLORS.border}`,
+              padding: '0 8px',
+              fontSize: '11px',
+              background: COLORS.bg,
+              color: COLORS.textSecondary,
+              fontFamily: TYPOGRAPHY.fontFamily,
+              cursor: 'pointer',
+              transition: `all ${TRANSITIONS.hover}`,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = COLORS.accentBorder;
+              e.currentTarget.style.boxShadow = `0 0 0 1px ${COLORS.accentBorder}`;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = COLORS.border;
+              e.currentTarget.style.boxShadow = 'none';
+            }}
             title="Orden"
           >
             <option value="chronological">Cronologico</option>
             <option value="custom">Personalizado</option>
           </select>
 
-          <span className="text-xs text-text-secondary">Colorear:</span>
+          <span style={{
+            fontSize: '11px',
+            color: COLORS.textTertiary,
+            fontFamily: TYPOGRAPHY.fontFamily,
+            fontWeight: 500,
+          }}>Colorear:</span>
           <select
             value={colorMode}
             onChange={(e) => setColorMode(e.target.value as ColorMode)}
-            className="h-8 rounded-md border border-border px-2 text-xs bg-white text-text-secondary"
+            style={{
+              height: DIMENSIONS.inputHeight,
+              borderRadius: DIMENSIONS.radius.sm,
+              border: `1px solid ${COLORS.border}`,
+              padding: '0 8px',
+              fontSize: '11px',
+              background: COLORS.bg,
+              color: COLORS.textSecondary,
+              fontFamily: TYPOGRAPHY.fontFamily,
+              cursor: 'pointer',
+              transition: `all ${TRANSITIONS.hover}`,
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = COLORS.accentBorder;
+              e.currentTarget.style.boxShadow = `0 0 0 1px ${COLORS.accentBorder}`;
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = COLORS.border;
+              e.currentTarget.style.boxShadow = 'none';
+            }}
             title="Color"
           >
             <option value="load">Carga</option>
@@ -2501,7 +2592,26 @@ export function GanttTimeline() {
             <select
               value={customColorField}
               onChange={(e) => setCustomColorField(e.target.value as CustomColorField)}
-              className="h-8 rounded-md border border-border px-2 text-xs bg-white text-text-secondary"
+              style={{
+                height: DIMENSIONS.inputHeight,
+                borderRadius: DIMENSIONS.radius.sm,
+                border: `1px solid ${COLORS.border}`,
+                padding: '0 8px',
+                fontSize: '11px',
+                background: COLORS.bg,
+                color: COLORS.textSecondary,
+                fontFamily: TYPOGRAPHY.fontFamily,
+                cursor: 'pointer',
+                transition: `all ${TRANSITIONS.hover}`,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.borderColor = COLORS.accentBorder;
+                e.currentTarget.style.boxShadow = `0 0 0 1px ${COLORS.accentBorder}`;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.borderColor = COLORS.border;
+                e.currentTarget.style.boxShadow = 'none';
+              }}
               title="Campo de color"
             >
               <option value="branch">Sucursal</option>
@@ -2509,30 +2619,114 @@ export function GanttTimeline() {
             </select>
           )}
           {(activeToolbarChips.length > 0 || showMilestonesOnly) && (
-          <div className="ml-auto flex items-center gap-2 flex-wrap">
+          <div style={{
+            marginLeft: 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            flexWrap: 'wrap',
+          }}>
             {activeToolbarChips.map((chip) => (
               <button
                 key={chip.id}
                 type="button"
                 onClick={chip.onRemove}
-                className="h-6 rounded-full border border-border bg-white px-2 text-[11px] text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
+                style={{
+                  height: '24px',
+                  borderRadius: DIMENSIONS.radius.full,
+                  border: `1px solid ${COLORS.border}`,
+                  background: COLORS.bg,
+                  padding: '0 8px',
+                  fontSize: '11px',
+                  color: COLORS.textSecondary,
+                  cursor: 'pointer',
+                  transition: `all ${TRANSITIONS.hover}`,
+                  fontFamily: TYPOGRAPHY.fontFamily,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = COLORS.bgMuted;
+                  e.currentTarget.style.color = COLORS.text;
+                  e.currentTarget.style.borderColor = COLORS.borderSubtle;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = COLORS.bg;
+                  e.currentTarget.style.color = COLORS.textSecondary;
+                  e.currentTarget.style.borderColor = COLORS.border;
+                }}
               >
-                {chip.label} ×
+                {chip.label}
+                <span style={{
+                  fontSize: '10px',
+                  opacity: 0.7,
+                }}>×</span>
               </button>
             ))}
             {showMilestonesOnly && (
               <button
                 type="button"
                 onClick={() => setShowMilestonesOnly(false)}
-                className="h-6 rounded-full border border-border bg-white px-2 text-[11px] text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
+                style={{
+                  height: '24px',
+                  borderRadius: DIMENSIONS.radius.full,
+                  border: `1px solid ${COLORS.border}`,
+                  background: COLORS.bg,
+                  padding: '0 8px',
+                  fontSize: '11px',
+                  color: COLORS.textSecondary,
+                  cursor: 'pointer',
+                  transition: `all ${TRANSITIONS.hover}`,
+                  fontFamily: TYPOGRAPHY.fontFamily,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = COLORS.bgMuted;
+                  e.currentTarget.style.color = COLORS.text;
+                  e.currentTarget.style.borderColor = COLORS.borderSubtle;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = COLORS.bg;
+                  e.currentTarget.style.color = COLORS.textSecondary;
+                  e.currentTarget.style.borderColor = COLORS.border;
+                }}
               >
-                Solo hitos ×
+                Solo hitos
+                <span style={{
+                  fontSize: '10px',
+                  opacity: 0.7,
+                }}>×</span>
               </button>
             )}
             <button
               type="button"
               onClick={resetTimelineToolbar}
-              className="h-6 rounded-full border border-border px-2 text-[11px] text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
+              style={{
+                height: '24px',
+                borderRadius: DIMENSIONS.radius.full,
+                border: `1px solid ${COLORS.danger}`,
+                background: COLORS.bg,
+                padding: '0 8px',
+                fontSize: '11px',
+                color: COLORS.danger,
+                cursor: 'pointer',
+                transition: `all ${TRANSITIONS.hover}`,
+                fontFamily: TYPOGRAPHY.fontFamily,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = COLORS.dangerSoft;
+                e.currentTarget.style.borderColor = COLORS.danger;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = COLORS.bg;
+                e.currentTarget.style.borderColor = COLORS.danger;
+              }}
             >
               Limpiar todo
             </button>
