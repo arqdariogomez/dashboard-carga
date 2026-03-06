@@ -92,3 +92,28 @@ body {
 .fade-in {
   animation: fade-in 0.2s ease-out forwards;
 }
+
+/* ── Fix: eliminar outline de focus en el gráfico de Recharts ── */
+.workload-chart-container *:focus,
+.workload-chart-container *:focus-visible,
+.workload-chart-container *:active {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.workload-chart-container svg,
+.workload-chart-container svg * {
+  outline: none !important;
+}
+
+.workload-chart-container .recharts-wrapper,
+.workload-chart-container .recharts-surface {
+  outline: none !important;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.workload-chart-container {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-user-select: none;
+  user-select: none;
+}

@@ -647,6 +647,7 @@ export function WorkloadLineChart() {
 
         {/* ─── Chart container ─── */}
         <div
+          className="workload-chart-container"
           style={{
             flex: 1,
             minHeight: 0,
@@ -776,23 +777,28 @@ export function WorkloadLineChart() {
                   }}
                 />
               )}
-              {selectedDate && (
-                <ReferenceLine
-                  x={format(selectedDate, 'dd MMM', { locale: es })}
-                  stroke={COLORS.accent}
-                  strokeWidth={2}
-                  strokeDasharray="8 4"
-                  strokeOpacity={0.7}
-                  label={{
-                    value: '●',
-                    position: 'top',
-                    fontSize: 12,
-                    fill: COLORS.accent,
-                    fontFamily: FONT_STACK,
-                    fontWeight: 600,
-                  }}
-                />
-              )}
+              {selectedDate && (() => {
+                const selKey = format(selectedDate, 'yyyy-MM-dd');
+                const match = chartData.find((d) => d.date === selKey);
+                if (!match) return null;
+                return (
+                  <ReferenceLine
+                    x={match.label}
+                    stroke={COLORS.accent}
+                    strokeWidth={2}
+                    strokeDasharray="8 4"
+                    strokeOpacity={0.7}
+                    label={{
+                      value: '●',
+                      position: 'top',
+                      fontSize: 12,
+                      fill: COLORS.accent,
+                      fontFamily: FONT_STACK,
+                      fontWeight: 600,
+                    }}
+                  />
+                );
+              })()}
               {persons.map((person, i) => (
                 <Line
                   key={person}
