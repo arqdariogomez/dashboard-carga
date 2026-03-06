@@ -727,13 +727,6 @@ export function WorkloadLineChart() {
                   name,
                 ]}
                 labelFormatter={(label) => label}
-                cursor={{
-                  stroke: COLORS.accent,
-                  strokeWidth: 1,
-                  strokeDasharray: '4 4',
-                  strokeOpacity: 0.4,
-                  pointerEvents: 'none',
-                }}
               />
               <ReferenceLine
                 y={100}
