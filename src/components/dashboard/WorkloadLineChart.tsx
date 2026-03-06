@@ -655,6 +655,8 @@ export function WorkloadLineChart() {
             background: COLORS.bg,
             padding: '16px 12px 8px 4px',
             cursor: 'pointer',
+            outline: 'none',
+            boxShadow: 'none',
           }}
           onClick={(e) => {
             // Fallback: si el clic no viene del gráfico, intentar obtener la fecha más cercana
@@ -671,6 +673,18 @@ export function WorkloadLineChart() {
                 setSelectedDate(new Date(selectedData.date));
               }
             }
+          }}
+          onMouseDown={(e) => {
+            e.currentTarget.style.outline = 'none';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+          onFocus={(e) => {
+            e.currentTarget.style.outline = 'none';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.outline = 'none';
+            e.currentTarget.style.boxShadow = 'none';
           }}
         >
           <ResponsiveContainer width="100%" height="100%">
