@@ -379,12 +379,8 @@ export function WorkloadLineChart() {
     if (data?.activePayload?.[0]?.payload?.date) {
       const dateStr = data.activePayload[0].payload.date;
       console.log('🔍 Debug - Date string:', dateStr);
-      const date = new Date(dateStr);
-      console.log('🔍 Debug - Parsed date:', date);
-      if (!isNaN(date.getTime())) {
-        console.log('🔍 Debug - Setting selected date:', date);
-        setSelectedDate(date);
-      }
+      // Usar la misma lógica de mediodía para evitar timezone issues
+      setSelectedDate(new Date(dateStr + 'T12:00:00'));
     } else {
       console.log('🔍 Debug - No active payload or date found');
     }
@@ -671,7 +667,8 @@ export function WorkloadLineChart() {
               const selectedData = chartData[clampedIndex];
               if (selectedData?.date) {
                 console.log('🔍 Debug - Fallback click, index:', clampedIndex, 'date:', selectedData.date);
-                setSelectedDate(new Date(selectedData.date));
+                // Usar la misma lógica de mediodía para evitar timezone issues
+                setSelectedDate(new Date(selectedData.date + 'T12:00:00'));
               }
             }
           }}
