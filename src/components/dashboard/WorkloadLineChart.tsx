@@ -2,9 +2,32 @@ import { useEffect, useMemo, useState, useCallback } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { getPersons } from '@/lib/workloadEngine';
 import { PERSON_COLORS } from '@/lib/constants';
-import { format, isToday, startOfDay, endOfDay, subDays, subMonths } from 'date-fns';
+import { format, isToday, startOfDay, subDays, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { LineChart as LineChartIcon, X, ChevronLeft, ChevronRight, Users, Building, Tag, Clock, Calendar, Home, Target, Settings } from 'lucide-react';
+import { LineChart as LineChartIcon, X, ChevronLeft, ChevronRight, Users, Building, Tag, Clock, Calendar, Home, Target } from 'lucide-react';
+
+// Helper function para encontrar el índice de fecha más cercana
+function findClosestDateIndex(
+  chartData: Array<{ date: string }>,
+  target: Date
+): number {
+  const targetStr = format(target, 'yyyy-MM-dd');
+  const exact = chartData.findIndex(d => d.date === targetStr);
+  if (exact >= 0) return exact;
+
+  let closestDiff = Infinity;
+  let closestIdx = -1;
+  const targetTime = target.getTime();
+  
+  for (let i = 0; i < chartData.length; i++) {
+    const diff = Math.abs(new Date(chartData[i].date).getTime() - targetTime);
+    if (diff < closestDiff) {
+      closestDiff = diff;
+      closestIdx = i;
+    }
+  }
+  return closestIdx;
+}
 import {
   Line,
   XAxis,
@@ -94,34 +117,21 @@ export function WorkloadLineChart() {
   const yDomain = yMode === 'auto' ? [0, 'auto'] as const : [0, Number(yMode)] as const;
 
   const todayLabel = useMemo(() => {
-    const todayEntry = chartData.find((d) => 'isToday' in d && d.isToday);
+    const todayEntry = chartData.find((d) => (d as any).isToday === 1);
     return todayEntry?.label || null;
   }, [chartData]);
 
   // Navegación rápida a fechas predefinidas
   const navigateToDate = useCallback((targetDate: Date) => {
-    // Buscar la fecha más cercana en chartData
-    const targetDateStr = format(targetDate, 'yyyy-MM-dd');
-    const closestIndex = chartData.findIndex(d => d.date === targetDateStr);
+    const targetIndex = findClosestDateIndex(chartData, targetDate);
     
-    if (closestIndex >= 0) {
-      setSelectedDate(new Date(chartData[closestIndex].date));
-    } else {
-      // Si no hay fecha exacta, encontrar la más cercana
-      let closestDiff = Infinity;
-      let closestIdx = -1;
-      
-      chartData.forEach((d, idx) => {
-        const diff = Math.abs(new Date(d.date).getTime() - targetDate.getTime());
-        if (diff < closestDiff) {
-          closestDiff = diff;
-          closestIdx = idx;
-        }
-      });
-      
-      if (closestIdx >= 0) {
-        setSelectedDate(new Date(chartData[closestIdx].date));
-      }
+    if (targetIndex >= 0) {
+      setSelectedDate(new Date(chartData[targetIndex].date));
+      // Centrar el viewport alrededor de la fecha encontrada
+      const halfWindow = 22;
+      const startIndex = Math.max(0, targetIndex - halfWindow);
+      const endIndex = Math.min(chartData.length - 1, targetIndex + halfWindow);
+      setVisibleRange({ startIndex, endIndex });
     }
   }, [chartData]);
 
@@ -129,35 +139,14 @@ export function WorkloadLineChart() {
   const dayDetails = useMemo((): DayDetails | null => {
     if (!selectedDate || !filteredProjects.length) return null;
 
-    console.log('🔍 Debug - Fecha seleccionada:', selectedDate.toISOString().split('T')[0]);
-    console.log('🔍 Debug - Proyectos filtrados:', filteredProjects.length);
+    const sel = startOfDay(selectedDate).getTime();
 
     const projects = filteredProjects
       .filter(project => {
-        if (!project.startDate || !project.endDate) {
-          console.log('⚠️ Proyecto sin fechas:', project.name);
-          return false;
-        }
-        
-        const projectStart = new Date(project.startDate);
-        const projectEnd = new Date(project.endDate);
-        const selected = new Date(selectedDate);
-        
-        // Normalizar todas las fechas a medianoche para comparación precisa
-        const selectedDateOnly = new Date(selected.getFullYear(), selected.getMonth(), selected.getDate());
-        const projectStartOnly = new Date(projectStart.getFullYear(), projectStart.getMonth(), projectStart.getDate());
-        const projectEndOnly = new Date(projectEnd.getFullYear(), projectEnd.getMonth(), projectEnd.getDate());
-        
-        // Usar comparación simple de fechas
-        const isActive = selectedDateOnly >= projectStartOnly && selectedDateOnly <= projectEndOnly;
-        
-        console.log('📅 Proyecto:', project.name);
-        console.log('   - Inicio:', projectStartOnly.toISOString().split('T')[0]);
-        console.log('   - Fin:', projectEndOnly.toISOString().split('T')[0]);
-        console.log('   - Seleccionado:', selectedDateOnly.toISOString().split('T')[0]);
-        console.log('   - Activo:', isActive);
-        
-        return isActive;
+        if (!project.startDate || !project.endDate) return false;
+        const start = startOfDay(new Date(project.startDate)).getTime();
+        const end = startOfDay(new Date(project.endDate)).getTime();
+        return sel >= start && sel <= end;
       })
       .map(project => ({
         id: project.id,
@@ -172,15 +161,13 @@ export function WorkloadLineChart() {
         endDate: new Date(project.endDate!),
       }));
 
-    console.log('🔍 Debug - Proyectos encontrados para el día:', projects.length);
-
     return { date: selectedDate, projects };
   }, [selectedDate, filteredProjects]);
 
   // Manejador de clic en el gráfico
   const handleChartClick = useCallback((data: any) => {
-    if (data && data.activeLabel) {
-      const dateStr = data.activeLabel;
+    if (data?.activePayload?.[0]?.payload?.date) {
+      const dateStr = data.activePayload[0].payload.date;
       const date = new Date(dateStr);
       if (!isNaN(date.getTime())) {
         setSelectedDate(date);
@@ -206,6 +193,12 @@ export function WorkloadLineChart() {
     }
   }, [selectedDate, chartData]);
 
+  // Calcular índice de fecha seleccionada una vez
+  const selectedDateIndex = useMemo(() => {
+    if (!selectedDate) return -1;
+    return chartData.findIndex(d => d.date === format(selectedDate, 'yyyy-MM-dd'));
+  }, [selectedDate, chartData]);
+
   if (chartData.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
@@ -219,8 +212,8 @@ export function WorkloadLineChart() {
   }
 
   return (
-    <div className="flex-1 min-h-0 flex">
-      <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6 flex-1 min-h-0 flex flex-col">
+    <div className="flex-1 min-h-0 flex flex-row">
+      <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6 flex-1 min-h-0 flex flex-col min-w-0">
         {/* Barra de herramientas moderna */}
         <div className="mb-6 flex items-center justify-between gap-4 flex-shrink-0">
           {/* Controles de escala */}
@@ -266,9 +259,9 @@ export function WorkloadLineChart() {
                   if (chartData.length === 0) return;
                   setVisibleRange({ startIndex: 0, endIndex: chartData.length - 1 });
                 }}
-                className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all duration-200"
+                className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all duration-200 flex items-center gap-1.5"
               >
-                <Target size={14} className="mr-1" />
+                <Target size={14} />
                 Ajustar
               </button>
             </div>
@@ -448,7 +441,7 @@ export function WorkloadLineChart() {
               <button
                 onClick={() => navigateDay('prev')}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
-                disabled={!chartData.find(d => d.date === format(selectedDate, 'yyyy-MM-dd')) || chartData.findIndex(d => d.date === format(selectedDate, 'yyyy-MM-dd')) === 0}
+                disabled={selectedDateIndex <= 0}
               >
                 <ChevronLeft size={18} className="text-gray-400" />
               </button>
@@ -460,7 +453,7 @@ export function WorkloadLineChart() {
               <button
                 onClick={() => navigateDay('next')}
                 className="p-2 hover:bg-gray-100 rounded-lg transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
-                disabled={!chartData.find(d => d.date === format(selectedDate, 'yyyy-MM-dd')) || chartData.findIndex(d => d.date === format(selectedDate, 'yyyy-MM-dd')) === chartData.length - 1}
+                disabled={selectedDateIndex < 0 || selectedDateIndex >= chartData.length - 1}
               >
                 <ChevronRight size={18} className="text-gray-400" />
               </button>
