@@ -366,7 +366,7 @@ export function WorkloadLineChart() {
             ? 'low'
             : project.priority === 2
             ? 'medium'
-            : ('high' as 'low' | 'medium' | 'high'),
+            : 'high',
         startDate: new Date(project.startDate!),
         endDate: new Date(project.endDate!),
       }));
@@ -375,12 +375,18 @@ export function WorkloadLineChart() {
   }, [selectedDate, filteredProjects]);
 
   const handleChartClick = useCallback((data: any) => {
+    console.log('🔍 Debug - Chart click data:', data);
     if (data?.activePayload?.[0]?.payload?.date) {
       const dateStr = data.activePayload[0].payload.date;
+      console.log('🔍 Debug - Date string:', dateStr);
       const date = new Date(dateStr);
+      console.log('🔍 Debug - Parsed date:', date);
       if (!isNaN(date.getTime())) {
+        console.log('🔍 Debug - Setting selected date:', date);
         setSelectedDate(date);
       }
+    } else {
+      console.log('🔍 Debug - No active payload or date found');
     }
   }, []);
 
@@ -648,6 +654,23 @@ export function WorkloadLineChart() {
             border: `1px solid ${COLORS.borderLight}`,
             background: COLORS.bg,
             padding: '16px 12px 8px 4px',
+            cursor: 'pointer',
+          }}
+          onClick={(e) => {
+            // Fallback: si el clic no viene del gráfico, intentar obtener la fecha más cercana
+            const rect = e.currentTarget.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const width = rect.width;
+            
+            if (chartData.length > 0) {
+              const index = Math.floor((x / width) * chartData.length);
+              const clampedIndex = Math.max(0, Math.min(index, chartData.length - 1));
+              const selectedData = chartData[clampedIndex];
+              if (selectedData?.date) {
+                console.log('🔍 Debug - Fallback click, index:', clampedIndex, 'date:', selectedData.date);
+                setSelectedDate(new Date(selectedData.date));
+              }
+            }
           }}
         >
           <ResponsiveContainer width="100%" height="100%">
