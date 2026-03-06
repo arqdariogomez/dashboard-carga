@@ -4,7 +4,7 @@ import { getPersons } from '@/lib/workloadEngine';
 import { PERSON_COLORS } from '@/lib/constants';
 import { format, isToday, startOfDay, endOfDay, subDays, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { LineChart as LineChartIcon, X, ChevronLeft, ChevronRight, Users, Building, Tag, Clock } from 'lucide-react';
+import { LineChart as LineChartIcon, X, ChevronLeft, ChevronRight, Users, Building, Tag, Clock, Calendar, Home, Target, Settings } from 'lucide-react';
 import {
   Line,
   XAxis,
@@ -219,116 +219,143 @@ export function WorkloadLineChart() {
   }
 
   return (
-    <div className="p-3 flex-1 min-h-0 flex">
-      <div className="bg-white rounded-xl border border-border p-3 flex-1 min-h-0 flex flex-col">
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setYMode('auto')}
-              className={`px-2 py-1 text-[11px] rounded-md border ${yMode === 'auto' ? 'bg-text-primary text-white border-text-primary' : 'bg-white text-text-secondary border-border hover:bg-bg-secondary'}`}
-            >
-              Escala auto
-            </button>
-            <button
-              type="button"
-              onClick={() => setYMode('200')}
-              className={`px-2 py-1 text-[11px] rounded-md border ${yMode === '200' ? 'bg-text-primary text-white border-text-primary' : 'bg-white text-text-secondary border-border hover:bg-bg-secondary'}`}
-            >
-              Tope 200%
-            </button>
-            <button
-              type="button"
-              onClick={() => setYMode('300')}
-              className={`px-2 py-1 text-[11px] rounded-md border ${yMode === '300' ? 'bg-text-primary text-white border-text-primary' : 'bg-white text-text-secondary border-border hover:bg-bg-secondary'}`}
-            >
-              Tope 300%
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (chartData.length === 0) return;
-                setVisibleRange({ startIndex: 0, endIndex: chartData.length - 1 });
-              }}
-              className="px-2 py-1 text-[11px] rounded-md border border-border bg-white text-text-secondary hover:bg-bg-secondary"
-            >
-              Ajustar rango
-            </button>
+    <div className="flex-1 min-h-0 bg-gray-50/50">
+      <div className="bg-white rounded-2xl border border-gray-200/60 shadow-sm p-6 flex-1 min-h-0 flex flex-col">
+        {/* Barra de herramientas moderna */}
+        <div className="mb-6 flex items-center justify-between gap-4">
+          {/* Controles de escala */}
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 p-1 bg-gray-50 rounded-lg border border-gray-200/60">
+              <button
+                type="button"
+                onClick={() => setYMode('auto')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
+                  yMode === 'auto' 
+                    ? 'bg-blue-500 text-white shadow-sm' 
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+              >
+                Auto
+              </button>
+              <button
+                type="button"
+                onClick={() => setYMode('200')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
+                  yMode === '200' 
+                    ? 'bg-blue-500 text-white shadow-sm' 
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+              >
+                200%
+              </button>
+              <button
+                type="button"
+                onClick={() => setYMode('300')}
+                className={`px-3 py-1.5 text-sm font-medium rounded-md transition-all duration-200 ${
+                  yMode === '300' 
+                    ? 'bg-blue-500 text-white shadow-sm' 
+                    : 'text-gray-600 hover:text-gray-900 hover:bg-gray-100'
+                }`}
+              >
+                300%
+              </button>
+              <div className="w-px h-6 bg-gray-200 mx-1" />
+              <button
+                type="button"
+                onClick={() => {
+                  if (chartData.length === 0) return;
+                  setVisibleRange({ startIndex: 0, endIndex: chartData.length - 1 });
+                }}
+                className="px-3 py-1.5 text-sm font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-100 rounded-md transition-all duration-200"
+              >
+                <Target size={14} className="mr-1" />
+                Ajustar
+              </button>
+            </div>
           </div>
           
           {/* Botones de navegación rápida */}
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => navigateToDate(new Date())}
-              className="px-2 py-1 text-[11px] bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-            >
-              Hoy
-            </button>
-            <button
-              onClick={() => navigateToDate(subDays(new Date(), 14))}
-              className="px-2 py-1 text-[11px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
-            >
-              2S
-            </button>
-            <button
-              onClick={() => navigateToDate(subMonths(new Date(), 1))}
-              className="px-2 py-1 text-[11px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
-            >
-              1M
-            </button>
-            <button
-              onClick={() => navigateToDate(subMonths(new Date(), 3))}
-              className="px-2 py-1 text-[11px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
-            >
-              3M
-            </button>
-            <button
-              onClick={() => navigateToDate(chartData.length > 0 ? new Date(chartData[0].date) : new Date())}
-              className="px-2 py-1 text-[11px] bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
-            >
-              Todo
-            </button>
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 p-1 bg-gray-50 rounded-lg border border-gray-200/60">
+              <button
+                onClick={() => navigateToDate(new Date())}
+                className="px-3 py-1.5 text-sm font-medium bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-all duration-200 shadow-sm flex items-center gap-1.5"
+              >
+                <Home size={14} />
+                Hoy
+              </button>
+              <button
+                onClick={() => navigateToDate(subDays(new Date(), 14))}
+                className="px-3 py-1.5 text-sm font-medium bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-all duration-200 flex items-center gap-1.5"
+              >
+                <Calendar size={14} />
+                2S
+              </button>
+              <button
+                onClick={() => navigateToDate(subMonths(new Date(), 1))}
+                className="px-3 py-1.5 text-sm font-medium bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-all duration-200 flex items-center gap-1.5"
+              >
+                1M
+              </button>
+              <button
+                onClick={() => navigateToDate(subMonths(new Date(), 3))}
+                className="px-3 py-1.5 text-sm font-medium bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-all duration-200 flex items-center gap-1.5"
+              >
+                3M
+              </button>
+              <button
+                onClick={() => navigateToDate(chartData.length > 0 ? new Date(chartData[0].date) : new Date())}
+                className="px-3 py-1.5 text-sm font-medium bg-gray-100 text-gray-700 rounded-md hover:bg-gray-200 transition-all duration-200 flex items-center gap-1.5"
+              >
+                Todo
+              </button>
+            </div>
           </div>
           
-          <div className="flex items-center gap-2 flex-wrap justify-end">
+          {/* Leyenda de personas */}
+          <div className="flex items-center gap-3 flex-wrap justify-end">
             {persons.map((person, i) => (
-              <span key={person} className="inline-flex items-center gap-1 text-[11px] text-text-secondary">
-                <span className="inline-block h-2.5 w-2.5 rounded-full" style={{ backgroundColor: PERSON_COLORS[i % PERSON_COLORS.length] }} />
-                {person}
-              </span>
+              <div key={person} className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 rounded-lg border border-gray-200/60">
+                <div className="w-3 h-3 rounded-full shadow-sm" style={{ backgroundColor: PERSON_COLORS[i % PERSON_COLORS.length] }} />
+                <span className="text-sm font-medium text-gray-700">{person}</span>
+              </div>
             ))}
           </div>
         </div>
-        <div className="flex-1 min-h-0">
+        
+        {/* Contenedor del gráfico */}
+        <div className="flex-1 min-h-0 bg-gray-50/30 rounded-xl p-4">
         <ResponsiveContainer width="100%" height="100%">
           <ComposedChart 
             data={chartData} 
-            margin={{ top: 8, right: 12, left: 0, bottom: 8 }}
+            margin={{ top: 16, right: 20, left: 8, bottom: 16 }}
             onClick={handleChartClick}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke="#E9E9E7" />
+            <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" strokeOpacity={0.5} />
             <XAxis
               dataKey="label"
-              tick={{ fontSize: 11, fill: '#787774' }}
+              tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Inter, system-ui, sans-serif' }}
               tickLine={false}
-              axisLine={{ stroke: '#E9E9E7' }}
+              axisLine={{ stroke: '#E5E7EB', strokeWidth: 1 }}
               interval="preserveStartEnd"
             />
             <YAxis
-              tick={{ fontSize: 11, fill: '#787774' }}
+              tick={{ fontSize: 11, fill: '#6B7280', fontFamily: 'Inter, system-ui, sans-serif' }}
               tickLine={false}
-              axisLine={{ stroke: '#E9E9E7' }}
+              axisLine={{ stroke: '#E5E7EB', strokeWidth: 1 }}
               tickFormatter={(v) => `${v}%`}
               domain={yDomain}
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#fff',
-                border: '1px solid #E9E9E7',
-                borderRadius: '8px',
-                fontSize: '11px',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                padding: '10px 14px',
+                backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                border: '1px solid rgba(229, 231, 235, 0.8)',
+                borderRadius: '12px',
+                fontSize: '12px',
+                fontFamily: 'Inter, system-ui, sans-serif',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -2px rgba(0, 0, 0, 0.06)',
+                padding: '12px 16px',
+                backdropFilter: 'blur(8px)',
               }}
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
               formatter={(value: any, name: any) => [`${value}%`, name]}
@@ -336,31 +363,33 @@ export function WorkloadLineChart() {
             />
             <ReferenceLine
               y={100}
-              stroke="#E2945E"
-              strokeDasharray="5 5"
-              label={{ value: '100% capacidad', position: 'insideTopRight', fontSize: 10, fill: '#E2945E' }}
+              stroke="#F59E0B"
+              strokeDasharray="8 4"
+              strokeWidth={2}
+              label={{ value: '100% capacidad', position: 'insideTopRight', fontSize: 11, fill: '#F59E0B', fontFamily: 'Inter, system-ui, sans-serif' }}
             />
             {todayLabel && (
               <ReferenceLine
                 x={todayLabel}
-                stroke="#F87171"
-                strokeDasharray="4 4"
-                strokeWidth={1.5}
-                label={{ value: 'HOY', position: 'top', fontSize: 9, fill: '#F87171', fontWeight: 'bold' }}
+                stroke="#EF4444"
+                strokeDasharray="6 3"
+                strokeWidth={2}
+                label={{ value: 'HOY', position: 'top', fontSize: 10, fill: '#EF4444', fontFamily: 'Inter, system-ui, sans-serif', fontWeight: 600 }}
               />
             )}
             {selectedDate && (
               <ReferenceLine
                 x={format(selectedDate, 'dd MMM', { locale: es })}
                 stroke="#3B82F6"
-                strokeWidth={2}
-                strokeDasharray="6 3"
+                strokeWidth={2.5}
+                strokeDasharray="8 4"
                 label={{ 
                   value: 'Seleccionado', 
                   position: 'top', 
-                  fontSize: 9, 
+                  fontSize: 10, 
                   fill: '#3B82F6', 
-                  fontWeight: 'bold' 
+                  fontFamily: 'Inter, system-ui, sans-serif',
+                  fontWeight: 600
                 }}
               />
             )}
@@ -371,15 +400,15 @@ export function WorkloadLineChart() {
                 dataKey={person}
                 stroke={PERSON_COLORS[i % PERSON_COLORS.length]}
                 strokeWidth={2.5}
-                dot={canRenderDots ? { r: 2, fill: PERSON_COLORS[i % PERSON_COLORS.length] } : false}
-                activeDot={{ r: 5, strokeWidth: 2, stroke: '#fff' }}
+                dot={canRenderDots ? { r: 3, fill: PERSON_COLORS[i % PERSON_COLORS.length], strokeWidth: 2, stroke: '#fff' } : false}
+                activeDot={{ r: 6, strokeWidth: 2.5, stroke: '#fff' }}
                 isAnimationActive={false}
               />
             ))}
             {visibleRange && (
               <Brush
                 dataKey="label"
-                height={24}
+                height={32}
                 startIndex={visibleRange.startIndex}
                 endIndex={visibleRange.endIndex}
                 onChange={(next) => {
@@ -387,8 +416,9 @@ export function WorkloadLineChart() {
                     setVisibleRange({ startIndex: next.startIndex, endIndex: next.endIndex });
                   }
                 }}
-                travellerWidth={14}
-                stroke="#9CA3AF"
+                travellerWidth={16}
+                stroke="#CBD5E1"
+                fill="#F8FAFC"
               />
             )}
           </ComposedChart>
@@ -398,49 +428,51 @@ export function WorkloadLineChart() {
       
       {/* Sidebar de detalles del día */}
       {selectedDate && dayDetails && (
-        <div className="w-80 bg-white border-l border-border flex flex-col">
+        <div className="w-96 bg-white border-l border-gray-200/60 shadow-lg flex flex-col">
           {/* Header del sidebar */}
-          <div className="p-4 border-b border-border">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-text-primary">
+          <div className="p-6 border-b border-gray-200/60 bg-gray-50/30">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-semibold text-gray-900">
                 {format(selectedDate, "d 'de' MMMM 'de' yyyy", { locale: es })}
               </h3>
               <button
                 onClick={() => setSelectedDate(null)}
-                className="p-1 hover:bg-bg-secondary rounded-md transition-colors"
+                className="p-2 hover:bg-gray-100 rounded-lg transition-all duration-200 group"
               >
-                <X size={16} className="text-text-secondary" />
+                <X size={18} className="text-gray-400 group-hover:text-gray-600 transition-colors" />
               </button>
             </div>
             
             {/* Navegación entre días */}
-            <div className="flex items-center justify-center gap-2 mb-3">
+            <div className="flex items-center justify-center gap-3 mb-4">
               <button
                 onClick={() => navigateDay('prev')}
-                className="p-1 hover:bg-bg-secondary rounded-md transition-colors disabled:opacity-50"
+                className="p-2 hover:bg-gray-100 rounded-lg transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
                 disabled={!chartData.find(d => d.date === format(selectedDate, 'yyyy-MM-dd')) || chartData.findIndex(d => d.date === format(selectedDate, 'yyyy-MM-dd')) === 0}
               >
-                <ChevronLeft size={16} className="text-text-secondary" />
+                <ChevronLeft size={18} className="text-gray-400" />
               </button>
-              <span className="text-xs text-text-secondary">
-                {dayDetails.projects.length} proyecto{dayDetails.projects.length !== 1 ? 's' : ''}
-              </span>
+              <div className="px-4 py-2 bg-blue-50 border border-blue-200 rounded-lg">
+                <span className="text-sm font-semibold text-blue-700">
+                  {dayDetails.projects.length} proyecto{dayDetails.projects.length !== 1 ? 's' : ''}
+                </span>
+              </div>
               <button
                 onClick={() => navigateDay('next')}
-                className="p-1 hover:bg-bg-secondary rounded-md transition-colors disabled:opacity-50"
+                className="p-2 hover:bg-gray-100 rounded-lg transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed"
                 disabled={!chartData.find(d => d.date === format(selectedDate, 'yyyy-MM-dd')) || chartData.findIndex(d => d.date === format(selectedDate, 'yyyy-MM-dd')) === chartData.length - 1}
               >
-                <ChevronRight size={16} className="text-text-secondary" />
+                <ChevronRight size={18} className="text-gray-400" />
               </button>
             </div>
             
             {/* Toggle de agrupación */}
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-text-secondary">Agrupar por:</span>
+            <div className="flex items-center gap-3">
+              <span className="text-sm font-medium text-gray-600">Agrupar por:</span>
               <select
                 value={groupBy}
                 onChange={(e) => setGroupBy(e.target.value as GroupByOption)}
-                className="text-xs px-2 py-1 border border-border rounded-md bg-white text-text-primary"
+                className="text-sm px-4 py-2 bg-white border border-gray-200 rounded-lg font-medium text-gray-700 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200"
               >
                 <option value="person">Persona</option>
                 <option value="branch">Sucursal</option>
@@ -450,58 +482,82 @@ export function WorkloadLineChart() {
           </div>
           
           {/* Lista de proyectos */}
-          <div className="flex-1 overflow-y-auto p-4">
+          <div className="flex-1 overflow-y-auto p-6">
             {dayDetails.projects.length === 0 ? (
-              <div className="text-center py-8">
-                <p className="text-sm text-text-secondary">No hay proyectos para este día</p>
+              <div className="text-center py-12">
+                <div className="w-16 h-16 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                  <Calendar size={24} className="text-gray-400" />
+                </div>
+                <p className="text-gray-500 font-medium">No hay proyectos para este día</p>
+                <p className="text-gray-400 text-sm mt-1">Selecciona otra fecha para ver detalles</p>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 {dayDetails.projects.map((project) => (
                   <div
                     key={project.id}
-                    className="p-3 bg-bg-secondary rounded-lg border border-border"
+                    className="p-4 bg-gray-50 rounded-xl border border-gray-200/60 hover:shadow-md transition-all duration-200 hover:border-gray-300/80"
                   >
-                    <div className="flex items-start justify-between mb-2">
-                      <h4 className="font-medium text-text-primary text-sm leading-tight">
+                    <div className="flex items-start justify-between mb-3">
+                      <h4 className="font-semibold text-gray-900 text-base leading-tight flex-1 pr-3">
                         {project.name}
                       </h4>
-                      <span className={`px-2 py-1 text-[10px] rounded-full ${
+                      <span className={`px-3 py-1 text-xs font-semibold rounded-full transition-all duration-200 ${
                         project.priority === 'high' 
-                          ? 'bg-red-100 text-red-700'
+                          ? 'bg-red-100 text-red-700 border border-red-200'
                           : project.priority === 'medium'
-                          ? 'bg-yellow-100 text-yellow-700'
-                          : 'bg-green-100 text-green-700'
+                          ? 'bg-amber-100 text-amber-700 border border-amber-200'
+                          : 'bg-green-100 text-green-700 border border-green-200'
                       }`}>
                         {project.priority === 'high' ? 'Alta' : project.priority === 'medium' ? 'Media' : 'Baja'}
                       </span>
                     </div>
                     
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2 text-xs text-text-secondary">
-                        <Users size={12} />
-                        <span>{project.assignee}</span>
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-3 text-sm text-gray-600">
+                        <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
+                          <Users size={16} className="text-blue-600" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900">{project.assignee}</div>
+                          <div className="text-xs text-gray-500">Asignado a</div>
+                        </div>
                       </div>
                       
                       {project.branch && (
-                        <div className="flex items-center gap-2 text-xs text-text-secondary">
-                          <Building size={12} />
-                          <span>{project.branch}</span>
+                        <div className="flex items-center gap-3 text-sm text-gray-600">
+                          <div className="w-8 h-8 bg-purple-50 rounded-lg flex items-center justify-center">
+                            <Building size={16} className="text-purple-600" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-gray-900">{project.branch}</div>
+                            <div className="text-xs text-gray-500">Sucursal</div>
+                          </div>
                         </div>
                       )}
                       
                       {project.type && (
-                        <div className="flex items-center gap-2 text-xs text-text-secondary">
-                          <Tag size={12} />
-                          <span>{project.type}</span>
+                        <div className="flex items-center gap-3 text-sm text-gray-600">
+                          <div className="w-8 h-8 bg-emerald-50 rounded-lg flex items-center justify-center">
+                            <Tag size={16} className="text-emerald-600" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-gray-900">{project.type}</div>
+                            <div className="text-xs text-gray-500">Tipo</div>
+                          </div>
                         </div>
                       )}
                       
-                      <div className="flex items-center gap-2 text-xs text-text-secondary">
-                        <Clock size={12} />
-                        <span>
-                          {format(project.startDate, 'd MMM', { locale: es })} - {format(project.endDate, 'd MMM', { locale: es })}
-                        </span>
+                      <div className="flex items-center gap-3 text-sm text-gray-600">
+                        <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center">
+                          <Clock size={16} className="text-orange-600" />
+                        </div>
+                        <div>
+                          <div className="font-medium text-gray-900">
+                            {format(project.startDate, 'd MMM', { locale: es })} - {format(project.endDate, 'd MMM', { locale: es })}
+                          </div>
+                          <div className="text-xs text-gray-500">Duración</div>
+                        </div>
                       </div>
                     </div>
                   </div>
