@@ -276,14 +276,10 @@ function computeBarProps(
           ? cc
           : null;
   
-  // ── Calcular progreso del proyecto (basado en días transcurridos vs totales)
-  const today = new Date();
-  const totalProjectDays = differenceInCalendarDays(project.endDate, project.startDate) + 1;
-  const elapsedDays = Math.max(0, Math.min(
-    differenceInCalendarDays(today, project.startDate) + 1,
-    totalProjectDays
-  ));
-  const progressPercentage = Math.max(0, Math.min(100, (elapsedDays / totalProjectDays) * 100));
+  // ── Leer progreso desde la columna progress (fallback a null si no existe)
+  const progressPercentage = project.progress !== undefined && project.progress !== null 
+    ? Math.max(0, Math.min(100, project.progress))
+    : null;
   
   const style: BarStyle = solid
     ? {

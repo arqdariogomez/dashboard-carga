@@ -11,6 +11,8 @@ export interface Project {
   blockedBy: string | null;
   blocksTo: string | null;
   reportedLoad: number | null;
+  // Progress (0-100 percentage)
+  progress?: number | null;
   // Hierarchy
   parentId?: string | null;
   isExpanded?: boolean;
