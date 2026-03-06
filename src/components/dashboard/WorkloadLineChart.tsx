@@ -47,7 +47,10 @@ function findClosestDateIndex(
   const targetTime = target.getTime();
 
   for (let i = 0; i < chartData.length; i++) {
-    const diff = Math.abs(new Date(chartData[i].date).getTime() - targetTime);
+    // ── FIX: parsear la fecha sin desfase de timezone ──
+    const [year, month, day] = chartData[i].date.split('-').map(Number);
+    const localDate = new Date(year, month - 1, day); // ← meses 0-indexed
+    const diff = Math.abs(localDate.getTime() - targetTime);
     if (diff < closestDiff) {
       closestDiff = diff;
       closestIdx = i;
@@ -343,7 +346,10 @@ export function WorkloadLineChart() {
     (targetDate: Date) => {
       const targetIndex = findClosestDateIndex(chartData, targetDate);
       if (targetIndex >= 0) {
-        setSelectedDate(new Date(chartData[targetIndex].date));
+        // ── FIX: parsear la fecha sin desfase de timezone ──
+        const [year, month, day] = chartData[targetIndex].date.split('-').map(Number);
+        const localDate = new Date(year, month - 1, day); // ← meses 0-indexed
+        setSelectedDate(localDate);
         const halfWindow = 22;
         const startIndex = Math.max(0, targetIndex - halfWindow);
         const endIndex = Math.min(
