@@ -283,11 +283,17 @@ export function WorkloadLineChart() {
 
     return Array.from(dateMap.entries())
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([key, dataByDate]) => ({
-        date: key,
-        label: format(new Date(key), 'dd MMM', { locale: es }),
-        ...dataByDate,
-      }));
+      .map(([key, dataByDate]) => {
+        // ── FIX: parsear la fecha sin desfase de timezone ──
+        const [year, month, day] = key.split('-').map(Number);
+        const localDate = new Date(year, month - 1, day); // ← meses 0-indexed
+
+        return {
+          date: key,
+          label: format(localDate, 'dd MMM', { locale: es }),
+          ...dataByDate,
+        };
+      });
   }, [persons, workloadData, dateRange]);
 
   useEffect(() => {
