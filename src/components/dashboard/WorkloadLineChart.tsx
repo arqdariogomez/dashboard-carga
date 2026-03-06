@@ -686,6 +686,7 @@ export function WorkloadLineChart() {
             e.currentTarget.style.outline = 'none';
             e.currentTarget.style.boxShadow = 'none';
           }}
+          tabIndex={-1}
         >
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart
