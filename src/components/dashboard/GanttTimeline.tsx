@@ -2382,29 +2382,100 @@ export function GanttTimeline() {
     <div className="p-4 flex-1 overflow-hidden flex flex-col">
       {/* â”€â”€ Toolbar â”€â”€ */}
       <div className="mb-3 space-y-2">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-xs text-text-secondary">Vista:</span>
-          <div className="relative" ref={viewMenuRef}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          flexWrap: 'wrap',
+        }}>
+          <span style={{
+            fontSize: '11px',
+            color: COLORS.textTertiary,
+            fontFamily: TYPOGRAPHY.fontFamily,
+            fontWeight: 500,
+          }}>Vista:</span>
+          <div style={{ position: 'relative' }} ref={viewMenuRef}>
             <button
               type="button"
               onClick={() => setIsViewMenuOpen((prev) => !prev)}
-              className="h-8 rounded-md border border-border bg-white px-2.5 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-secondary inline-flex items-center gap-1.5"
+              style={{
+                height: DIMENSIONS.inputHeight,
+                borderRadius: DIMENSIONS.radius.sm,
+                border: `1px solid ${COLORS.border}`,
+                background: COLORS.bg,
+                padding: '0 10px',
+                fontSize: '11px',
+                color: COLORS.textSecondary,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+                transition: `all ${TRANSITIONS.hover}`,
+                fontFamily: TYPOGRAPHY.fontFamily,
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = COLORS.bgMuted;
+                e.currentTarget.style.color = COLORS.text;
+                e.currentTarget.style.borderColor = COLORS.accentBorder;
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = COLORS.bg;
+                e.currentTarget.style.color = COLORS.textSecondary;
+                e.currentTarget.style.borderColor = COLORS.border;
+              }}
             >
               {activeTimelineViewId === '__current__'
                 ? 'Sin vista'
                 : (timelineViews.find((v) => v.id === activeTimelineViewId)?.name || 'Vista')}
-              <ChevronDown size={12} />
+              <ChevronDown size={12} strokeWidth={1.5} />
             </button>
             {isViewMenuOpen && (
-              <div className="absolute left-0 top-9 z-[120] w-64 rounded-lg border border-border bg-white shadow-lg p-2">
-                <div className="text-[11px] text-text-secondary mb-1">Vista activa</div>
+              <div style={{
+                position: 'absolute',
+                left: 0,
+                top: '36px',
+                zIndex: 120,
+                width: '256px',
+                borderRadius: DIMENSIONS.radius.md,
+                border: `1px solid ${COLORS.border}`,
+                background: COLORS.bg,
+                boxShadow: SHADOWS.lg,
+                padding: '8px',
+              }}>
+                <div style={{
+                  fontSize: '11px',
+                  color: COLORS.textTertiary,
+                  marginBottom: '4px',
+                  fontFamily: TYPOGRAPHY.fontFamily,
+                  fontWeight: 500,
+                }}>Vista activa</div>
                 <select
                   value={activeTimelineViewId}
                   onChange={(e) => {
                     handleSelectTimelineView(e.target.value);
                     setIsViewMenuOpen(false);
                   }}
-                  className="w-full h-8 rounded-md border border-border px-2 text-xs bg-white"
+                  style={{
+                    width: '100%',
+                    height: DIMENSIONS.inputHeight,
+                    borderRadius: DIMENSIONS.radius.sm,
+                    border: `1px solid ${COLORS.border}`,
+                    padding: '0 8px',
+                    fontSize: '11px',
+                    background: COLORS.bg,
+                    color: COLORS.textSecondary,
+                    fontFamily: TYPOGRAPHY.fontFamily,
+                    cursor: 'pointer',
+                    transition: `all ${TRANSITIONS.hover}`,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = COLORS.accentBorder;
+                    e.currentTarget.style.boxShadow = `0 0 0 1px ${COLORS.accentBorder}`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = COLORS.border;
+                    e.currentTarget.style.boxShadow = 'none';
+                  }}
                 >
                   <option value="__current__">Sin vista</option>
                   {timelineViews.map((view) => (
@@ -2413,14 +2484,41 @@ export function GanttTimeline() {
                     </option>
                   ))}
                 </select>
-                <div className="mt-2 grid grid-cols-2 gap-1">
+                <div style={{
+                  marginTop: '8px',
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: '4px',
+                }}>
                   <button
                     type="button"
                     onClick={() => {
                       handleSaveTimelineView();
                       setIsViewMenuOpen(false);
                     }}
-                    className="h-7 rounded border border-border px-2 text-[11px] text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
+                    style={{
+                      height: '28px',
+                      borderRadius: DIMENSIONS.radius.sm,
+                      border: `1px solid ${COLORS.border}`,
+                      background: COLORS.bg,
+                      padding: '0 8px',
+                      fontSize: '11px',
+                      color: COLORS.textSecondary,
+                      cursor: 'pointer',
+                      transition: `all ${TRANSITIONS.hover}`,
+                      fontFamily: TYPOGRAPHY.fontFamily,
+                      fontWeight: 500,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = COLORS.bgMuted;
+                      e.currentTarget.style.color = COLORS.text;
+                      e.currentTarget.style.borderColor = COLORS.accentBorder;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = COLORS.bg;
+                      e.currentTarget.style.color = COLORS.textSecondary;
+                      e.currentTarget.style.borderColor = COLORS.border;
+                    }}
                   >
                     Guardar
                   </button>
@@ -2430,7 +2528,29 @@ export function GanttTimeline() {
                       handleSaveTimelineViewAs();
                       setIsViewMenuOpen(false);
                     }}
-                    className="h-7 rounded border border-border px-2 text-[11px] text-text-secondary hover:text-text-primary hover:bg-bg-secondary"
+                    style={{
+                      height: '28px',
+                      borderRadius: DIMENSIONS.radius.sm,
+                      border: `1px solid ${COLORS.border}`,
+                      background: COLORS.bg,
+                      padding: '0 8px',
+                      fontSize: '11px',
+                      color: COLORS.textSecondary,
+                      cursor: 'pointer',
+                      transition: `all ${TRANSITIONS.hover}`,
+                      fontFamily: TYPOGRAPHY.fontFamily,
+                      fontWeight: 500,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = COLORS.bgMuted;
+                      e.currentTarget.style.color = COLORS.text;
+                      e.currentTarget.style.borderColor = COLORS.accentBorder;
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = COLORS.bg;
+                      e.currentTarget.style.color = COLORS.textSecondary;
+                      e.currentTarget.style.borderColor = COLORS.border;
+                    }}
                   >
                     Guardar como
                   </button>
@@ -2441,7 +2561,33 @@ export function GanttTimeline() {
                       void handleDeleteTimelineView();
                       setIsViewMenuOpen(false);
                     }}
-                    className="col-span-2 h-7 rounded border border-border px-2 text-[11px] text-text-secondary hover:text-text-primary hover:bg-bg-secondary disabled:opacity-40 disabled:cursor-not-allowed"
+                    style={{
+                      height: '28px',
+                      borderRadius: DIMENSIONS.radius.sm,
+                      border: `1px solid ${COLORS.danger}`,
+                      background: COLORS.bg,
+                      padding: '0 8px',
+                      fontSize: '11px',
+                      color: activeTimelineViewId === '__current__' ? COLORS.textDisabled : COLORS.danger,
+                      cursor: activeTimelineViewId === '__current__' ? 'not-allowed' : 'pointer',
+                      transition: `all ${TRANSITIONS.hover}`,
+                      fontFamily: TYPOGRAPHY.fontFamily,
+                      fontWeight: 500,
+                      gridColumn: '1 / -1',
+                      opacity: activeTimelineViewId === '__current__' ? 0.4 : 1,
+                    }}
+                    onMouseEnter={(e) => {
+                      if (activeTimelineViewId !== '__current__') {
+                        e.currentTarget.style.background = COLORS.dangerSoft;
+                        e.currentTarget.style.borderColor = COLORS.danger;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (activeTimelineViewId !== '__current__') {
+                        e.currentTarget.style.background = COLORS.bg;
+                        e.currentTarget.style.borderColor = COLORS.danger;
+                      }
+                    }}
                   >
                     Eliminar vista
                   </button>
