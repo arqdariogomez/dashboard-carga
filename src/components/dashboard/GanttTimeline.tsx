@@ -1,4 +1,4 @@
-﻿import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
+import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { useUiFeedback } from '@/context/UiFeedbackContext';
 import { usePersonProfiles } from '@/context/PersonProfilesContext';
@@ -29,8 +29,8 @@ import {
 } from 'lucide-react';
 import type { Project } from '@/lib/types';
 import { branchLabel } from '@/lib/branchUtils';
-import { computeTreeConnectors } from '@/lib/useTreeConnectors';
-import { TreeConnectors } from '@/components/dashboard/TreeConnectors';
+import { GanttTreeOverlay } from '@/modules/gantt/components/GanttTreeOverlay';
+import { useGanttTreeGeometry } from '@/modules/gantt/hooks/useGanttTreeGeometry';
 import React from 'react';
 import { createPortal } from 'react-dom';
 
@@ -39,9 +39,9 @@ import { createPortal } from 'react-dom';
 // ────────────────────────────────────────────
 import { COLORS, TYPOGRAPHY, DIMENSIONS, SHADOWS, TRANSITIONS } from '@/lib/designTokens';
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 //  TYPES
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 
 type ColorMode = 'load' | 'person' | 'type' | 'custom';
 type CustomColorField = 'branch' | 'type';
@@ -108,9 +108,9 @@ interface TimelineViewPreset {
   showMilestonesOnly: boolean;
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 //  CONSTANTS
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 
 const MIN_SIDEBAR_WIDTH = 320;
 const MAX_SIDEBAR_WIDTH = 760;
@@ -148,9 +148,9 @@ const PRESET_LABELS: Record<TimePreset, string> = {
   ALL: 'Todo',
 };
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 //  PURE UTILITIES
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 
 function isMilestoneProject(project: Project): boolean {
   if (!project.startDate || !project.endDate) return false;
@@ -293,9 +293,9 @@ function computeBarProps(
   };
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 //  ZOOM SLIDER COMPONENT
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 
 function ZoomSlider({
   zoom,
@@ -414,9 +414,9 @@ function ZoomSlider({
   );
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 //  MINIMAP COMPONENT
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 
 function Minimap({
   projects,
@@ -545,9 +545,9 @@ function Minimap({
   );
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 //  GANTT ROW (memoized)
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 
 interface GanttRowProps {
   node: HierarchyNode;
@@ -591,6 +591,7 @@ interface GanttRowProps {
   canMoveUp: boolean;
   canMoveDown: boolean;
   isSidebarCollapsed: boolean;
+  rowRef?: (el: HTMLElement | null) => void;
 }
 
 const GanttRow = React.memo(function GanttRow({
@@ -631,6 +632,7 @@ const GanttRow = React.memo(function GanttRow({
   canMoveUp,
   canMoveDown,
   isSidebarCollapsed,
+  rowRef,
 }: GanttRowProps) {
   const bar = getBarPropsFn(node);
   if (!bar) return null;
@@ -669,13 +671,11 @@ const GanttRow = React.memo(function GanttRow({
     const menuH = 224;
     const gap = 6;
 
-    // Prefer opening to the right of the trigger; flip to left only if needed.
     let left = rect.right + gap;
     if (left + menuW > window.innerWidth - 8) {
       left = rect.left - menuW - gap;
     }
 
-    // Prefer below the trigger; flip upward near bottom viewport edge.
     let top = rect.bottom + gap;
     if (top + menuH > window.innerHeight - 8) {
       top = rect.top - menuH - gap;
@@ -687,10 +687,6 @@ const GanttRow = React.memo(function GanttRow({
   const dragOff =
     milestoneDrag?.projectId === node.id ? milestoneDrag.offsetDays : 0;
   const indentStepPx = 12;
-  const { ancestorContinuations, hasNextSibling, hasParentConnector } = useMemo(
-    () => computeTreeConnectors(node, pList),
-    [node, pList],
-  );
 
   // Visual resize preview
   const resizeState = barResize?.projectId === node.id ? barResize : null;
@@ -709,7 +705,10 @@ const GanttRow = React.memo(function GanttRow({
   }
 
   return (
-    <div className="relative z-0 flex border-b border-border hover:bg-bg-secondary/20 transition-colors group group/bar">
+    <div
+      ref={rowRef}
+      className="relative z-0 flex border-b border-border hover:bg-bg-secondary/20 transition-colors group group/bar"
+    >
       {/* Sidebar */}
       <div
         className="relative px-3 py-2 border-r border-border sticky left-0 z-50 bg-white group-hover/bar:bg-bg-secondary transition-colors"
@@ -844,21 +843,10 @@ const GanttRow = React.memo(function GanttRow({
           {!isSidebarCollapsed && (
             <>
               <div
+                data-gantt-name-cell
                 style={{ paddingLeft: level * indentStepPx }}
                 className="relative min-w-0 flex-1 flex items-center"
               >
-                {level > 0 && (
-                  <TreeConnectors
-                    depth={level}
-                    step={indentStepPx}
-                    ancestorContinuations={ancestorContinuations}
-                    hasNextSiblingAtCurrentLevel={hasNextSibling}
-                    hasParentConnectorAtCurrentLevel={hasParentConnector}
-                    lineClassName="stroke-neutral-300/75 group-hover/bar:stroke-neutral-400/85"
-                    bleedTop={8}
-                    bleedBottom={0}
-                  />
-                )}
                 {hasChildren && (
                   <button
                     onClick={() => onToggleExpansion(node.id)}
@@ -1001,9 +989,9 @@ const GanttRow = React.memo(function GanttRow({
   );
 });
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 //  DEPENDENCIES MODAL
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 
 function DependenciesModal({
   projectId,
@@ -1108,9 +1096,9 @@ function DependenciesModal({
   );
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 //  GANTT TOOLTIP
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 
 function GanttTooltip({
   project,
@@ -1138,7 +1126,6 @@ function GanttTooltip({
   );
   const left = Math.max(sidebarWidth + 12, Math.min(x + 10, ml));
 
-  // Show below if near top edge
   const showBelow = y < 160;
   const topStyle = showBelow
     ? { top: y + 20 }
@@ -1215,9 +1202,9 @@ function GanttTooltip({
   );
 }
 
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 //  MAIN COMPONENT
-// â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+// ═══════════════════════════════════════════════
 
 export function GanttTimeline() {
   const {
@@ -1230,7 +1217,7 @@ export function GanttTimeline() {
   const { confirm } = useUiFeedback();
   const { getAvatarUrl } = usePersonProfiles();
 
-  // â”€â”€ State â”€â”€
+  // ── State ──
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(
@@ -1262,7 +1249,7 @@ export function GanttTimeline() {
   const [milestoneDrag, setMilestoneDrag] =
     useState<MilestoneDragState | null>(null);
 
-  // â”€â”€ Refs â”€â”€
+  // ── Refs ──
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const tooltipContainerRef = useRef<HTMLDivElement>(null);
   const viewMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1275,6 +1262,16 @@ export function GanttTimeline() {
   const scrollRafRef = useRef(0);
   const barResizeRef = useRef<BarResizeState | null>(null);
   const milestoneDragRef = useRef<MilestoneDragState | null>(null);
+
+  // ── Tree connector overlay hook ──
+  const {
+    rowRefs: treeRowRefs,
+    groupHostRefs: treeGroupHostRefs,
+    version: treeVersion,
+    registerRow: treeRegisterRow,
+    registerGroupHost: treeRegisterGroupHost,
+    invalidate: invalidateTree,
+  } = useGanttTreeGeometry();
 
   // Keep refs in sync with state
   useEffect(() => {
@@ -1296,7 +1293,7 @@ export function GanttTimeline() {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [isViewMenuOpen]);
 
-  // â”€â”€ Memoized data â”€â”€
+  // ── Memoized data ──
   const activeProjects = useMemo(() => {
     const f = getActiveProjects(filteredProjects);
     return showMilestonesOnly ? f.filter(isMilestoneProject) : f;
@@ -1461,7 +1458,7 @@ export function GanttTimeline() {
     ],
   );
 
-  // â”€â”€ Derived â”€â”€
+  // ── Derived ──
   const totalDays = range
     ? differenceInCalendarDays(range.end, range.start) + 1
     : 0;
@@ -1534,9 +1531,9 @@ export function GanttTimeline() {
     [range, totalDays, dayWidth, colorMode, customColorField, personColorMap],
   );
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
   //  SCROLL / ZOOM HELPERS
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
 
   const applyScrollToDOM = useCallback((value: number) => {
     const el = scrollContainerRef.current;
@@ -1648,9 +1645,9 @@ export function GanttTimeline() {
     [dayWidth, timelineWidth, getTimelineViewWidth, applyScrollToDOM],
   );
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
   //  CALLBACKS
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
 
   const toggleGroup = useCallback((groupId: string) => {
     setCollapsedGroups((prev) => {
@@ -2050,9 +2047,9 @@ export function GanttTimeline() {
     setIsSidebarCollapsed(true);
   }, [isSidebarCollapsed, sidebarWidth]);
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
   //  EFFECTS
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
 
   // Drag cursor + prevent text selection
   useEffect(() => {
@@ -2067,12 +2064,12 @@ export function GanttTimeline() {
     }
   }, [barResize, milestoneDrag, isSidebarResizing]);
 
-  // Sync state â†’ DOM
+  // Sync state → DOM
   useEffect(() => {
     applyScrollToDOM(scrollX);
   }, [scrollX, applyScrollToDOM]);
 
-  // Native scroll â†’ state
+  // Native scroll → state
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -2205,6 +2202,14 @@ export function GanttTimeline() {
     };
   }, [isSidebarResizing]);
 
+  // Invalidate tree geometry after DOM updates
+  useEffect(() => {
+    const frame = requestAnimationFrame(() => {
+      invalidateTree();
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeProjects, groupedTimeline, sidebarWidth, collapsedGroups, invalidateTree]);
+
   // Timeline views persistence by board
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -2253,9 +2258,9 @@ export function GanttTimeline() {
     }
   }, [timelineViewsStorageKey, timelineViews, activeTimelineViewId]);
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
   //  EARLY RETURN
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
   if (!range || activeProjects.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
@@ -2270,7 +2275,7 @@ export function GanttTimeline() {
     );
   }
 
-  // â”€â”€ Year and Month headers â”€â”€
+  // ── Year and Month headers ──
   const years: { label: string; startOffset: number; width: number }[] = [];
   const months: { label: string; startOffset: number; width: number }[] = [];
   let curYear = -1,
@@ -2308,9 +2313,11 @@ export function GanttTimeline() {
     return { min: Math.min(...indices), max: Math.max(...indices) };
   })();
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  const indentStepPx = 12;
+
+  // ═══════════════════════════════════════════════
   //  RENDER HELPERS
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
 
   const renderTree = (
     nodes: HierarchyNode[],
@@ -2367,6 +2374,7 @@ export function GanttTimeline() {
           canMoveUp={(orderIndexMap.get(n.id) ?? -1) > movableOrderRange.min}
           canMoveDown={(orderIndexMap.get(n.id) ?? -1) < movableOrderRange.max}
           isSidebarCollapsed={isSidebarCollapsed}
+          rowRef={treeRegisterRow(n.id)}
         />,
       );
       if (n.children?.length && exp)
@@ -2375,12 +2383,12 @@ export function GanttTimeline() {
     return items;
   };
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
   //  JSX
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════════
   return (
     <div className="p-4 flex-1 overflow-hidden flex flex-col">
-      {/* â”€â”€ Toolbar â”€â”€ */}
+      {/* ── Toolbar ── */}
       <div className="mb-3 space-y-2">
         <div style={{
           display: 'flex',
@@ -2881,7 +2889,7 @@ export function GanttTimeline() {
         </div>
       </div>
 
-      {/* â”€â”€ Main â”€â”€ */}
+      {/* ── Main ── */}
       <div className="flex flex-col flex-1 min-h-0">
         {/* Timeline */}
         <div
@@ -2890,7 +2898,7 @@ export function GanttTimeline() {
         >
           <div ref={scrollContainerRef} className="overflow-auto h-full">
             <div style={{ minWidth: timelineWidth + sidebarWidth }}>
-              {/* â”€â”€ HEADER â”€â”€ */}
+              {/* ── HEADER ── */}
               <div className="sticky top-0 z-30 border-b border-border bg-white">
                 {/* Row 1: Sidebar label + Years */}
                 <div className="flex">
@@ -2972,7 +2980,7 @@ export function GanttTimeline() {
                 </div>
               </div>
 
-              {/* â”€â”€ GROUPS â”€â”€ */}
+              {/* ── GROUPS ── */}
               {groupedTimeline.map((group, gi) => {
                 const pList = group.projects;
                 const collapsed = collapsedGroups.has(group.id);
@@ -2980,7 +2988,23 @@ export function GanttTimeline() {
                 const roots = (groupRootsMap.get(group.id) || []) as HierarchyNode[];
 
                 if (groupMode === 'none') {
-                  return <div key={group.id}>{renderTree(roots, pList)}</div>;
+                  return (
+                    <div
+                      key={group.id}
+                      ref={treeRegisterGroupHost(group.id)}
+                      className="relative"
+                    >
+                      {renderTree(roots, pList)}
+                      <GanttTreeOverlay
+                        projects={pList}
+                        rowRefs={treeRowRefs}
+                        groupHostRefs={treeGroupHostRefs} groupId={group.id}
+                        step={indentStepPx}
+                        version={treeVersion}
+                        className="stroke-neutral-300/75"
+                      />
+                    </div>
+                  );
                 }
 
                 return (
@@ -3061,7 +3085,22 @@ export function GanttTimeline() {
                         )}
                       </div>
                     </div>
-                    {!collapsed && renderTree(roots, pList)}
+                    {!collapsed && (
+                      <div
+                        ref={treeRegisterGroupHost(group.id)}
+                        className="relative"
+                      >
+                        {renderTree(roots, pList)}
+                        <GanttTreeOverlay
+                          projects={pList}
+                          rowRefs={treeRowRefs}
+                          groupHostRefs={treeGroupHostRefs} groupId={group.id}
+                          step={indentStepPx}
+                          version={treeVersion}
+                          className="stroke-neutral-300/75"
+                        />
+                      </div>
+                    )}
                   </div>
                 );
               })}
