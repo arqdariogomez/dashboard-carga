@@ -26,7 +26,9 @@ import {
   Copy,
   Trash2,
   Pencil,
+  Save,
 } from 'lucide-react';
+import { ToolbarDropdown, ToolbarDropdownWithActions, TOOLBAR_ICONS } from '@/components/shared/ModernToolbar';
 import type { Project } from '@/lib/types';
 import { branchLabel } from '@/lib/branchUtils';
 import { GanttTreeOverlay } from '@/modules/gantt/components/GanttTreeOverlay';
@@ -2387,391 +2389,87 @@ export function GanttTimeline() {
   //  JSX
   // ═══════════════════════════════════════════════
   return (
-    <div className="p-4 flex-1 overflow-hidden flex flex-col">
+    <div className="p-2 flex-1 overflow-hidden flex flex-col">
       {/* ── Toolbar ── */}
-      <div className="mb-3 space-y-2">
+      <div className="mb-2 space-y-1">
         <div style={{
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
           flexWrap: 'wrap',
         }}>
-          <span style={{
-            fontSize: '11px',
-            color: COLORS.textTertiary,
-            fontFamily: TYPOGRAPHY.fontFamily,
-            fontWeight: 500,
-          }}>Vista:</span>
-          <div style={{ position: 'relative' }} ref={viewMenuRef}>
-            <button
-              type="button"
-              onClick={() => setIsViewMenuOpen((prev) => !prev)}
-              style={{
-                height: DIMENSIONS.inputHeight,
-                borderRadius: DIMENSIONS.radius.sm,
-                border: `1px solid ${COLORS.border}`,
-                background: COLORS.bg,
-                padding: '0 10px',
-                fontSize: '11px',
-                color: COLORS.textSecondary,
-                cursor: 'pointer',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '6px',
-                transition: `all ${TRANSITIONS.hover}`,
-                fontFamily: TYPOGRAPHY.fontFamily,
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = COLORS.bgMuted;
-                e.currentTarget.style.color = COLORS.text;
-                e.currentTarget.style.borderColor = COLORS.accentBorder;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = COLORS.bg;
-                e.currentTarget.style.color = COLORS.textSecondary;
-                e.currentTarget.style.borderColor = COLORS.border;
-              }}
-            >
-              {activeTimelineViewId === '__current__'
-                ? 'Sin vista'
-                : (timelineViews.find((v) => v.id === activeTimelineViewId)?.name || 'Vista')}
-              <ChevronDown size={12} strokeWidth={1.5} />
-            </button>
-            {isViewMenuOpen && (
-              <div style={{
-                position: 'absolute',
-                left: 0,
-                top: '36px',
-                zIndex: 120,
-                width: '256px',
-                borderRadius: DIMENSIONS.radius.md,
-                border: `1px solid ${COLORS.border}`,
-                background: COLORS.bg,
-                boxShadow: SHADOWS.lg,
-                padding: '8px',
-              }}>
-                <div style={{
-                  fontSize: '11px',
-                  color: COLORS.textTertiary,
-                  marginBottom: '4px',
-                  fontFamily: TYPOGRAPHY.fontFamily,
-                  fontWeight: 500,
-                }}>Vista activa</div>
-                <select
-                  value={activeTimelineViewId}
-                  onChange={(e) => {
-                    handleSelectTimelineView(e.target.value);
-                    setIsViewMenuOpen(false);
-                  }}
-                  style={{
-                    width: '100%',
-                    height: DIMENSIONS.inputHeight,
-                    borderRadius: DIMENSIONS.radius.sm,
-                    border: `1px solid ${COLORS.border}`,
-                    padding: '0 8px',
-                    fontSize: '11px',
-                    background: COLORS.bg,
-                    color: COLORS.textSecondary,
-                    fontFamily: TYPOGRAPHY.fontFamily,
-                    cursor: 'pointer',
-                    transition: `all ${TRANSITIONS.hover}`,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.borderColor = COLORS.accentBorder;
-                    e.currentTarget.style.boxShadow = `0 0 0 1px ${COLORS.accentBorder}`;
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderColor = COLORS.border;
-                    e.currentTarget.style.boxShadow = 'none';
-                  }}
-                >
-                  <option value="__current__">Sin vista</option>
-                  {timelineViews.map((view) => (
-                    <option key={view.id} value={view.id}>
-                      {view.name}
-                    </option>
-                  ))}
-                </select>
-                <div style={{
-                  marginTop: '8px',
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: '4px',
-                }}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleSaveTimelineView();
-                      setIsViewMenuOpen(false);
-                    }}
-                    style={{
-                      height: '28px',
-                      borderRadius: DIMENSIONS.radius.sm,
-                      border: `1px solid ${COLORS.border}`,
-                      background: COLORS.bg,
-                      padding: '0 8px',
-                      fontSize: '11px',
-                      color: COLORS.textSecondary,
-                      cursor: 'pointer',
-                      transition: `all ${TRANSITIONS.hover}`,
-                      fontFamily: TYPOGRAPHY.fontFamily,
-                      fontWeight: 500,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = COLORS.bgMuted;
-                      e.currentTarget.style.color = COLORS.text;
-                      e.currentTarget.style.borderColor = COLORS.accentBorder;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = COLORS.bg;
-                      e.currentTarget.style.color = COLORS.textSecondary;
-                      e.currentTarget.style.borderColor = COLORS.border;
-                    }}
-                  >
-                    Guardar
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleSaveTimelineViewAs();
-                      setIsViewMenuOpen(false);
-                    }}
-                    style={{
-                      height: '28px',
-                      borderRadius: DIMENSIONS.radius.sm,
-                      border: `1px solid ${COLORS.border}`,
-                      background: COLORS.bg,
-                      padding: '0 8px',
-                      fontSize: '11px',
-                      color: COLORS.textSecondary,
-                      cursor: 'pointer',
-                      transition: `all ${TRANSITIONS.hover}`,
-                      fontFamily: TYPOGRAPHY.fontFamily,
-                      fontWeight: 500,
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.background = COLORS.bgMuted;
-                      e.currentTarget.style.color = COLORS.text;
-                      e.currentTarget.style.borderColor = COLORS.accentBorder;
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.background = COLORS.bg;
-                      e.currentTarget.style.color = COLORS.textSecondary;
-                      e.currentTarget.style.borderColor = COLORS.border;
-                    }}
-                  >
-                    Guardar como
-                  </button>
-                  <button
-                    type="button"
-                    disabled={activeTimelineViewId === '__current__'}
-                    onClick={() => {
-                      void handleDeleteTimelineView();
-                      setIsViewMenuOpen(false);
-                    }}
-                    style={{
-                      height: '28px',
-                      borderRadius: DIMENSIONS.radius.sm,
-                      border: `1px solid ${COLORS.danger}`,
-                      background: COLORS.bg,
-                      padding: '0 8px',
-                      fontSize: '11px',
-                      color: activeTimelineViewId === '__current__' ? COLORS.textDisabled : COLORS.danger,
-                      cursor: activeTimelineViewId === '__current__' ? 'not-allowed' : 'pointer',
-                      transition: `all ${TRANSITIONS.hover}`,
-                      fontFamily: TYPOGRAPHY.fontFamily,
-                      fontWeight: 500,
-                      gridColumn: '1 / -1',
-                      opacity: activeTimelineViewId === '__current__' ? 0.4 : 1,
-                    }}
-                    onMouseEnter={(e) => {
-                      if (activeTimelineViewId !== '__current__') {
-                        e.currentTarget.style.background = COLORS.dangerSoft;
-                        e.currentTarget.style.borderColor = COLORS.danger;
-                      }
-                    }}
-                    onMouseLeave={(e) => {
-                      if (activeTimelineViewId !== '__current__') {
-                        e.currentTarget.style.background = COLORS.bg;
-                        e.currentTarget.style.borderColor = COLORS.danger;
-                      }
-                    }}
-                  >
-                    Eliminar vista
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          <ToolbarDropdownWithActions
+            value={activeTimelineViewId}
+            onChange={(v) => handleSelectTimelineView(v)}
+            options={[
+              { value: '__current__', label: 'Sin vista' },
+              ...timelineViews.map(v => ({ value: v.id, label: v.name })),
+            ]}
+            icon={TOOLBAR_ICONS.view}
+            placeholder="Vista"
+            actions={[
+              {
+                label: 'Guardar vista actual',
+                onClick: () => handleSaveTimelineView(),
+                icon: <Save size={14} />,
+              },
+              {
+                label: 'Nueva vista',
+                onClick: () => handleSaveTimelineViewAs(),
+                variant: 'primary',
+                icon: <Plus size={14} />,
+              },
+            ]}
+          />
 
-          <span style={{
-            fontSize: '11px',
-            color: COLORS.textTertiary,
-            fontFamily: TYPOGRAPHY.fontFamily,
-            fontWeight: 500,
-          }}>Agrupar:</span>
-          <select
+          <ToolbarDropdown
             value={groupMode}
-            onChange={(e) => setGroupMode(e.target.value as GroupMode)}
-            style={{
-              height: DIMENSIONS.inputHeight,
-              borderRadius: DIMENSIONS.radius.sm,
-              border: `1px solid ${COLORS.border}`,
-              padding: '0 8px',
-              fontSize: '11px',
-              background: COLORS.bg,
-              color: COLORS.textSecondary,
-              fontFamily: TYPOGRAPHY.fontFamily,
-              cursor: 'pointer',
-              transition: `all ${TRANSITIONS.hover}`,
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = COLORS.accentBorder;
-              e.currentTarget.style.boxShadow = `0 0 0 1px ${COLORS.accentBorder}`;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = COLORS.border;
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-            title="Agrupar"
-          >
-            <option value="none">Ninguno</option>
-            <option value="person">Persona</option>
-            <option value="type">Tipo</option>
-            <option value="custom">Personalizado</option>
-          </select>
-          {groupMode === 'custom' && (
-            <select
-              value={customGroupField}
-              onChange={(e) => setCustomGroupField(e.target.value as CustomGroupField)}
-              style={{
-                height: DIMENSIONS.inputHeight,
-                borderRadius: DIMENSIONS.radius.sm,
-                border: `1px solid ${COLORS.border}`,
-                padding: '0 8px',
-                fontSize: '11px',
-                background: COLORS.bg,
-                color: COLORS.textSecondary,
-                fontFamily: TYPOGRAPHY.fontFamily,
-                cursor: 'pointer',
-                transition: `all ${TRANSITIONS.hover}`,
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = COLORS.accentBorder;
-                e.currentTarget.style.boxShadow = `0 0 0 1px ${COLORS.accentBorder}`;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = COLORS.border;
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-              title="Campo de agrupacion"
-            >
-              <option value="branch">Sucursal</option>
-              <option value="priority">Prioridad</option>
-            </select>
-          )}
+            onChange={(v) => setGroupMode(v as GroupMode)}
+            options={[
+              { value: 'none', label: 'Sin agrupar' },
+              { value: 'person', label: 'Por persona' },
+              { value: 'type', label: 'Por tipo' },
+              { value: 'custom', label: 'Personalizado' },
+            ]}
+            icon={TOOLBAR_ICONS.group}
+            secondaryOptions={groupMode === 'custom' ? [
+              { value: 'branch', label: 'Sucursal' },
+              { value: 'priority', label: 'Prioridad' },
+            ] : undefined}
+            secondaryValue={customGroupField}
+            onSecondaryChange={(v) => setCustomGroupField(v as CustomGroupField)}
+            placeholder="Agrupar"
+          />
 
-          <span style={{
-            fontSize: '11px',
-            color: COLORS.textTertiary,
-            fontFamily: TYPOGRAPHY.fontFamily,
-            fontWeight: 500,
-          }}>Orden:</span>
-          <select
+          <ToolbarDropdown
             value={orderMode}
-            onChange={(e) => setOrderMode(e.target.value as OrderMode)}
-            style={{
-              height: DIMENSIONS.inputHeight,
-              borderRadius: DIMENSIONS.radius.sm,
-              border: `1px solid ${COLORS.border}`,
-              padding: '0 8px',
-              fontSize: '11px',
-              background: COLORS.bg,
-              color: COLORS.textSecondary,
-              fontFamily: TYPOGRAPHY.fontFamily,
-              cursor: 'pointer',
-              transition: `all ${TRANSITIONS.hover}`,
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = COLORS.accentBorder;
-              e.currentTarget.style.boxShadow = `0 0 0 1px ${COLORS.accentBorder}`;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = COLORS.border;
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-            title="Orden"
-          >
-            <option value="chronological">Cronologico</option>
-            <option value="custom">Personalizado</option>
-          </select>
+            onChange={(v) => setOrderMode(v as OrderMode)}
+            options={[
+              { value: 'chronological', label: 'Cronológico' },
+              { value: 'custom', label: 'Personalizado' },
+            ]}
+            icon={TOOLBAR_ICONS.order}
+            placeholder="Orden"
+          />
 
-          <span style={{
-            fontSize: '11px',
-            color: COLORS.textTertiary,
-            fontFamily: TYPOGRAPHY.fontFamily,
-            fontWeight: 500,
-          }}>Colorear:</span>
-          <select
+          <ToolbarDropdown
             value={colorMode}
-            onChange={(e) => setColorMode(e.target.value as ColorMode)}
-            style={{
-              height: DIMENSIONS.inputHeight,
-              borderRadius: DIMENSIONS.radius.sm,
-              border: `1px solid ${COLORS.border}`,
-              padding: '0 8px',
-              fontSize: '11px',
-              background: COLORS.bg,
-              color: COLORS.textSecondary,
-              fontFamily: TYPOGRAPHY.fontFamily,
-              cursor: 'pointer',
-              transition: `all ${TRANSITIONS.hover}`,
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = COLORS.accentBorder;
-              e.currentTarget.style.boxShadow = `0 0 0 1px ${COLORS.accentBorder}`;
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = COLORS.border;
-              e.currentTarget.style.boxShadow = 'none';
-            }}
-            title="Color"
-          >
-            <option value="load">Carga</option>
-            <option value="person">Persona</option>
-            <option value="type">Tipo</option>
-            <option value="custom">Personalizado</option>
-          </select>
-          {colorMode === 'custom' && (
-            <select
-              value={customColorField}
-              onChange={(e) => setCustomColorField(e.target.value as CustomColorField)}
-              style={{
-                height: DIMENSIONS.inputHeight,
-                borderRadius: DIMENSIONS.radius.sm,
-                border: `1px solid ${COLORS.border}`,
-                padding: '0 8px',
-                fontSize: '11px',
-                background: COLORS.bg,
-                color: COLORS.textSecondary,
-                fontFamily: TYPOGRAPHY.fontFamily,
-                cursor: 'pointer',
-                transition: `all ${TRANSITIONS.hover}`,
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = COLORS.accentBorder;
-                e.currentTarget.style.boxShadow = `0 0 0 1px ${COLORS.accentBorder}`;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = COLORS.border;
-                e.currentTarget.style.boxShadow = 'none';
-              }}
-              title="Campo de color"
-            >
-              <option value="branch">Sucursal</option>
-              <option value="type">Tipo</option>
-            </select>
-          )}
+            onChange={(v) => setColorMode(v as ColorMode)}
+            options={[
+              { value: 'load', label: 'Por carga' },
+              { value: 'person', label: 'Por persona' },
+              { value: 'type', label: 'Por tipo' },
+              { value: 'custom', label: 'Personalizado' },
+            ]}
+            icon={TOOLBAR_ICONS.color}
+            secondaryOptions={colorMode === 'custom' ? [
+              { value: 'branch', label: 'Sucursal' },
+              { value: 'type', label: 'Tipo' },
+            ] : undefined}
+            secondaryValue={customColorField}
+            onSecondaryChange={(v) => setCustomColorField(v as CustomColorField)}
+            placeholder="Colorear"
+          />
           {(activeToolbarChips.length > 0 || showMilestonesOnly) && (
           <div style={{
             marginLeft: 'auto',
