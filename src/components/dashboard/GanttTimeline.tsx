@@ -35,7 +35,13 @@ import {
   EyeOff,
   X,
 } from 'lucide-react';
-import { ToolbarDropdown, ToolbarDropdownWithActions, FilterDropdown, UnifiedFilterDropdown, TOOLBAR_ICONS } from '@/components/shared/ModernToolbar';
+import {
+  ToolbarDropdown,
+  ToolbarDropdownWithActions,
+  FilterDropdown,
+  UnifiedFilterDropdown,
+  TOOLBAR_ICONS,
+} from '@/components/shared/ModernToolbar';
 import type { Project } from '@/lib/types';
 import { branchLabel } from '@/lib/branchUtils';
 import { GanttTreeOverlay } from '@/modules/gantt/components/GanttTreeOverlay';
@@ -46,7 +52,13 @@ import { createPortal } from 'react-dom';
 // ────────────────────────────────────────────
 //  DESIGN TOKENS (Nuevo Sistema Evolucionado)
 // ────────────────────────────────────────────
-import { COLORS, TYPOGRAPHY, DIMENSIONS, SHADOWS, TRANSITIONS } from '@/lib/designTokens';
+import {
+  COLORS,
+  TYPOGRAPHY,
+  DIMENSIONS,
+  SHADOWS,
+  TRANSITIONS,
+} from '@/lib/designTokens';
 
 // ═══════════════════════════════════════════════
 //  TYPES
@@ -124,6 +136,7 @@ interface TimelineViewPreset {
 const MIN_SIDEBAR_WIDTH = 320;
 const MAX_SIDEBAR_WIDTH = 760;
 const MIN_BAR_WIDTH = 12;
+const INDENT_STEP_PX = 12;
 
 const MIN_ZOOM = 0.3;
 const MAX_ZOOM = 3;
@@ -643,12 +656,14 @@ const GanttRow = React.memo(function GanttRow({
   isSidebarCollapsed,
   rowRef,
 }: GanttRowProps) {
-  const bar = getBarPropsFn(node);
-  if (!bar) return null;
+  // ── ALL HOOKS MUST BE BEFORE ANY EARLY RETURN ──
   const [rowMenuOpen, setRowMenuOpen] = useState(false);
   const rowMenuRef = useRef<HTMLDivElement | null>(null);
   const rowMenuPopupRef = useRef<HTMLDivElement | null>(null);
-  const [rowMenuPos, setRowMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const [rowMenuPos, setRowMenuPos] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
 
   useEffect(() => {
     if (!rowMenuOpen) return;
@@ -674,28 +689,36 @@ const GanttRow = React.memo(function GanttRow({
     setRowMenuOpen(true);
   }, []);
 
-  const openRowMenuFromButton = useCallback((rect: DOMRect) => {
-    if (typeof window === 'undefined') return;
-    const menuW = 176;
-    const menuH = 224;
-    const gap = 6;
+  const openRowMenuFromButton = useCallback(
+    (rect: DOMRect) => {
+      if (typeof window === 'undefined') return;
+      const menuW = 176;
+      const menuH = 224;
+      const gap = 6;
 
-    let left = rect.right + gap;
-    if (left + menuW > window.innerWidth - 8) {
-      left = rect.left - menuW - gap;
-    }
+      let left = rect.right + gap;
+      if (left + menuW > window.innerWidth - 8) {
+        left = rect.left - menuW - gap;
+      }
 
-    let top = rect.bottom + gap;
-    if (top + menuH > window.innerHeight - 8) {
-      top = rect.top - menuH - gap;
-    }
+      let top = rect.bottom + gap;
+      if (top + menuH > window.innerHeight - 8) {
+        top = rect.top - menuH - gap;
+      }
 
-    openRowMenuAt(left, top);
-  }, [openRowMenuAt]);
+      openRowMenuAt(left, top);
+    },
+    [openRowMenuAt],
+  );
+
+  // ── Compute bar props (after all hooks) ──
+  const bar = getBarPropsFn(node);
+
+  // ── EARLY RETURN (safe — all hooks are above) ──
+  if (!bar) return null;
 
   const dragOff =
     milestoneDrag?.projectId === node.id ? milestoneDrag.offsetDays : 0;
-  const indentStepPx = 12;
 
   // Visual resize preview
   const resizeState = barResize?.projectId === node.id ? barResize : null;
@@ -731,7 +754,9 @@ const GanttRow = React.memo(function GanttRow({
               className="h-5 w-5 inline-flex items-center justify-center opacity-0 group-hover:opacity-100 group-hover/bar:opacity-100 focus-visible:opacity-100 text-text-secondary transition-opacity"
               onClick={(e) => {
                 e.stopPropagation();
-                const rect = (e.currentTarget as HTMLButtonElement).getBoundingClientRect();
+                const rect = (
+                  e.currentTarget as HTMLButtonElement
+                ).getBoundingClientRect();
                 if (rowMenuOpen) {
                   setRowMenuOpen(false);
                   setRowMenuPos(null);
@@ -744,116 +769,118 @@ const GanttRow = React.memo(function GanttRow({
             >
               <MoreHorizontal size={12} />
             </button>
-            {rowMenuOpen && rowMenuPos && typeof document !== 'undefined'
+            {rowMenuOpen &&
+            rowMenuPos &&
+            typeof document !== 'undefined'
               ? createPortal(
-              <div
-                ref={rowMenuPopupRef}
-                className="fixed z-[900] w-44 rounded-lg border border-border bg-white shadow-lg p-1 pointer-events-auto"
-                style={{ top: rowMenuPos.top, left: rowMenuPos.left }}
-                onClick={(e) => e.stopPropagation()}
-              >
-                <button
-                  type="button"
-                  className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
-                  onClick={() => {
-                    onCreateProjectFrom(node);
-                    setRowMenuOpen(false);
-                  }}
-                >
-                  <Plus size={12} />
-                  Nuevo
-                </button>
-                <button
-                  type="button"
-                  className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
-                  onClick={() => {
-                    onDuplicateProjectFrom(node);
-                    setRowMenuOpen(false);
-                  }}
-                >
-                  <Copy size={12} />
-                  Duplicar
-                </button>
-                <button
-                  type="button"
-                  className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
-                  onClick={() => {
-                    onStartEditName(node.id, node.name);
-                    setRowMenuOpen(false);
-                  }}
-                >
-                  <Pencil size={12} />
-                  Renombrar
-                </button>
-                <button
-                  type="button"
-                  className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
-                  onClick={() => {
-                    onToggleMilestone(node);
-                    setRowMenuOpen(false);
-                  }}
-                >
-                  <Diamond size={12} />
-                  {ms ? 'Quitar hito' : 'Marcar hito'}
-                </button>
-                <button
-                  type="button"
-                  className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
-                  onClick={() => {
-                    onOpenDependencyEditor(node.id);
-                    setRowMenuOpen(false);
-                  }}
-                >
-                  <Link2 size={12} />
-                  Dependencias
-                </button>
-                <div className="my-1 border-t border-border" />
-                <button
-                  type="button"
-                  disabled={!canMoveUp}
-                  className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                  onClick={() => {
-                    onMoveRowUp(node.id);
-                    setRowMenuOpen(false);
-                  }}
-                >
-                  <ChevronUp size={12} />
-                  Mover arriba
-                </button>
-                <button
-                  type="button"
-                  disabled={!canMoveDown}
-                  className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-                  onClick={() => {
-                    onMoveRowDown(node.id);
-                    setRowMenuOpen(false);
-                  }}
-                >
-                  <ChevronDown size={12} />
-                  Mover abajo
-                </button>
-                <div className="my-1 border-t border-border" />
-                <button
-                  type="button"
-                  className="w-full text-left px-2 py-1.5 text-xs rounded text-red-600 hover:bg-red-50 inline-flex items-center gap-2"
-                  onClick={() => {
-                    onDeleteProjectById(node.id);
-                    setRowMenuOpen(false);
-                  }}
-                >
-                  <Trash2 size={12} />
-                  Eliminar
-                </button>
-              </div>,
-              document.body
-            )
+                  <div
+                    ref={rowMenuPopupRef}
+                    className="fixed z-[900] w-44 rounded-lg border border-border bg-white shadow-lg p-1 pointer-events-auto"
+                    style={{ top: rowMenuPos.top, left: rowMenuPos.left }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
+                      onClick={() => {
+                        onCreateProjectFrom(node);
+                        setRowMenuOpen(false);
+                      }}
+                    >
+                      <Plus size={12} />
+                      Nuevo
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
+                      onClick={() => {
+                        onDuplicateProjectFrom(node);
+                        setRowMenuOpen(false);
+                      }}
+                    >
+                      <Copy size={12} />
+                      Duplicar
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
+                      onClick={() => {
+                        onStartEditName(node.id, node.name);
+                        setRowMenuOpen(false);
+                      }}
+                    >
+                      <Pencil size={12} />
+                      Renombrar
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
+                      onClick={() => {
+                        onToggleMilestone(node);
+                        setRowMenuOpen(false);
+                      }}
+                    >
+                      <Diamond size={12} />
+                      {ms ? 'Quitar hito' : 'Marcar hito'}
+                    </button>
+                    <button
+                      type="button"
+                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2"
+                      onClick={() => {
+                        onOpenDependencyEditor(node.id);
+                        setRowMenuOpen(false);
+                      }}
+                    >
+                      <Link2 size={12} />
+                      Dependencias
+                    </button>
+                    <div className="my-1 border-t border-border" />
+                    <button
+                      type="button"
+                      disabled={!canMoveUp}
+                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                      onClick={() => {
+                        onMoveRowUp(node.id);
+                        setRowMenuOpen(false);
+                      }}
+                    >
+                      <ChevronUp size={12} />
+                      Mover arriba
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!canMoveDown}
+                      className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-bg-secondary inline-flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
+                      onClick={() => {
+                        onMoveRowDown(node.id);
+                        setRowMenuOpen(false);
+                      }}
+                    >
+                      <ChevronDown size={12} />
+                      Mover abajo
+                    </button>
+                    <div className="my-1 border-t border-border" />
+                    <button
+                      type="button"
+                      className="w-full text-left px-2 py-1.5 text-xs rounded text-red-600 hover:bg-red-50 inline-flex items-center gap-2"
+                      onClick={() => {
+                        onDeleteProjectById(node.id);
+                        setRowMenuOpen(false);
+                      }}
+                    >
+                      <Trash2 size={12} />
+                      Eliminar
+                    </button>
+                  </div>,
+                  document.body,
+                )
               : null}
           </div>
           {!isSidebarCollapsed && (
             <>
               <div
                 data-gantt-name-cell
-                style={{ paddingLeft: level * indentStepPx }}
+                style={{ paddingLeft: level * INDENT_STEP_PX }}
                 className="relative min-w-0 flex-1 flex items-center"
               >
                 {hasChildren && (
@@ -922,7 +949,26 @@ const GanttRow = React.memo(function GanttRow({
             onMouseEnter={(ev) => onBarHover(ev, node)}
             onMouseLeave={onBarLeave}
           />
-        ) : (
+        ) : null}
+
+        {/* Project name outside the milestone (monday.com style) */}
+        {ms && isMilestoneProject(node) && (
+          <div
+            className="absolute z-[2] text-[10px] font-medium truncate whitespace-nowrap leading-none pointer-events-none"
+            style={{
+              left: bar.left - 7 + dragOff * dayWidth + 12,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: COLORS.text,
+              maxWidth: '120px',
+            }}
+            title={node.name}
+          >
+            {node.name}
+          </div>
+        )}
+
+        {!ms && (
           <div
             className="absolute z-[1] h-7 rounded-md flex items-center overflow-hidden cursor-pointer group/resize hover:shadow-md hover:brightness-[0.97] transition-all duration-150"
             style={{
@@ -938,21 +984,27 @@ const GanttRow = React.memo(function GanttRow({
               className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 opacity-0 group-hover/resize:opacity-100 transition-opacity"
               onMouseDown={(e) => onStartBarResize(e, node, 'start')}
             />
-            {visualWidth > 40 && (
-              <span
-                className="text-[10px] font-semibold truncate px-2 whitespace-nowrap leading-none"
-                style={{
-                  color: bar.style.text,
-                  textShadow: '0 0 3px rgba(255,255,255,0.8)',
-                }}
-              >
-                {node.name}
-              </span>
-            )}
             <div
               className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 opacity-0 group-hover/resize:opacity-100 transition-opacity"
               onMouseDown={(e) => onStartBarResize(e, node, 'end')}
             />
+          </div>
+        )}
+
+        {/* Project name outside the bar (monday.com style) */}
+        {!ms && visualWidth > 20 && (
+          <div
+            className="absolute z-[2] text-[10px] font-medium truncate whitespace-nowrap leading-none pointer-events-none"
+            style={{
+              left: visualLeft + visualWidth + 4,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              color: COLORS.text,
+              maxWidth: '120px',
+            }}
+            title={node.name}
+          >
+            {node.name}
           </div>
         )}
 
@@ -1160,9 +1212,7 @@ function GanttTooltip({
         </div>
         <div className="text-text-secondary">Fin</div>
         <div className="text-text-primary tabular-nums">
-          {project.endDate
-            ? format(project.endDate, 'dd/MM/yyyy')
-            : '—'}
+          {project.endDate ? format(project.endDate, 'dd/MM/yyyy') : '—'}
         </div>
         <div className="text-text-secondary">Dias req.</div>
         <div className="text-text-primary font-medium">
@@ -1229,7 +1279,9 @@ export function GanttTimeline() {
   const { getAvatarUrl } = usePersonProfiles();
 
   // ── State ──
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
+    new Set(),
+  );
   const [tooltip, setTooltip] = useState<TooltipData | null>(null);
   const [editingProjectId, setEditingProjectId] = useState<string | null>(
     null,
@@ -1239,7 +1291,8 @@ export function GanttTimeline() {
   const [colorMode, setColorMode] = useState<ColorMode>('type');
   const [customColorField, setCustomColorField] =
     useState<CustomColorField>('branch');
-  const [hasSelectedColorCustomBefore, setHasSelectedColorCustomBefore] = useState(false);
+  const [hasSelectedColorCustomBefore, setHasSelectedColorCustomBefore] =
+    useState(false);
   const [groupMode, setGroupMode] = useState<GroupMode>('none');
   const [customGroupField, setCustomGroupField] =
     useState<CustomGroupField>('branch');
@@ -1253,7 +1306,8 @@ export function GanttTimeline() {
   const [zoomScale, setZoomScale] = useState(1);
   const [activePreset, setActivePreset] = useState<TimePreset | null>('ALL');
   const [timelineViews, setTimelineViews] = useState<TimelineViewPreset[]>([]);
-  const [activeTimelineViewId, setActiveTimelineViewId] = useState<string>('__current__');
+  const [activeTimelineViewId, setActiveTimelineViewId] =
+    useState<string>('__current__');
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
 
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
@@ -1448,7 +1502,8 @@ export function GanttTimeline() {
   );
 
   const timelineViewsStorageKey = useMemo(
-    () => `workload-dashboard-timeline-views-${activeBoardId || 'default'}`,
+    () =>
+      `workload-dashboard-timeline-views-${activeBoardId || 'default'}`,
     [activeBoardId],
   );
 
@@ -1709,7 +1764,8 @@ export function GanttTimeline() {
       if (!isMilestoneProject(project)) {
         const ok = await confirm({
           title: 'Convertir en hito',
-          message: 'Ajustara fecha fin = inicio y duracion = 0. ¿Continuar?',
+          message:
+            'Ajustara fecha fin = inicio y duracion = 0. ¿Continuar?',
           confirmText: 'Convertir',
         });
         if (!ok) return;
@@ -1731,110 +1787,140 @@ export function GanttTimeline() {
     [dispatch, confirm],
   );
 
-  const handleCreateProjectFrom = useCallback((source: Project) => {
-    const anchor = source.startDate || source.endDate || new Date();
-    const start = new Date(anchor);
-    const end = source.endDate ? new Date(source.endDate) : new Date(anchor);
-    const base: Project = {
-      id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      name: 'Nuevo proyecto',
-      branch: source.branch || [],
-      startDate: start,
-      endDate: end,
-      assignees: source.assignees || [],
-      daysRequired: Math.max(1, Number(source.daysRequired || 1)),
-      priority: source.priority || 1,
-      type: source.type || 'Proyecto',
-      blockedBy: null,
-      blocksTo: null,
-      reportedLoad: null,
-      parentId: source.parentId || null,
-      isExpanded: true,
-      hierarchyLevel: source.hierarchyLevel || 0,
-      assignedDays: 0,
-      balanceDays: 0,
-      dailyLoad: 0,
-      totalHours: 0,
-    };
-    const withComputed = computeProjectFields(base, state.config, [...state.projects, base]);
-    dispatch({
-      type: 'ADD_PROJECT',
-      payload: withComputed,
-    });
+  const handleCreateProjectFrom = useCallback(
+    (source: Project) => {
+      const anchor = source.startDate || source.endDate || new Date();
+      const start = new Date(anchor);
+      const end = source.endDate
+        ? new Date(source.endDate)
+        : new Date(anchor);
+      const base: Project = {
+        id: `proj-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: 'Nuevo proyecto',
+        branch: source.branch || [],
+        startDate: start,
+        endDate: end,
+        assignees: source.assignees || [],
+        daysRequired: Math.max(1, Number(source.daysRequired || 1)),
+        priority: source.priority || 1,
+        type: source.type || 'Proyecto',
+        blockedBy: null,
+        blocksTo: null,
+        reportedLoad: null,
+        parentId: source.parentId || null,
+        isExpanded: true,
+        hierarchyLevel: source.hierarchyLevel || 0,
+        assignedDays: 0,
+        balanceDays: 0,
+        dailyLoad: 0,
+        totalHours: 0,
+      };
+      const withComputed = computeProjectFields(base, state.config, [
+        ...state.projects,
+        base,
+      ]);
+      dispatch({
+        type: 'ADD_PROJECT',
+        payload: withComputed,
+      });
 
-    const currentOrder = (state.projectOrder && state.projectOrder.length > 0)
-      ? [...state.projectOrder]
-      : state.projects.map((p) => p.id);
-    const sourceIndex = currentOrder.indexOf(source.id);
-    const insertIndex = sourceIndex >= 0 ? sourceIndex + 1 : currentOrder.length;
-    currentOrder.splice(insertIndex, 0, withComputed.id);
-    dispatch({
-      type: 'REORDER_PROJECTS',
-      payload: currentOrder,
-    });
-  }, [dispatch, state.config, state.projects, state.projectOrder]);
+      const currentOrder =
+        state.projectOrder && state.projectOrder.length > 0
+          ? [...state.projectOrder]
+          : state.projects.map((p) => p.id);
+      const sourceIndex = currentOrder.indexOf(source.id);
+      const insertIndex =
+        sourceIndex >= 0 ? sourceIndex + 1 : currentOrder.length;
+      currentOrder.splice(insertIndex, 0, withComputed.id);
+      dispatch({
+        type: 'REORDER_PROJECTS',
+        payload: currentOrder,
+      });
+    },
+    [dispatch, state.config, state.projects, state.projectOrder],
+  );
 
-  const handleDuplicateProjectFrom = useCallback((source: Project) => {
-    const cloneBase: Project = {
-      ...source,
-      id: `dup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-      name: `${source.name} (copia)`,
-      startDate: source.startDate ? new Date(source.startDate) : null,
-      endDate: source.endDate ? new Date(source.endDate) : null,
-      isExpanded: true,
-    };
-    const withComputed = computeProjectFields(cloneBase, state.config, [...state.projects, cloneBase]);
-    dispatch({
-      type: 'ADD_PROJECT',
-      payload: withComputed,
-    });
+  const handleDuplicateProjectFrom = useCallback(
+    (source: Project) => {
+      const cloneBase: Project = {
+        ...source,
+        id: `dup-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        name: `${source.name} (copia)`,
+        startDate: source.startDate ? new Date(source.startDate) : null,
+        endDate: source.endDate ? new Date(source.endDate) : null,
+        isExpanded: true,
+      };
+      const withComputed = computeProjectFields(cloneBase, state.config, [
+        ...state.projects,
+        cloneBase,
+      ]);
+      dispatch({
+        type: 'ADD_PROJECT',
+        payload: withComputed,
+      });
 
-    const currentOrder = (state.projectOrder && state.projectOrder.length > 0)
-      ? [...state.projectOrder]
-      : state.projects.map((p) => p.id);
-    const sourceIndex = currentOrder.indexOf(source.id);
-    const insertIndex = sourceIndex >= 0 ? sourceIndex + 1 : currentOrder.length;
-    currentOrder.splice(insertIndex, 0, withComputed.id);
-    dispatch({
-      type: 'REORDER_PROJECTS',
-      payload: currentOrder,
-    });
-  }, [dispatch, state.config, state.projects, state.projectOrder]);
+      const currentOrder =
+        state.projectOrder && state.projectOrder.length > 0
+          ? [...state.projectOrder]
+          : state.projects.map((p) => p.id);
+      const sourceIndex = currentOrder.indexOf(source.id);
+      const insertIndex =
+        sourceIndex >= 0 ? sourceIndex + 1 : currentOrder.length;
+      currentOrder.splice(insertIndex, 0, withComputed.id);
+      dispatch({
+        type: 'REORDER_PROJECTS',
+        payload: currentOrder,
+      });
+    },
+    [dispatch, state.config, state.projects, state.projectOrder],
+  );
 
-  const handleDeleteProjectById = useCallback((projectId: string) => {
-    void confirm({
-      title: 'Eliminar proyecto',
-      message: 'Esta accion no se puede deshacer.',
-      confirmText: 'Eliminar',
-      tone: 'danger',
-    }).then((ok) => {
-      if (!ok) return;
-      dispatch({ type: 'DELETE_PROJECT', payload: projectId });
-    });
-  }, [confirm, dispatch]);
+  const handleDeleteProjectById = useCallback(
+    (projectId: string) => {
+      void confirm({
+        title: 'Eliminar proyecto',
+        message: 'Esta accion no se puede deshacer.',
+        confirmText: 'Eliminar',
+        tone: 'danger',
+      }).then((ok) => {
+        if (!ok) return;
+        dispatch({ type: 'DELETE_PROJECT', payload: projectId });
+      });
+    },
+    [confirm, dispatch],
+  );
 
-  const moveProjectByStep = useCallback((projectId: string, step: -1 | 1) => {
-    const baseOrder =
-      state.projectOrder && state.projectOrder.length > 0
-        ? [...state.projectOrder]
-        : state.projects.map((p) => p.id);
-    const idx = baseOrder.indexOf(projectId);
-    if (idx < 0) return;
-    const target = idx + step;
-    if (target < 0 || target >= baseOrder.length) return;
-    const [moved] = baseOrder.splice(idx, 1);
-    baseOrder.splice(target, 0, moved);
-    dispatch({ type: 'REORDER_PROJECTS', payload: baseOrder });
-    setOrderMode('custom');
-  }, [dispatch, state.projectOrder, state.projects]);
+  const moveProjectByStep = useCallback(
+    (projectId: string, step: -1 | 1) => {
+      const baseOrder =
+        state.projectOrder && state.projectOrder.length > 0
+          ? [...state.projectOrder]
+          : state.projects.map((p) => p.id);
+      const idx = baseOrder.indexOf(projectId);
+      if (idx < 0) return;
+      const target = idx + step;
+      if (target < 0 || target >= baseOrder.length) return;
+      const [moved] = baseOrder.splice(idx, 1);
+      baseOrder.splice(target, 0, moved);
+      dispatch({ type: 'REORDER_PROJECTS', payload: baseOrder });
+      setOrderMode('custom');
+    },
+    [dispatch, state.projectOrder, state.projects],
+  );
 
-  const handleMoveRowUp = useCallback((projectId: string) => {
-    moveProjectByStep(projectId, -1);
-  }, [moveProjectByStep]);
+  const handleMoveRowUp = useCallback(
+    (projectId: string) => {
+      moveProjectByStep(projectId, -1);
+    },
+    [moveProjectByStep],
+  );
 
-  const handleMoveRowDown = useCallback((projectId: string) => {
-    moveProjectByStep(projectId, 1);
-  }, [moveProjectByStep]);
+  const handleMoveRowDown = useCallback(
+    (projectId: string) => {
+      moveProjectByStep(projectId, 1);
+    },
+    [moveProjectByStep],
+  );
 
   const applyTimelineView = useCallback((view: TimelineViewPreset) => {
     setGroupMode(view.groupMode);
@@ -1845,12 +1931,15 @@ export function GanttTimeline() {
     setShowMilestonesOnly(view.showMilestonesOnly);
   }, []);
 
-  const handleSelectTimelineView = useCallback((viewId: string) => {
-    setActiveTimelineViewId(viewId);
-    if (viewId === '__current__') return;
-    const view = timelineViews.find((v) => v.id === viewId);
-    if (view) applyTimelineView(view);
-  }, [timelineViews, applyTimelineView]);
+  const handleSelectTimelineView = useCallback(
+    (viewId: string) => {
+      setActiveTimelineViewId(viewId);
+      if (viewId === '__current__') return;
+      const view = timelineViews.find((v) => v.id === viewId);
+      if (view) applyTimelineView(view);
+    },
+    [timelineViews, applyTimelineView],
+  );
 
   const handleSaveTimelineView = useCallback(() => {
     if (activeTimelineViewId === '__current__') {
@@ -1869,7 +1958,9 @@ export function GanttTimeline() {
     }
     setTimelineViews((prev) =>
       prev.map((v) =>
-        v.id === activeTimelineViewId ? { ...v, ...currentViewSnapshot } : v,
+        v.id === activeTimelineViewId
+          ? { ...v, ...currentViewSnapshot }
+          : v,
       ),
     );
   }, [activeTimelineViewId, currentViewSnapshot]);
@@ -1890,7 +1981,9 @@ export function GanttTimeline() {
 
   const handleDeleteTimelineView = useCallback(async () => {
     if (activeTimelineViewId === '__current__') return;
-    const selected = timelineViews.find((v) => v.id === activeTimelineViewId);
+    const selected = timelineViews.find(
+      (v) => v.id === activeTimelineViewId,
+    );
     if (!selected) return;
     const ok = await confirm({
       title: 'Eliminar vista',
@@ -1899,7 +1992,9 @@ export function GanttTimeline() {
       tone: 'danger',
     });
     if (!ok) return;
-    setTimelineViews((prev) => prev.filter((v) => v.id !== activeTimelineViewId));
+    setTimelineViews((prev) =>
+      prev.filter((v) => v.id !== activeTimelineViewId),
+    );
     setActiveTimelineViewId('__current__');
   }, [activeTimelineViewId, timelineViews, confirm]);
 
@@ -1914,16 +2009,21 @@ export function GanttTimeline() {
   }, []);
 
   const activeToolbarChips = useMemo(() => {
-    const chips: Array<{ id: string; label: string; onRemove: () => void }> = [];
+    const chips: Array<{
+      id: string;
+      label: string;
+      onRemove: () => void;
+    }> = [];
     if (groupMode !== 'none') {
+      const groupLabel =
+        groupMode === 'person'
+          ? 'Agrupar: Persona'
+          : groupMode === 'type'
+            ? 'Agrupar: Tipo'
+            : 'Agrupar: Personalizado';
       chips.push({
         id: 'group',
-        label:
-          groupMode === 'none'
-            ? 'Sin agrupar'
-            : groupMode === 'type'
-              ? 'Agrupar: Tipo'
-              : 'Agrupar: Personalizado',
+        label: groupLabel,
         onRemove: () => {
           setGroupMode('none');
           setCustomGroupField('branch');
@@ -1945,14 +2045,15 @@ export function GanttTimeline() {
       });
     }
     if (colorMode !== 'type') {
+      const colorLabel =
+        colorMode === 'load'
+          ? 'Color: Carga'
+          : colorMode === 'person'
+            ? 'Color: Persona'
+            : 'Color: Personalizado';
       chips.push({
         id: 'color',
-        label:
-          colorMode === 'person'
-            ? 'Color: Persona'
-            : colorMode === 'type'
-              ? 'Color: Tipo'
-              : 'Color: Personalizado',
+        label: colorLabel,
         onRemove: () => {
           setColorMode('type');
           setCustomColorField('branch');
@@ -1967,7 +2068,9 @@ export function GanttTimeline() {
       });
     }
     if (activeTimelineViewId !== '__current__') {
-      const selected = timelineViews.find((v) => v.id === activeTimelineViewId);
+      const selected = timelineViews.find(
+        (v) => v.id === activeTimelineViewId,
+      );
       chips.push({
         id: 'view',
         label: `Vista: ${selected?.name || 'Guardada'}`,
@@ -2051,7 +2154,13 @@ export function GanttTimeline() {
 
   const toggleSidebarCollapse = useCallback(() => {
     if (isSidebarCollapsed) {
-      setSidebarWidth(clamp(sidebarExpandedWidthRef.current, MIN_SIDEBAR_WIDTH, MAX_SIDEBAR_WIDTH));
+      setSidebarWidth(
+        clamp(
+          sidebarExpandedWidthRef.current,
+          MIN_SIDEBAR_WIDTH,
+          MAX_SIDEBAR_WIDTH,
+        ),
+      );
       setIsSidebarCollapsed(false);
       return;
     }
@@ -2110,11 +2219,13 @@ export function GanttTimeline() {
       e.preventDefault();
 
       const rect = el.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left - sidebarWidth + el.scrollLeft;
+      const mouseX =
+        e.clientX - rect.left - sidebarWidth + el.scrollLeft;
       const anchorDay = mouseX / dayWidth;
 
       const dir = e.deltaY < 0 ? 1 : -1;
-      const factor = dir > 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR;
+      const factor =
+        dir > 0 ? ZOOM_WHEEL_FACTOR : 1 / ZOOM_WHEEL_FACTOR;
       zoomToDay(zoomScale * factor, anchorDay);
     };
 
@@ -2126,7 +2237,9 @@ export function GanttTimeline() {
   useEffect(() => {
     if (!milestoneDrag) return;
     const onMove = (e: MouseEvent) => {
-      const off = Math.round((e.clientX - milestoneDrag.startX) / dayWidth);
+      const off = Math.round(
+        (e.clientX - milestoneDrag.startX) / dayWidth,
+      );
       setMilestoneDrag((p) => (p ? { ...p, offsetDays: off } : p));
     };
     const onUp = () => {
@@ -2156,7 +2269,9 @@ export function GanttTimeline() {
   useEffect(() => {
     if (!barResize) return;
     const onMove = (e: MouseEvent) => {
-      const off = Math.round((e.clientX - barResize.startX) / dayWidth);
+      const off = Math.round(
+        (e.clientX - barResize.startX) / dayWidth,
+      );
       setBarResize((p) => (p ? { ...p, offsetDays: off } : p));
     };
     const onUp = () => {
@@ -2221,7 +2336,13 @@ export function GanttTimeline() {
       invalidateTree();
     });
     return () => cancelAnimationFrame(frame);
-  }, [activeProjects, groupedTimeline, sidebarWidth, collapsedGroups, invalidateTree]);
+  }, [
+    activeProjects,
+    groupedTimeline,
+    sidebarWidth,
+    collapsedGroups,
+    invalidateTree,
+  ]);
 
   // Timeline views persistence by board
   useEffect(() => {
@@ -2280,7 +2401,9 @@ export function GanttTimeline() {
         <div className="w-16 h-16 rounded-2xl bg-bg-secondary flex items-center justify-center mb-3">
           <CalendarRange size={28} className="text-text-secondary/50" />
         </div>
-        <p className="text-sm font-medium">No hay proyectos con fechas</p>
+        <p className="text-sm font-medium">
+          No hay proyectos con fechas
+        </p>
         <p className="text-xs mt-1">
           Agrega fechas a los proyectos para ver el timeline.
         </p>
@@ -2289,8 +2412,10 @@ export function GanttTimeline() {
   }
 
   // ── Year and Month headers ──
-  const years: { label: string; startOffset: number; width: number }[] = [];
-  const months: { label: string; startOffset: number; width: number }[] = [];
+  const years: { label: string; startOffset: number; width: number }[] =
+    [];
+  const months: { label: string; startOffset: number; width: number }[] =
+    [];
   let curYear = -1,
     yStart = 0,
     curMonth = -1,
@@ -2310,7 +2435,11 @@ export function GanttTimeline() {
 
     if (m !== curMonth) {
       if (months.length) months[months.length - 1].width = i - mStart;
-      months.push({ label: format(d, 'MMM'), startOffset: i, width: 0 });
+      months.push({
+        label: format(d, 'MMM'),
+        startOffset: i,
+        width: 0,
+      });
       mStart = i;
       curMonth = m;
     }
@@ -2326,8 +2455,6 @@ export function GanttTimeline() {
     return { min: Math.min(...indices), max: Math.max(...indices) };
   })();
 
-  const indentStepPx = 12;
-
   // ═══════════════════════════════════════════════
   //  RENDER HELPERS
   // ═══════════════════════════════════════════════
@@ -2342,7 +2469,9 @@ export function GanttTimeline() {
       const ns = state.projects.find((p) => p.id === n.id);
       const exp = ns?.isExpanded ?? true;
       const hasKids = isParent(n.id, pList);
-      const depsFor = dependenciesAll.filter((d) => d.from.id === n.id);
+      const depsFor = dependenciesAll.filter(
+        (d) => d.from.id === n.id,
+      );
       const depNames = dependencyNamesByProject.get(n.id) || [];
 
       items.push(
@@ -2384,8 +2513,12 @@ export function GanttTimeline() {
           onDeleteProjectById={handleDeleteProjectById}
           onMoveRowUp={handleMoveRowUp}
           onMoveRowDown={handleMoveRowDown}
-          canMoveUp={(orderIndexMap.get(n.id) ?? -1) > movableOrderRange.min}
-          canMoveDown={(orderIndexMap.get(n.id) ?? -1) < movableOrderRange.max}
+          canMoveUp={
+            (orderIndexMap.get(n.id) ?? -1) > movableOrderRange.min
+          }
+          canMoveDown={
+            (orderIndexMap.get(n.id) ?? -1) < movableOrderRange.max
+          }
           isSidebarCollapsed={isSidebarCollapsed}
           rowRef={treeRegisterRow(n.id)}
         />,
@@ -2403,18 +2536,23 @@ export function GanttTimeline() {
     <div className="p-2 flex-1 overflow-hidden flex flex-col">
       {/* ── Toolbar ── */}
       <div className="mb-2 space-y-1">
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          flexWrap: 'wrap',
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            flexWrap: 'wrap',
+          }}
+        >
           <ToolbarDropdownWithActions
             value={activeTimelineViewId}
             onChange={(v) => handleSelectTimelineView(v)}
             options={[
               { value: '__current__', label: 'Vista predeterminada' },
-              ...timelineViews.map(v => ({ value: v.id, label: v.name })),
+              ...timelineViews.map((v) => ({
+                value: v.id,
+                label: v.name,
+              })),
             ]}
             icon={TOOLBAR_ICONS.view}
             placeholder="Vista"
@@ -2438,12 +2576,18 @@ export function GanttTimeline() {
               {
                 id: 'persons',
                 label: 'Personas',
-                options: filterPersons.map(p => ({ value: p, label: p })),
+                options: filterPersons.map((p) => ({
+                  value: p,
+                  label: p,
+                })),
               },
               {
                 id: 'branches',
                 label: 'Sucursales',
-                options: filterBranches.map(b => ({ value: b, label: b })),
+                options: filterBranches.map((b) => ({
+                  value: b,
+                  label: b,
+                })),
               },
               {
                 id: 'types',
@@ -2462,24 +2606,55 @@ export function GanttTimeline() {
             }}
             onChange={(groupId, values) => {
               if (groupId === 'persons') {
-                dispatch({ type: 'SET_FILTERS', payload: { persons: values } });
+                dispatch({
+                  type: 'SET_FILTERS',
+                  payload: { persons: values },
+                });
               } else if (groupId === 'branches') {
-                dispatch({ type: 'SET_FILTERS', payload: { branches: values } });
+                dispatch({
+                  type: 'SET_FILTERS',
+                  payload: { branches: values },
+                });
               } else if (groupId === 'types') {
-                dispatch({ type: 'SET_FILTERS', payload: { types: values } });
+                dispatch({
+                  type: 'SET_FILTERS',
+                  payload: { types: values },
+                });
               }
             }}
             showOnlyActive={state.filters.showOnlyActive}
-            onToggleOnlyActive={() => dispatch({ type: 'SET_FILTERS', payload: { showOnlyActive: !state.filters.showOnlyActive } })}
+            onToggleOnlyActive={() =>
+              dispatch({
+                type: 'SET_FILTERS',
+                payload: {
+                  showOnlyActive: !state.filters.showOnlyActive,
+                },
+              })
+            }
           />
 
           {state.filters.persons.length > 0 && (
-            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: '4px',
+                alignItems: 'center',
+              }}
+            >
               {state.filters.persons.slice(0, 3).map((p) => (
                 <button
                   key={`person-${p}`}
                   type="button"
-                  onClick={() => dispatch({ type: 'SET_FILTERS', payload: { persons: state.filters.persons.filter(x => x !== p) } })}
+                  onClick={() =>
+                    dispatch({
+                      type: 'SET_FILTERS',
+                      payload: {
+                        persons: state.filters.persons.filter(
+                          (x) => x !== p,
+                        ),
+                      },
+                    })
+                  }
                   style={{
                     height: '22px',
                     borderRadius: DIMENSIONS.radius.full,
@@ -2497,11 +2672,13 @@ export function GanttTimeline() {
                     fontWeight: 500,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = COLORS.dangerSoft;
+                    e.currentTarget.style.background =
+                      COLORS.dangerSoft;
                     e.currentTarget.style.color = COLORS.danger;
                   }}
                   onMouseLeave={(e) => {
-                    e.currentTarget.style.background = COLORS.accentSoft;
+                    e.currentTarget.style.background =
+                      COLORS.accentSoft;
                     e.currentTarget.style.color = COLORS.accentText;
                   }}
                 >
@@ -2510,18 +2687,40 @@ export function GanttTimeline() {
                 </button>
               ))}
               {state.filters.persons.length > 3 && (
-                <span style={{ fontSize: '11px', color: COLORS.textTertiary }}>+{state.filters.persons.length - 3}</span>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: COLORS.textTertiary,
+                  }}
+                >
+                  +{state.filters.persons.length - 3}
+                </span>
               )}
             </div>
           )}
 
           {state.filters.branches.length > 0 && (
-            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: '4px',
+                alignItems: 'center',
+              }}
+            >
               {state.filters.branches.slice(0, 3).map((b) => (
                 <button
                   key={`branch-${b}`}
                   type="button"
-                  onClick={() => dispatch({ type: 'SET_FILTERS', payload: { branches: state.filters.branches.filter(x => x !== b) } })}
+                  onClick={() =>
+                    dispatch({
+                      type: 'SET_FILTERS',
+                      payload: {
+                        branches: state.filters.branches.filter(
+                          (x) => x !== b,
+                        ),
+                      },
+                    })
+                  }
                   style={{
                     height: '22px',
                     borderRadius: DIMENSIONS.radius.full,
@@ -2552,18 +2751,40 @@ export function GanttTimeline() {
                 </button>
               ))}
               {state.filters.branches.length > 3 && (
-                <span style={{ fontSize: '11px', color: COLORS.textTertiary }}>+{state.filters.branches.length - 3}</span>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: COLORS.textTertiary,
+                  }}
+                >
+                  +{state.filters.branches.length - 3}
+                </span>
               )}
             </div>
           )}
 
           {state.filters.types.length > 0 && (
-            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: '4px',
+                alignItems: 'center',
+              }}
+            >
               {state.filters.types.slice(0, 3).map((t) => (
                 <button
                   key={`type-${t}`}
                   type="button"
-                  onClick={() => dispatch({ type: 'SET_FILTERS', payload: { types: state.filters.types.filter(x => x !== t) } })}
+                  onClick={() =>
+                    dispatch({
+                      type: 'SET_FILTERS',
+                      payload: {
+                        types: state.filters.types.filter(
+                          (x) => x !== t,
+                        ),
+                      },
+                    })
+                  }
                   style={{
                     height: '22px',
                     borderRadius: DIMENSIONS.radius.full,
@@ -2594,7 +2815,14 @@ export function GanttTimeline() {
                 </button>
               ))}
               {state.filters.types.length > 3 && (
-                <span style={{ fontSize: '11px', color: COLORS.textTertiary }}>+{state.filters.types.length - 3}</span>
+                <span
+                  style={{
+                    fontSize: '11px',
+                    color: COLORS.textTertiary,
+                  }}
+                >
+                  +{state.filters.types.length - 3}
+                </span>
               )}
             </div>
           )}
@@ -2609,10 +2837,14 @@ export function GanttTimeline() {
               { value: 'custom', label: 'Personalizado' },
             ]}
             icon={TOOLBAR_ICONS.group}
-            secondaryOptions={groupMode === 'custom' ? [
-              { value: 'branch', label: 'Sucursal' },
-              { value: 'priority', label: 'Prioridad' },
-            ] : undefined}
+            secondaryOptions={
+              groupMode === 'custom'
+                ? [
+                    { value: 'branch', label: 'Sucursal' },
+                    { value: 'priority', label: 'Prioridad' },
+                  ]
+                : undefined
+            }
             secondaryValue={customGroupField}
             onSecondaryChange={(v) => {
               setCustomGroupField(v as CustomGroupField);
@@ -2643,10 +2875,14 @@ export function GanttTimeline() {
               { value: 'custom', label: 'Personalizado' },
             ]}
             icon={TOOLBAR_ICONS.color}
-            secondaryOptions={colorMode === 'custom' ? [
-              { value: 'branch', label: 'Sucursal' },
-              { value: 'type', label: 'Tipo' },
-            ] : undefined}
+            secondaryOptions={
+              colorMode === 'custom'
+                ? [
+                    { value: 'branch', label: 'Sucursal' },
+                    { value: 'type', label: 'Tipo' },
+                  ]
+                : undefined
+            }
             secondaryValue={customColorField}
             onSecondaryChange={(v) => {
               setCustomColorField(v as CustomColorField);
@@ -2656,119 +2892,132 @@ export function GanttTimeline() {
             placeholder="Colorear"
           />
           {(activeToolbarChips.length > 0 || showMilestonesOnly) && (
-          <div style={{
-            marginLeft: 'auto',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            flexWrap: 'wrap',
-          }}>
-            {activeToolbarChips.map((chip) => (
-              <button
-                key={chip.id}
-                type="button"
-                onClick={chip.onRemove}
-                style={{
-                  height: '24px',
-                  borderRadius: DIMENSIONS.radius.full,
-                  border: `1px solid ${COLORS.border}`,
-                  background: COLORS.bg,
-                  padding: '0 8px',
-                  fontSize: '11px',
-                  color: COLORS.textSecondary,
-                  cursor: 'pointer',
-                  transition: `all ${TRANSITIONS.hover}`,
-                  fontFamily: TYPOGRAPHY.fontFamily,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = COLORS.bgMuted;
-                  e.currentTarget.style.color = COLORS.text;
-                  e.currentTarget.style.borderColor = COLORS.borderSubtle;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = COLORS.bg;
-                  e.currentTarget.style.color = COLORS.textSecondary;
-                  e.currentTarget.style.borderColor = COLORS.border;
-                }}
-              >
-                {chip.label}
-                <span style={{
-                  fontSize: '10px',
-                  opacity: 0.7,
-                }}>×</span>
-              </button>
-            ))}
-            {showMilestonesOnly && (
-              <button
-                type="button"
-                onClick={() => setShowMilestonesOnly(false)}
-                style={{
-                  height: '24px',
-                  borderRadius: DIMENSIONS.radius.full,
-                  border: `1px solid ${COLORS.border}`,
-                  background: COLORS.bg,
-                  padding: '0 8px',
-                  fontSize: '11px',
-                  color: COLORS.textSecondary,
-                  cursor: 'pointer',
-                  transition: `all ${TRANSITIONS.hover}`,
-                  fontFamily: TYPOGRAPHY.fontFamily,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = COLORS.bgMuted;
-                  e.currentTarget.style.color = COLORS.text;
-                  e.currentTarget.style.borderColor = COLORS.borderSubtle;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = COLORS.bg;
-                  e.currentTarget.style.color = COLORS.textSecondary;
-                  e.currentTarget.style.borderColor = COLORS.border;
-                }}
-              >
-                Solo hitos
-                <span style={{
-                  fontSize: '10px',
-                  opacity: 0.7,
-                }}>×</span>
-              </button>
-            )}
-            <button
-              type="button"
-              onClick={resetTimelineToolbar}
+            <div
               style={{
-                height: '24px',
-                borderRadius: DIMENSIONS.radius.full,
-                border: `1px solid ${COLORS.danger}`,
-                background: COLORS.bg,
-                padding: '0 8px',
-                fontSize: '11px',
-                color: COLORS.danger,
-                cursor: 'pointer',
-                transition: `all ${TRANSITIONS.hover}`,
-                fontFamily: TYPOGRAPHY.fontFamily,
+                marginLeft: 'auto',
                 display: 'flex',
                 alignItems: 'center',
-                gap: '4px',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = COLORS.dangerSoft;
-                e.currentTarget.style.borderColor = COLORS.danger;
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = COLORS.bg;
-                e.currentTarget.style.borderColor = COLORS.danger;
+                gap: '8px',
+                flexWrap: 'wrap',
               }}
             >
-              Limpiar todo
-            </button>
-          </div>
-        )}
+              {activeToolbarChips.map((chip) => (
+                <button
+                  key={chip.id}
+                  type="button"
+                  onClick={chip.onRemove}
+                  style={{
+                    height: '24px',
+                    borderRadius: DIMENSIONS.radius.full,
+                    border: `1px solid ${COLORS.border}`,
+                    background: COLORS.bg,
+                    padding: '0 8px',
+                    fontSize: '11px',
+                    color: COLORS.textSecondary,
+                    cursor: 'pointer',
+                    transition: `all ${TRANSITIONS.hover}`,
+                    fontFamily: TYPOGRAPHY.fontFamily,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = COLORS.bgMuted;
+                    e.currentTarget.style.color = COLORS.text;
+                    e.currentTarget.style.borderColor =
+                      COLORS.borderSubtle;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = COLORS.bg;
+                    e.currentTarget.style.color = COLORS.textSecondary;
+                    e.currentTarget.style.borderColor = COLORS.border;
+                  }}
+                >
+                  {chip.label}
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      opacity: 0.7,
+                    }}
+                  >
+                    ×
+                  </span>
+                </button>
+              ))}
+              {showMilestonesOnly && (
+                <button
+                  type="button"
+                  onClick={() => setShowMilestonesOnly(false)}
+                  style={{
+                    height: '24px',
+                    borderRadius: DIMENSIONS.radius.full,
+                    border: `1px solid ${COLORS.border}`,
+                    background: COLORS.bg,
+                    padding: '0 8px',
+                    fontSize: '11px',
+                    color: COLORS.textSecondary,
+                    cursor: 'pointer',
+                    transition: `all ${TRANSITIONS.hover}`,
+                    fontFamily: TYPOGRAPHY.fontFamily,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = COLORS.bgMuted;
+                    e.currentTarget.style.color = COLORS.text;
+                    e.currentTarget.style.borderColor =
+                      COLORS.borderSubtle;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = COLORS.bg;
+                    e.currentTarget.style.color =
+                      COLORS.textSecondary;
+                    e.currentTarget.style.borderColor = COLORS.border;
+                  }}
+                >
+                  Solo hitos
+                  <span
+                    style={{
+                      fontSize: '10px',
+                      opacity: 0.7,
+                    }}
+                  >
+                    ×
+                  </span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={resetTimelineToolbar}
+                style={{
+                  height: '24px',
+                  borderRadius: DIMENSIONS.radius.full,
+                  border: `1px solid ${COLORS.danger}`,
+                  background: COLORS.bg,
+                  padding: '0 8px',
+                  fontSize: '11px',
+                  color: COLORS.danger,
+                  cursor: 'pointer',
+                  transition: `all ${TRANSITIONS.hover}`,
+                  fontFamily: TYPOGRAPHY.fontFamily,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = COLORS.dangerSoft;
+                  e.currentTarget.style.borderColor = COLORS.danger;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = COLORS.bg;
+                  e.currentTarget.style.borderColor = COLORS.danger;
+                }}
+              >
+                Limpiar todo
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -2779,7 +3028,10 @@ export function GanttTimeline() {
           ref={tooltipContainerRef}
           className="bg-white rounded-xl border border-border overflow-hidden flex-1 min-h-0 relative isolate"
         >
-          <div ref={scrollContainerRef} className="overflow-auto h-full">
+          <div
+            ref={scrollContainerRef}
+            className="overflow-auto h-full"
+          >
             <div style={{ minWidth: timelineWidth + sidebarWidth }}>
               {/* ── HEADER ── */}
               <div className="sticky top-0 z-30 border-b border-border bg-white">
@@ -2796,11 +3048,22 @@ export function GanttTimeline() {
                       type="button"
                       onClick={toggleSidebarCollapse}
                       className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded text-text-secondary hover:bg-bg-secondary"
-                      title={isSidebarCollapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
+                      title={
+                        isSidebarCollapsed
+                          ? 'Expandir sidebar'
+                          : 'Colapsar sidebar'
+                      }
                     >
-                      {isSidebarCollapsed ? <ChevronsRight size={12} /> : <ChevronsLeft size={12} />}
+                      {isSidebarCollapsed ? (
+                        <ChevronsRight size={12} />
+                      ) : (
+                        <ChevronsLeft size={12} />
+                      )}
                     </button>
-                    {!isSidebarCollapsed && (groupMode === 'none' ? 'Proyecto' : 'Grupo / Proyecto')}
+                    {!isSidebarCollapsed &&
+                      (groupMode === 'none'
+                        ? 'Proyecto'
+                        : 'Grupo / Proyecto')}
                     <div
                       onMouseDown={startSidebarResize}
                       className={`absolute right-0 top-0 h-full w-2 transition-colors ${isSidebarCollapsed ? 'cursor-default' : 'cursor-col-resize hover:bg-blue-100/40'}`}
@@ -2851,11 +3114,15 @@ export function GanttTimeline() {
                       <>
                         <div
                           className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-10 pointer-events-none"
-                          style={{ left: todayOffset * dayWidth }}
+                          style={{
+                            left: todayOffset * dayWidth,
+                          }}
                         />
                         <div
                           className="absolute top-1/2 w-3 h-3 bg-blue-400 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20"
-                          style={{ left: todayOffset * dayWidth }}
+                          style={{
+                            left: todayOffset * dayWidth,
+                          }}
                         />
                       </>
                     )}
@@ -2867,8 +3134,10 @@ export function GanttTimeline() {
               {groupedTimeline.map((group, gi) => {
                 const pList = group.projects;
                 const collapsed = collapsedGroups.has(group.id);
-                const pColor = PERSON_COLORS[gi % PERSON_COLORS.length];
-                const roots = (groupRootsMap.get(group.id) || []) as HierarchyNode[];
+                const pColor =
+                  PERSON_COLORS[gi % PERSON_COLORS.length];
+                const roots = (groupRootsMap.get(group.id) ||
+                  []) as HierarchyNode[];
 
                 if (groupMode === 'none') {
                   return (
@@ -2881,8 +3150,9 @@ export function GanttTimeline() {
                       <GanttTreeOverlay
                         projects={pList}
                         rowRefs={treeRowRefs}
-                        groupHostRefs={treeGroupHostRefs} groupId={group.id}
-                        step={indentStepPx}
+                        groupHostRefs={treeGroupHostRefs}
+                        groupId={group.id}
+                        step={INDENT_STEP_PX}
                         version={treeVersion}
                         className="stroke-neutral-300/75"
                       />
@@ -2904,17 +3174,27 @@ export function GanttTimeline() {
                         }}
                       >
                         {collapsed ? (
-                          <ChevronRight size={14} className="text-text-secondary" />
+                          <ChevronRight
+                            size={14}
+                            className="text-text-secondary"
+                          />
                         ) : (
-                          <ChevronDown size={14} className="text-text-secondary" />
+                          <ChevronDown
+                            size={14}
+                            className="text-text-secondary"
+                          />
                         )}
                         {groupMode === 'person' ? (
                           <div
                             className="w-6 h-6 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 overflow-hidden"
-                            style={{ backgroundColor: pColor }}
+                            style={{
+                              backgroundColor: pColor,
+                            }}
                           >
                             {(() => {
-                              const avatarUrl = getAvatarUrl(group.label);
+                              const avatarUrl = getAvatarUrl(
+                                group.label,
+                              );
                               return avatarUrl ? (
                                 <img
                                   src={avatarUrl}
@@ -2929,7 +3209,10 @@ export function GanttTimeline() {
                         ) : (
                           <div
                             className="w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold flex-shrink-0"
-                            style={{ backgroundColor: '#E2E8F0', color: '#475569' }}
+                            style={{
+                              backgroundColor: '#E2E8F0',
+                              color: '#475569',
+                            }}
                           >
                             {group.label.charAt(0)}
                           </div>
@@ -2944,7 +3227,8 @@ export function GanttTimeline() {
                       <div className="flex-1 relative h-8">
                         {collapsed &&
                           pList.map((proj) => {
-                            const b = getBarPropsForProject(proj);
+                            const b =
+                              getBarPropsForProject(proj);
                             if (!b) return null;
                             return (
                               <div
@@ -2963,7 +3247,9 @@ export function GanttTimeline() {
                         {showTodayLine && (
                           <div
                             className="absolute top-0 bottom-0 w-0.5 bg-blue-400/50 pointer-events-none"
-                            style={{ left: todayOffset * dayWidth }}
+                            style={{
+                              left: todayOffset * dayWidth,
+                            }}
                           />
                         )}
                       </div>
@@ -2977,8 +3263,9 @@ export function GanttTimeline() {
                         <GanttTreeOverlay
                           projects={pList}
                           rowRefs={treeRowRefs}
-                          groupHostRefs={treeGroupHostRefs} groupId={group.id}
-                          step={indentStepPx}
+                          groupHostRefs={treeGroupHostRefs}
+                          groupId={group.id}
+                          step={INDENT_STEP_PX}
                           version={treeVersion}
                           className="stroke-neutral-300/75"
                         />
@@ -2997,79 +3284,100 @@ export function GanttTimeline() {
               x={tooltip.x}
               y={tooltip.y}
               sidebarWidth={sidebarWidth}
-              containerWidth={tooltipContainerRef.current?.clientWidth ?? 0}
+              containerWidth={
+                tooltipContainerRef.current?.clientWidth ?? 0
+              }
               containerHeight={
                 tooltipContainerRef.current?.clientHeight ?? 0
               }
               dependencyNames={
-                dependencyNamesByProject.get(tooltip.project.id) || []
+                dependencyNamesByProject.get(
+                  tooltip.project.id,
+                ) || []
               }
             />
           )}
         </div>
 
         {/* ─── NAVIGATION BAR (Apple/shadcn/ui Style) ─── */}
-        <div style={{
-          marginTop: '8px',
-          flexShrink: 0,
-        }}>
+        <div
+          style={{
+            marginTop: '8px',
+            flexShrink: 0,
+          }}
+        >
           {/* Controls */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}>
-            {/* Presets - PillGroup Style */}
-            <div style={{
-              display: 'inline-flex',
+          <div
+            style={{
+              display: 'flex',
               alignItems: 'center',
-              gap: '2px',
-              padding: '3px',
-              background: COLORS.bgMuted,
-              borderRadius: DIMENSIONS.radius.sm,
-              border: `1px solid ${COLORS.border}`,
-            }}>
-              {(Object.keys(PRESET_DAYS) as TimePreset[]).map((preset) => {
-                const isActive = activePreset === preset;
-                return (
-                  <button
-                    key={preset}
-                    onClick={() => applyPreset(preset)}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      padding: '4px 8px',
-                      borderRadius: '6px',
-                      border: 'none',
-                      cursor: 'pointer',
-                      transition: `all ${TRANSITIONS.hover}`,
-                      background: isActive ? COLORS.bg : 'transparent',
-                      boxShadow: isActive ? SHADOWS.sm : 'none',
-                      color: isActive ? COLORS.text : COLORS.textTertiary,
-                      fontSize: '11px',
-                      fontWeight: isActive ? 500 : 400,
-                      fontFamily: TYPOGRAPHY.fontFamily,
-                      minWidth: '28px',
-                    }}
-                  >
-                    {PRESET_LABELS[preset]}
-                  </button>
-                );
-              })}
+              gap: '8px',
+            }}
+          >
+            {/* Presets - PillGroup Style */}
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '2px',
+                padding: '3px',
+                background: COLORS.bgMuted,
+                borderRadius: DIMENSIONS.radius.sm,
+                border: `1px solid ${COLORS.border}`,
+              }}
+            >
+              {(Object.keys(PRESET_DAYS) as TimePreset[]).map(
+                (preset) => {
+                  const isActive = activePreset === preset;
+                  return (
+                    <button
+                      key={preset}
+                      onClick={() => applyPreset(preset)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        padding: '4px 8px',
+                        borderRadius: '6px',
+                        border: 'none',
+                        cursor: 'pointer',
+                        transition: `all ${TRANSITIONS.hover}`,
+                        background: isActive
+                          ? COLORS.bg
+                          : 'transparent',
+                        boxShadow: isActive
+                          ? SHADOWS.sm
+                          : 'none',
+                        color: isActive
+                          ? COLORS.text
+                          : COLORS.textTertiary,
+                        fontSize: '11px',
+                        fontWeight: isActive ? 500 : 400,
+                        fontFamily: TYPOGRAPHY.fontFamily,
+                        minWidth: '28px',
+                      }}
+                    >
+                      {PRESET_LABELS[preset]}
+                    </button>
+                  );
+                },
+              )}
             </div>
 
-            <div style={{
-              width: '1px',
-              height: '20px',
-              background: COLORS.border,
-            }} />
+            <div
+              style={{
+                width: '1px',
+                height: '20px',
+                background: COLORS.border,
+              }}
+            />
 
             {/* Navigation */}
             <button
               onClick={() =>
                 panToDay(
-                  viewStartDay - (viewEndDay - viewStartDay) * 0.5,
+                  viewStartDay -
+                    (viewEndDay - viewStartDay) * 0.5,
                 )
               }
               style={{
@@ -3131,7 +3439,8 @@ export function GanttTimeline() {
             <button
               onClick={() =>
                 panToDay(
-                  viewEndDay + (viewEndDay - viewStartDay) * 0.5,
+                  viewEndDay +
+                    (viewEndDay - viewStartDay) * 0.5,
                 )
               }
               style={{
@@ -3161,45 +3470,48 @@ export function GanttTimeline() {
               <ChevronsRight size={14} strokeWidth={1.5} />
             </button>
 
-            <div style={{
-              width: '1px',
-              height: '20px',
-              background: COLORS.border,
-            }} />
+            <div
+              style={{
+                width: '1px',
+                height: '20px',
+                background: COLORS.border,
+              }}
+            />
 
             {/* Zoom Slider */}
             <ZoomSlider zoom={zoomScale} onChange={zoomCentered} />
 
             {/* Zoom percentage */}
-            <span style={{
-              fontSize: '11px',
-              color: COLORS.textTertiary,
-              fontVariantNumeric: 'tabular-nums',
-              minWidth: '40px',
-              textAlign: 'center',
-              fontFamily: TYPOGRAPHY.fontFamily,
-            }}>
+            <span
+              style={{
+                fontSize: '11px',
+                color: COLORS.textTertiary,
+                fontVariantNumeric: 'tabular-nums',
+                minWidth: '40px',
+                textAlign: 'center',
+                fontFamily: TYPOGRAPHY.fontFamily,
+              }}
+            >
               {Math.round(zoomScale * 100)}%
             </span>
 
             {/* Date range */}
-            <span style={{
-              marginLeft: 'auto',
-              fontSize: '11px',
-              color: COLORS.textTertiary,
-              fontVariantNumeric: 'tabular-nums',
-              fontFamily: TYPOGRAPHY.fontFamily,
-            }}>
+            <span
+              style={{
+                marginLeft: 'auto',
+                fontSize: '11px',
+                color: COLORS.textTertiary,
+                fontVariantNumeric: 'tabular-nums',
+                fontFamily: TYPOGRAPHY.fontFamily,
+              }}
+            >
               {format(
                 addDays(range.start, Math.floor(viewStartDay)),
                 'dd MMM',
               )}
               {' — '}
               {format(
-                addDays(
-                  range.start,
-                  Math.floor(viewEndDay)
-                ),
+                addDays(range.start, Math.floor(viewEndDay)),
                 'dd MMM',
               )}
             </span>
@@ -3216,7 +3528,9 @@ export function GanttTimeline() {
             const s = activeProjects.find(
               (p) => p.id === dependencyEditorProjectId,
             );
-            return s ? parseDependencyIds(s, activeProjects) : [];
+            return s
+              ? parseDependencyIds(s, activeProjects)
+              : [];
           })()}
           onClose={() => setDependencyEditorProjectId(null)}
           onSave={(ids) => {
