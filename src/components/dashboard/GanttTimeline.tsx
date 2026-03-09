@@ -2411,7 +2411,7 @@ export function GanttTimeline() {
             value={activeTimelineViewId}
             onChange={(v) => handleSelectTimelineView(v)}
             options={[
-              { value: '__current__', label: 'Sin vista' },
+              { value: '__current__', label: 'Vista predeterminada' },
               ...timelineViews.map(v => ({ value: v.id, label: v.name })),
             ]}
             icon={TOOLBAR_ICONS.view}
@@ -2467,42 +2467,9 @@ export function GanttTimeline() {
                 dispatch({ type: 'SET_FILTERS', payload: { types: values } });
               }
             }}
+            showOnlyActive={state.filters.showOnlyActive}
+            onToggleOnlyActive={() => dispatch({ type: 'SET_FILTERS', payload: { showOnlyActive: !state.filters.showOnlyActive } })}
           />
-
-          <button
-            type="button"
-            onClick={() => dispatch({ type: 'SET_FILTERS', payload: { showOnlyActive: !state.filters.showOnlyActive } })}
-            style={{
-              height: '30px',
-              borderRadius: DIMENSIONS.radius.sm,
-              border: 'none',
-              background: state.filters.showOnlyActive ? COLORS.accentSoft : 'transparent',
-              padding: '0 8px',
-              fontSize: '12px',
-              color: state.filters.showOnlyActive ? COLORS.accent : COLORS.textSecondary,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              transition: TRANSITIONS.hover,
-              fontFamily: TYPOGRAPHY.fontFamily,
-              fontWeight: 500,
-              outline: 'none',
-            }}
-            onMouseEnter={(e) => {
-              if (!state.filters.showOnlyActive) {
-                e.currentTarget.style.background = COLORS.bgMuted;
-              }
-            }}
-            onMouseLeave={(e) => {
-              if (!state.filters.showOnlyActive) {
-                e.currentTarget.style.background = 'transparent';
-              }
-            }}
-          >
-            <EyeOff size={14} />
-            Solo activos
-          </button>
 
           {state.filters.persons.length > 0 && (
             <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>

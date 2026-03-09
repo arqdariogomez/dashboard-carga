@@ -828,17 +828,21 @@ interface UnifiedFilterDropdownProps {
   groups: FilterGroup[];
   selections: Record<string, string[]>;
   onChange: (groupId: string, values: string[]) => void;
+  showOnlyActive?: boolean;
+  onToggleOnlyActive?: () => void;
 }
 
 export function UnifiedFilterDropdown({
   groups,
   selections,
   onChange,
+  showOnlyActive = false,
+  onToggleOnlyActive,
 }: UnifiedFilterDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const totalSelections = Object.values(selections).reduce((acc, arr) => acc + arr.length, 0);
+  const totalSelections = Object.values(selections).reduce((acc, arr) => acc + arr.length, 0) + (showOnlyActive ? 1 : 0);
   const displayLabel = totalSelections > 0 
     ? `Filtros (${totalSelections})` 
     : 'Filtros';
@@ -918,6 +922,62 @@ export function UnifiedFilterDropdown({
             animation: `${TRANSITIONS.smooth} ease-out`,
           }}
         >
+          {onToggleOnlyActive && (
+            <button
+              type="button"
+              onClick={onToggleOnlyActive}
+              style={{
+                width: '100%',
+                textAlign: 'left',
+                padding: '6px 8px',
+                borderRadius: DIMENSIONS.radius.sm,
+                border: 'none',
+                background: showOnlyActive ? COLORS.accentSoft : 'transparent',
+                color: showOnlyActive ? COLORS.accentText : COLORS.textSecondary,
+                fontSize: '12px',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px',
+                transition: TRANSITIONS.colors,
+                fontFamily: TYPOGRAPHY.fontFamily,
+                fontWeight: 500,
+                marginBottom: '4px',
+              }}
+              onMouseEnter={(e) => {
+                if (!showOnlyActive) {
+                  e.currentTarget.style.background = COLORS.bgMuted;
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!showOnlyActive) {
+                  e.currentTarget.style.background = 'transparent';
+                }
+              }}
+            >
+              <span style={{
+                width: '14px',
+                height: '14px',
+                borderRadius: '3px',
+                border: `1.5px solid ${showOnlyActive ? COLORS.accent : COLORS.border}`,
+                background: showOnlyActive ? COLORS.accent : 'transparent',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: TRANSITIONS.colors,
+              }}>
+                {showOnlyActive && (
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
+                    <path d="M2 5L4 7L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </span>
+              Solo activos
+            </button>
+          )}
+          {onToggleOnlyActive && (
+            <div style={{ height: '1px', background: COLORS.border, margin: '4px 0' }} />
+          )}
           {groups.map((group) => (
             <div key={group.id}>
               <div
