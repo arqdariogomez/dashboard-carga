@@ -651,3 +651,169 @@ export const TOOLBAR_ICONS = {
   color: <Palette size={14} />,
   filter: <Filter size={14} />,
 };
+
+interface FilterDropdownOption {
+  value: string;
+  label: string;
+}
+
+interface FilterDropdownProps {
+  label: string;
+  icon?: React.ReactNode;
+  options: FilterDropdownOption[];
+  selectedValues: string[];
+  onChange: (values: string[]) => void;
+  placeholder?: string;
+}
+
+export function FilterDropdown({
+  label,
+  icon,
+  options,
+  selectedValues,
+  onChange,
+  placeholder = 'Seleccionar',
+}: FilterDropdownProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const hasSelection = selectedValues.length > 0;
+  const displayLabel = hasSelection 
+    ? `${label} (${selectedValues.length})` 
+    : label;
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const toggleOption = (value: string) => {
+    if (selectedValues.includes(value)) {
+      onChange(selectedValues.filter(v => v !== value));
+    } else {
+      onChange([...selectedValues, value]);
+    }
+  };
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          height: '30px',
+          borderRadius: DIMENSIONS.radius.sm,
+          border: 'none',
+          background: hasSelection ? COLORS.accentSoft : 'transparent',
+          padding: '0 8px',
+          fontSize: '12px',
+          color: hasSelection ? COLORS.accent : COLORS.textSecondary,
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          transition: TRANSITIONS.hover,
+          fontFamily: TYPOGRAPHY.fontFamily,
+          fontWeight: 500,
+          outline: 'none',
+        }}
+        onMouseEnter={(e) => {
+          if (!hasSelection) {
+            e.currentTarget.style.background = COLORS.bgMuted;
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!hasSelection) {
+            e.currentTarget.style.background = 'transparent';
+          }
+        }}
+      >
+        {icon && (
+          <span style={{ opacity: 0.7, display: 'flex' }}>
+            {icon}
+          </span>
+        )}
+        <span style={{ whiteSpace: 'nowrap' }}>{displayLabel}</span>
+      </button>
+
+      {isOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '34px',
+            left: 0,
+            zIndex: 100,
+            minWidth: '180px',
+            maxHeight: '240px',
+            overflowY: 'auto',
+            borderRadius: DIMENSIONS.radius.md,
+            border: `1px solid ${COLORS.border}`,
+            background: COLORS.bg,
+            boxShadow: SHADOWS.lg,
+            padding: '4px',
+            animation: `${TRANSITIONS.smooth} ease-out`,
+          }}
+        >
+          {options.length === 0 ? (
+            <div style={{
+              padding: '8px 10px',
+              fontSize: '12px',
+              color: COLORS.textTertiary,
+              fontFamily: TYPOGRAPHY.fontFamily,
+            }}>
+              Sin opciones disponibles
+            </div>
+          ) : (
+            options.map((option) => (
+              <label
+                key={option.value}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
+                  padding: '6px 8px',
+                  borderRadius: DIMENSIONS.radius.sm,
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  color: selectedValues.includes(option.value) ? COLORS.accentText : COLORS.textSecondary,
+                  background: selectedValues.includes(option.value) ? COLORS.accentSoft : 'transparent',
+                  fontFamily: TYPOGRAPHY.fontFamily,
+                  transition: TRANSITIONS.colors,
+                }}
+                onMouseEnter={(e) => {
+                  if (!selectedValues.includes(option.value)) {
+                    e.currentTarget.style.background = COLORS.bgMuted;
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!selectedValues.includes(option.value)) {
+                    e.currentTarget.style.background = 'transparent';
+                  }
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedValues.includes(option.value)}
+                  onChange={() => toggleOption(option.value)}
+                  style={{
+                    width: '14px',
+                    height: '14px',
+                    cursor: 'pointer',
+                    accentColor: COLORS.accent,
+                  }}
+                />
+                {option.label}
+              </label>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

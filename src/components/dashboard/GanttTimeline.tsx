@@ -27,8 +27,14 @@ import {
   Trash2,
   Pencil,
   Save,
+  Filter,
+  Users,
+  Building2,
+  Tag,
+  Layers,
+  EyeOff,
 } from 'lucide-react';
-import { ToolbarDropdown, ToolbarDropdownWithActions, TOOLBAR_ICONS } from '@/components/shared/ModernToolbar';
+import { ToolbarDropdown, ToolbarDropdownWithActions, FilterDropdown, TOOLBAR_ICONS } from '@/components/shared/ModernToolbar';
 import type { Project } from '@/lib/types';
 import { branchLabel } from '@/lib/branchUtils';
 import { GanttTreeOverlay } from '@/modules/gantt/components/GanttTreeOverlay';
@@ -1215,6 +1221,8 @@ export function GanttTimeline() {
     filteredProjects,
     dateRange: globalRange,
     activeBoardId,
+    allPersons: filterPersons,
+    allBranches: filterBranches,
   } = useProject();
   const { confirm } = useUiFeedback();
   const { getAvatarUrl } = usePersonProfiles();
@@ -2421,6 +2429,69 @@ export function GanttTimeline() {
               },
             ]}
           />
+
+          <FilterDropdown
+            label="Personas"
+            icon={<Users size={14} />}
+            options={filterPersons.map(p => ({ value: p, label: p }))}
+            selectedValues={state.filters.persons}
+            onChange={(values) => dispatch({ type: 'SET_FILTERS', payload: { persons: values } })}
+          />
+
+          <FilterDropdown
+            label="Sucursales"
+            icon={<Building2 size={14} />}
+            options={filterBranches.map(b => ({ value: b, label: b }))}
+            selectedValues={state.filters.branches}
+            onChange={(values) => dispatch({ type: 'SET_FILTERS', payload: { branches: values } })}
+          />
+
+          <FilterDropdown
+            label="Tipo"
+            icon={<Tag size={14} />}
+            options={[
+              { value: 'Proyecto', label: 'Proyecto' },
+              { value: 'Lanzamiento', label: 'Lanzamiento' },
+              { value: 'En radar', label: 'En radar' },
+            ]}
+            selectedValues={state.filters.types}
+            onChange={(values) => dispatch({ type: 'SET_FILTERS', payload: { types: values } })}
+          />
+
+          <button
+            type="button"
+            onClick={() => dispatch({ type: 'SET_FILTERS', payload: { showOnlyActive: !state.filters.showOnlyActive } })}
+            style={{
+              height: '30px',
+              borderRadius: DIMENSIONS.radius.sm,
+              border: 'none',
+              background: state.filters.showOnlyActive ? COLORS.accentSoft : 'transparent',
+              padding: '0 8px',
+              fontSize: '12px',
+              color: state.filters.showOnlyActive ? COLORS.accent : COLORS.textSecondary,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '4px',
+              transition: TRANSITIONS.hover,
+              fontFamily: TYPOGRAPHY.fontFamily,
+              fontWeight: 500,
+              outline: 'none',
+            }}
+            onMouseEnter={(e) => {
+              if (!state.filters.showOnlyActive) {
+                e.currentTarget.style.background = COLORS.bgMuted;
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (!state.filters.showOnlyActive) {
+                e.currentTarget.style.background = 'transparent';
+              }
+            }}
+          >
+            <EyeOff size={14} />
+            Solo activos
+          </button>
 
           <ToolbarDropdown
             value={groupMode}
