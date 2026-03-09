@@ -1239,9 +1239,11 @@ export function GanttTimeline() {
   const [colorMode, setColorMode] = useState<ColorMode>('type');
   const [customColorField, setCustomColorField] =
     useState<CustomColorField>('branch');
+  const [hasSelectedColorCustomBefore, setHasSelectedColorCustomBefore] = useState(false);
   const [groupMode, setGroupMode] = useState<GroupMode>('none');
   const [customGroupField, setCustomGroupField] =
     useState<CustomGroupField>('branch');
+  const [hasSelectedCustomBefore, setHasSelectedCustomBefore] = useState(false);
   const [orderMode, setOrderMode] = useState<OrderMode>('chronological');
   const [dependencyEditorProjectId, setDependencyEditorProjectId] = useState<
     string | null
@@ -2612,7 +2614,11 @@ export function GanttTimeline() {
               { value: 'priority', label: 'Prioridad' },
             ] : undefined}
             secondaryValue={customGroupField}
-            onSecondaryChange={(v) => setCustomGroupField(v as CustomGroupField)}
+            onSecondaryChange={(v) => {
+              setCustomGroupField(v as CustomGroupField);
+              setHasSelectedCustomBefore(true);
+            }}
+            keepOpenOnFirstSelection={!hasSelectedCustomBefore}
             placeholder="Agrupar"
           />
 
@@ -2642,7 +2648,11 @@ export function GanttTimeline() {
               { value: 'type', label: 'Tipo' },
             ] : undefined}
             secondaryValue={customColorField}
-            onSecondaryChange={(v) => setCustomColorField(v as CustomColorField)}
+            onSecondaryChange={(v) => {
+              setCustomColorField(v as CustomColorField);
+              setHasSelectedColorCustomBefore(true);
+            }}
+            keepOpenOnFirstSelection={!hasSelectedColorCustomBefore}
             placeholder="Colorear"
           />
           {(activeToolbarChips.length > 0 || showMilestonesOnly) && (

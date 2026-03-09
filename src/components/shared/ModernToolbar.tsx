@@ -113,7 +113,10 @@ export function ToolbarDropdown({
               type="button"
               onClick={() => {
                 onChange(option.value);
-                setIsOpen(false);
+                if (!keepOpenOnFirstSelection || hasSelectedOnce) {
+                  setIsOpen(false);
+                }
+                setHasSelectedOnce(true);
               }}
               style={{
                 width: '100%',
@@ -168,7 +171,9 @@ export function ToolbarDropdown({
                   type="button"
                   onClick={() => {
                     onSecondaryChange(option.value);
-                    setIsOpen(false);
+                    if (!keepOpenOnFirstSelection || hasSelectedOnce) {
+                      setIsOpen(false);
+                    }
                   }}
                   style={{
                     width: '100%',
@@ -229,6 +234,7 @@ interface ToolbarDropdownWithActionsProps {
   icon?: React.ReactNode;
   actions?: DropdownAction[];
   placeholder?: string;
+  keepOpenOnFirstSelection?: boolean;
 }
 
 export function ToolbarDropdownWithActions({
@@ -238,10 +244,12 @@ export function ToolbarDropdownWithActions({
   icon,
   actions = [],
   placeholder = 'Seleccionar',
+  keepOpenOnFirstSelection = false,
 }: ToolbarDropdownWithActionsProps) {
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoveredOption, setHoveredOption] = useState<string | null>(null);
+  const [hasSelectedOnce, setHasSelectedOnce] = useState(false);
 
   const selectedOption = options.find((o) => o.value === value);
   const displayLabel = selectedOption?.label || placeholder;
