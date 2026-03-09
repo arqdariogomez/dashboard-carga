@@ -817,3 +817,178 @@ export function FilterDropdown({
     </div>
   );
 }
+
+interface FilterGroup {
+  id: string;
+  label: string;
+  options: FilterDropdownOption[];
+}
+
+interface UnifiedFilterDropdownProps {
+  groups: FilterGroup[];
+  selections: Record<string, string[]>;
+  onChange: (groupId: string, values: string[]) => void;
+}
+
+export function UnifiedFilterDropdown({
+  groups,
+  selections,
+  onChange,
+}: UnifiedFilterDropdownProps) {
+  const [isOpen, setIsOpen] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const totalSelections = Object.values(selections).reduce((acc, arr) => acc + arr.length, 0);
+  const displayLabel = totalSelections > 0 
+    ? `Filtros (${totalSelections})` 
+    : 'Filtros';
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!containerRef.current?.contains(e.target as Node)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  const toggleOption = (groupId: string, value: string) => {
+    const current = selections[groupId] || [];
+    if (current.includes(value)) {
+      onChange(groupId, current.filter(v => v !== value));
+    } else {
+      onChange(groupId, [...current, value]);
+    }
+  };
+
+  return (
+    <div ref={containerRef} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setIsOpen(!isOpen)}
+        style={{
+          height: '30px',
+          borderRadius: DIMENSIONS.radius.sm,
+          border: 'none',
+          background: totalSelections > 0 ? COLORS.accentSoft : 'transparent',
+          padding: '0 8px',
+          fontSize: '12px',
+          color: totalSelections > 0 ? COLORS.accent : COLORS.textSecondary,
+          cursor: 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: '4px',
+          transition: TRANSITIONS.hover,
+          fontFamily: TYPOGRAPHY.fontFamily,
+          fontWeight: 500,
+          outline: 'none',
+        }}
+        onMouseEnter={(e) => {
+          if (totalSelections === 0) {
+            e.currentTarget.style.background = COLORS.bgMuted;
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (totalSelections === 0) {
+            e.currentTarget.style.background = 'transparent';
+          }
+        }}
+      >
+        <Filter size={14} />
+        <span style={{ whiteSpace: 'nowrap' }}>{displayLabel}</span>
+      </button>
+
+      {isOpen && (
+        <div
+          style={{
+            position: 'absolute',
+            top: '34px',
+            left: 0,
+            zIndex: 100,
+            minWidth: '220px',
+            maxHeight: '320px',
+            overflowY: 'auto',
+            borderRadius: DIMENSIONS.radius.md,
+            border: `1px solid ${COLORS.border}`,
+            background: COLORS.bg,
+            boxShadow: SHADOWS.lg,
+            padding: '6px',
+            animation: `${TRANSITIONS.smooth} ease-out`,
+          }}
+        >
+          {groups.map((group) => (
+            <div key={group.id}>
+              <div
+                style={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  color: COLORS.textTertiary,
+                  padding: '6px 8px 4px',
+                  fontFamily: TYPOGRAPHY.fontFamily,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.5px',
+                }}
+              >
+                {group.label}
+              </div>
+              {group.options.length === 0 ? (
+                <div style={{
+                  padding: '6px 8px',
+                  fontSize: '12px',
+                  color: COLORS.textTertiary,
+                  fontFamily: TYPOGRAPHY.fontFamily,
+                }}>
+                  Sin opciones
+                </div>
+              ) : (
+                group.options.map((option) => (
+                  <label
+                    key={option.value}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      padding: '5px 8px',
+                      borderRadius: DIMENSIONS.radius.sm,
+                      cursor: 'pointer',
+                      fontSize: '12px',
+                      color: (selections[group.id] || []).includes(option.value) ? COLORS.accentText : COLORS.textSecondary,
+                      background: (selections[group.id] || []).includes(option.value) ? COLORS.accentSoft : 'transparent',
+                      fontFamily: TYPOGRAPHY.fontFamily,
+                      transition: TRANSITIONS.colors,
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!(selections[group.id] || []).includes(option.value)) {
+                        e.currentTarget.style.background = COLORS.bgMuted;
+                      }
+                    }}
+                    onMouseLeave={(e) => {
+                      if (!(selections[group.id] || []).includes(option.value)) {
+                        e.currentTarget.style.background = 'transparent';
+                      }
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={(selections[group.id] || []).includes(option.value)}
+                      onChange={() => toggleOption(group.id, option.value)}
+                      style={{
+                        width: '14px',
+                        height: '14px',
+                        cursor: 'pointer',
+                        accentColor: COLORS.accent,
+                      }}
+                    />
+                    {option.label}
+                  </label>
+                ))
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}

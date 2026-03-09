@@ -33,8 +33,9 @@ import {
   Tag,
   Layers,
   EyeOff,
+  X,
 } from 'lucide-react';
-import { ToolbarDropdown, ToolbarDropdownWithActions, FilterDropdown, TOOLBAR_ICONS } from '@/components/shared/ModernToolbar';
+import { ToolbarDropdown, ToolbarDropdownWithActions, FilterDropdown, UnifiedFilterDropdown, TOOLBAR_ICONS } from '@/components/shared/ModernToolbar';
 import type { Project } from '@/lib/types';
 import { branchLabel } from '@/lib/branchUtils';
 import { GanttTreeOverlay } from '@/modules/gantt/components/GanttTreeOverlay';
@@ -2430,32 +2431,42 @@ export function GanttTimeline() {
             ]}
           />
 
-          <FilterDropdown
-            label="Personas"
-            icon={<Users size={14} />}
-            options={filterPersons.map(p => ({ value: p, label: p }))}
-            selectedValues={state.filters.persons}
-            onChange={(values) => dispatch({ type: 'SET_FILTERS', payload: { persons: values } })}
-          />
-
-          <FilterDropdown
-            label="Sucursales"
-            icon={<Building2 size={14} />}
-            options={filterBranches.map(b => ({ value: b, label: b }))}
-            selectedValues={state.filters.branches}
-            onChange={(values) => dispatch({ type: 'SET_FILTERS', payload: { branches: values } })}
-          />
-
-          <FilterDropdown
-            label="Tipo"
-            icon={<Tag size={14} />}
-            options={[
-              { value: 'Proyecto', label: 'Proyecto' },
-              { value: 'Lanzamiento', label: 'Lanzamiento' },
-              { value: 'En radar', label: 'En radar' },
+          <UnifiedFilterDropdown
+            groups={[
+              {
+                id: 'persons',
+                label: 'Personas',
+                options: filterPersons.map(p => ({ value: p, label: p })),
+              },
+              {
+                id: 'branches',
+                label: 'Sucursales',
+                options: filterBranches.map(b => ({ value: b, label: b })),
+              },
+              {
+                id: 'types',
+                label: 'Tipo',
+                options: [
+                  { value: 'Proyecto', label: 'Proyecto' },
+                  { value: 'Lanzamiento', label: 'Lanzamiento' },
+                  { value: 'En radar', label: 'En radar' },
+                ],
+              },
             ]}
-            selectedValues={state.filters.types}
-            onChange={(values) => dispatch({ type: 'SET_FILTERS', payload: { types: values } })}
+            selections={{
+              persons: state.filters.persons,
+              branches: state.filters.branches,
+              types: state.filters.types,
+            }}
+            onChange={(groupId, values) => {
+              if (groupId === 'persons') {
+                dispatch({ type: 'SET_FILTERS', payload: { persons: values } });
+              } else if (groupId === 'branches') {
+                dispatch({ type: 'SET_FILTERS', payload: { branches: values } });
+              } else if (groupId === 'types') {
+                dispatch({ type: 'SET_FILTERS', payload: { types: values } });
+              }
+            }}
           />
 
           <button
@@ -2492,6 +2503,132 @@ export function GanttTimeline() {
             <EyeOff size={14} />
             Solo activos
           </button>
+
+          {state.filters.persons.length > 0 && (
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              {state.filters.persons.slice(0, 3).map((p) => (
+                <button
+                  key={`person-${p}`}
+                  type="button"
+                  onClick={() => dispatch({ type: 'SET_FILTERS', payload: { persons: state.filters.persons.filter(x => x !== p) } })}
+                  style={{
+                    height: '22px',
+                    borderRadius: DIMENSIONS.radius.full,
+                    border: 'none',
+                    background: COLORS.accentSoft,
+                    padding: '0 8px',
+                    fontSize: '11px',
+                    color: COLORS.accentText,
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: TRANSITIONS.hover,
+                    fontFamily: TYPOGRAPHY.fontFamily,
+                    fontWeight: 500,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = COLORS.dangerSoft;
+                    e.currentTarget.style.color = COLORS.danger;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = COLORS.accentSoft;
+                    e.currentTarget.style.color = COLORS.accentText;
+                  }}
+                >
+                  {p}
+                  <X size={10} />
+                </button>
+              ))}
+              {state.filters.persons.length > 3 && (
+                <span style={{ fontSize: '11px', color: COLORS.textTertiary }}>+{state.filters.persons.length - 3}</span>
+              )}
+            </div>
+          )}
+
+          {state.filters.branches.length > 0 && (
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              {state.filters.branches.slice(0, 3).map((b) => (
+                <button
+                  key={`branch-${b}`}
+                  type="button"
+                  onClick={() => dispatch({ type: 'SET_FILTERS', payload: { branches: state.filters.branches.filter(x => x !== b) } })}
+                  style={{
+                    height: '22px',
+                    borderRadius: DIMENSIONS.radius.full,
+                    border: 'none',
+                    background: '#DCFCE7',
+                    padding: '0 8px',
+                    fontSize: '11px',
+                    color: '#166534',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: TRANSITIONS.hover,
+                    fontFamily: TYPOGRAPHY.fontFamily,
+                    fontWeight: 500,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#FEE2E2';
+                    e.currentTarget.style.color = '#DC2626';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#DCFCE7';
+                    e.currentTarget.style.color = '#166534';
+                  }}
+                >
+                  {b}
+                  <X size={10} />
+                </button>
+              ))}
+              {state.filters.branches.length > 3 && (
+                <span style={{ fontSize: '11px', color: COLORS.textTertiary }}>+{state.filters.branches.length - 3}</span>
+              )}
+            </div>
+          )}
+
+          {state.filters.types.length > 0 && (
+            <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+              {state.filters.types.slice(0, 3).map((t) => (
+                <button
+                  key={`type-${t}`}
+                  type="button"
+                  onClick={() => dispatch({ type: 'SET_FILTERS', payload: { types: state.filters.types.filter(x => x !== t) } })}
+                  style={{
+                    height: '22px',
+                    borderRadius: DIMENSIONS.radius.full,
+                    border: 'none',
+                    background: '#F3E8FF',
+                    padding: '0 8px',
+                    fontSize: '11px',
+                    color: '#7C3AED',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    transition: TRANSITIONS.hover,
+                    fontFamily: TYPOGRAPHY.fontFamily,
+                    fontWeight: 500,
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = '#FEE2E2';
+                    e.currentTarget.style.color = '#DC2626';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = '#F3E8FF';
+                    e.currentTarget.style.color = '#7C3AED';
+                  }}
+                >
+                  {t}
+                  <X size={10} />
+                </button>
+              ))}
+              {state.filters.types.length > 3 && (
+                <span style={{ fontSize: '11px', color: COLORS.textTertiary }}>+{state.filters.types.length - 3}</span>
+              )}
+            </div>
+          )}
 
           <ToolbarDropdown
             value={groupMode}
