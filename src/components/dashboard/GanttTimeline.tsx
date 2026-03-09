@@ -583,7 +583,14 @@ interface GanttRowProps {
   getBarProps: (p: Project) => BarProps | null;
   dependencies: { from: Project; to: Project }[];
   dependencyNames: string[];
-  barResize: BarResizeState | null;
+  barDrag: {
+    projectId: string;
+    mode: 'move' | 'resize-start' | 'resize-end';
+    startX: number;
+    originStart: Date;
+    originEnd: Date;
+    offsetDays: number;
+  } | null;
   milestoneDrag: MilestoneDragState | null;
   editingProjectId: string | null;
   editingProjectName: string;
@@ -599,6 +606,7 @@ interface GanttRowProps {
   onToggleExpansion: (id: string) => void;
   onToggleMilestone: (project: Project) => void;
   onOpenDependencyEditor: (id: string) => void;
+  onStartBarMove: (e: React.MouseEvent, project: Project) => void;
   onStartBarResize: (
     e: React.MouseEvent,
     project: Project,
@@ -628,7 +636,7 @@ const GanttRow = React.memo(function GanttRow({
   getBarProps: getBarPropsFn,
   dependencies: depsFor,
   dependencyNames: depNames,
-  barResize,
+  barDrag,
   milestoneDrag,
   editingProjectId,
   editingProjectName,
@@ -644,6 +652,7 @@ const GanttRow = React.memo(function GanttRow({
   onToggleExpansion,
   onToggleMilestone,
   onOpenDependencyEditor,
+  onStartBarMove,
   onStartBarResize,
   onStartMilestoneDrag,
   onCreateProjectFrom,
@@ -720,26 +729,34 @@ const GanttRow = React.memo(function GanttRow({
   const dragOff =
     milestoneDrag?.projectId === node.id ? milestoneDrag.offsetDays : 0;
 
-  // Visual resize preview
-  const resizeState = barResize?.projectId === node.id ? barResize : null;
+  // Visual drag/resize preview
+  const dragState = barDrag?.projectId === node.id ? barDrag : null;
   let visualLeft = bar.left;
   let visualWidth = bar.width;
 
-  if (resizeState && resizeState.offsetDays !== 0) {
-    const offsetPx = resizeState.offsetDays * dayWidth;
-    if (resizeState.type === 'start') {
-      visualLeft = bar.left + offsetPx;
-      visualWidth = bar.width - offsetPx;
-    } else {
-      visualWidth = bar.width + offsetPx;
+  if (dragState && dragState.offsetDays !== 0) {
+    const offsetPx = dragState.offsetDays * dayWidth;
+    
+    switch (dragState.mode) {
+      case 'move':
+        visualLeft = bar.left + offsetPx;
+        break;
+      case 'resize-start':
+        visualLeft = bar.left + offsetPx;
+        visualWidth = bar.width - offsetPx;
+        break;
+      case 'resize-end':
+        visualWidth = bar.width + offsetPx;
+        break;
     }
+    
     visualWidth = Math.max(visualWidth, MIN_BAR_WIDTH);
   }
 
   return (
     <div
       ref={rowRef}
-      className="relative z-0 flex border-b border-border hover:bg-bg-secondary/20 transition-colors group group/bar"
+      className="relative z-0 flex hover:bg-bg-secondary/20 transition-colors group group/bar"
     >
       {/* Sidebar */}
       <div
@@ -975,27 +992,47 @@ const GanttRow = React.memo(function GanttRow({
               left: visualLeft,
               width: visualWidth,
               background: bar.style.bg,
-              border: `1px solid ${bar.style.border}`,
             }}
             onMouseEnter={(ev) => onBarHover(ev, node)}
             onMouseLeave={onBarLeave}
           >
+            {/* Move zone - centro de la barra */}
             <div
-              className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 opacity-0 group-hover/resize:opacity-100 transition-opacity"
-              onMouseDown={(e) => onStartBarResize(e, node, 'start')}
+              className={`
+                absolute top-0 bottom-0 z-0
+                ${dragState?.mode === 'move' ? 'cursor-grabbing' : 'cursor-grab'}
+              `}
+              style={{
+                // Para barras anchas: dejar espacio a los resize handles
+                // Para barras pequeñas: ocupar todo
+                left: visualWidth > 40 ? '8px' : '0',
+                right: visualWidth > 40 ? '8px' : '0',
+              }}
+              onMouseDown={(e) => onStartBarMove(e, node)}
             />
-            <div
-              className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 opacity-0 group-hover/resize:opacity-100 transition-opacity"
-              onMouseDown={(e) => onStartBarResize(e, node, 'end')}
-            />
+
+            {/* Resize handles - solo si la barra es suficientemente ancha */}
+            {visualWidth > 40 && (
+              <>
+                <div
+                  className="absolute left-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 z-10 opacity-0 group-hover/resize:opacity-100 transition-opacity"
+                  onMouseDown={(e) => onStartBarResize(e, node, 'start')}
+                />
+                <div
+                  className="absolute right-0 top-0 bottom-0 w-2 cursor-ew-resize hover:bg-white/40 z-10 opacity-0 group-hover/resize:opacity-100 transition-opacity"
+                  onMouseDown={(e) => onStartBarResize(e, node, 'end')}
+                />
+              </>
+            )}
           </div>
         )}
 
-        {/* Project name outside the bar (monday.com style) */}
-        {!ms && visualWidth > 20 && (
+        {/* Project name outside the bar (always to the right) */}
+        {!ms && (
           <div
             className="absolute z-[2] text-[10px] font-medium truncate whitespace-nowrap leading-none pointer-events-none"
             style={{
+              // Siempre mostrar a la derecha, pero ajustar posición para barras pequeñas
               left: visualLeft + visualWidth + 4,
               top: '50%',
               transform: 'translateY(-50%)',
@@ -1169,6 +1206,7 @@ function GanttTooltip({
   containerWidth,
   containerHeight,
   dependencyNames,
+  personColorMap,
 }: {
   project: Project;
   x: number;
@@ -1177,6 +1215,7 @@ function GanttTooltip({
   containerWidth: number;
   containerHeight: number;
   dependencyNames: string[];
+  personColorMap: Map<string, string>;
 }) {
   const lc = getLoadColor(project.dailyLoad);
   const pct = Math.round(project.dailyLoad * 100);
@@ -1200,6 +1239,39 @@ function GanttTooltip({
       <div className="font-semibold text-sm text-text-primary mb-1 truncate">
         {project.name}
       </div>
+      
+      {/* Assigned person with avatar */}
+      {project.assignees.length > 0 && (
+        <div className="flex items-center gap-2 mb-2.5">
+          <div className="flex -space-x-1">
+            {project.assignees.slice(0, 3).map((person, index) => (
+              <div
+                key={person}
+                className="relative"
+                title={person}
+              >
+                <div
+                  className="w-5 h-5 rounded-full text-[10px] font-medium flex items-center justify-center text-white border border-white shadow-sm"
+                  style={{
+                    backgroundColor: personColorMap.get(person) || '#64748B',
+                  }}
+                >
+                  {person.charAt(0).toUpperCase()}
+                </div>
+                {project.assignees.length > 3 && index === 2 && (
+                  <div className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-gray-400 text-[8px] font-medium flex items-center justify-center text-white border border-white shadow-sm">
+                    +{project.assignees.length - 3}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="text-[11px] text-text-secondary">
+            Asignado a: {project.assignees.join(', ')}
+          </div>
+        </div>
+      )}
+      
       <div className="text-[11px] text-text-secondary mb-2.5">
         {branchLabel(project.branch)} · {project.type}
       </div>
@@ -1312,7 +1384,14 @@ export function GanttTimeline() {
 
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [barResize, setBarResize] = useState<BarResizeState | null>(null);
+  const [barDrag, setBarDrag] = useState<{
+    projectId: string;
+    mode: 'move' | 'resize-start' | 'resize-end';
+    startX: number;
+    originStart: Date;
+    originEnd: Date;
+    offsetDays: number;
+  } | null>(null);
   const [milestoneDrag, setMilestoneDrag] =
     useState<MilestoneDragState | null>(null);
 
@@ -1327,7 +1406,14 @@ export function GanttTimeline() {
   const sidebarExpandedWidthRef = useRef(500);
   const suppressScrollRef = useRef(false);
   const scrollRafRef = useRef(0);
-  const barResizeRef = useRef<BarResizeState | null>(null);
+  const barDragRef = useRef<{
+    projectId: string;
+    mode: 'move' | 'resize-start' | 'resize-end';
+    startX: number;
+    originStart: Date;
+    originEnd: Date;
+    offsetDays: number;
+  } | null>(null);
   const milestoneDragRef = useRef<MilestoneDragState | null>(null);
 
   // ── Tree connector overlay hook ──
@@ -1342,8 +1428,8 @@ export function GanttTimeline() {
 
   // Keep refs in sync with state
   useEffect(() => {
-    barResizeRef.current = barResize;
-  }, [barResize]);
+    barDragRef.current = barDrag;
+  }, [barDrag]);
   useEffect(() => {
     milestoneDragRef.current = milestoneDrag;
   }, [milestoneDrag]);
@@ -2105,14 +2191,33 @@ export function GanttTimeline() {
     setTooltip(null);
   }, []);
 
+  const handleStartBarMove = useCallback(
+    (e: React.MouseEvent, project: Project) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!project.startDate || !project.endDate) return;
+
+      setBarDrag({
+        projectId: project.id,
+        mode: 'move',
+        startX: e.clientX,
+        originStart: new Date(project.startDate),
+        originEnd: new Date(project.endDate),
+        offsetDays: 0,
+      });
+    },
+    [],
+  );
+
   const handleStartBarResize = useCallback(
     (e: React.MouseEvent, project: Project, type: 'start' | 'end') => {
       e.preventDefault();
       e.stopPropagation();
       if (!project.startDate || !project.endDate) return;
-      setBarResize({
+
+      setBarDrag({
         projectId: project.id,
-        type,
+        mode: type === 'start' ? 'resize-start' : 'resize-end',
         startX: e.clientX,
         originStart: new Date(project.startDate),
         originEnd: new Date(project.endDate),
@@ -2175,16 +2280,17 @@ export function GanttTimeline() {
 
   // Drag cursor + prevent text selection
   useEffect(() => {
-    if (barResize || milestoneDrag || isSidebarResizing) {
+    if (barDrag || milestoneDrag || isSidebarResizing) {
       document.body.style.cursor =
-        barResize || milestoneDrag ? 'ew-resize' : 'col-resize';
+        barDrag?.mode === 'move' ? 'grabbing' : 
+        (barDrag || milestoneDrag) ? 'ew-resize' : 'col-resize';
       document.body.style.userSelect = 'none';
       return () => {
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
       };
     }
-  }, [barResize, milestoneDrag, isSidebarResizing]);
+  }, [barDrag, milestoneDrag, isSidebarResizing]);
 
   // Sync state → DOM
   useEffect(() => {
@@ -2265,44 +2371,71 @@ export function GanttTimeline() {
     };
   }, [milestoneDrag, dayWidth, dispatch]);
 
-  // Bar resize
+  // Bar drag (unified resize + move)
   useEffect(() => {
-    if (!barResize) return;
+    if (!barDrag) return;
+    
     const onMove = (e: MouseEvent) => {
-      const off = Math.round(
-        (e.clientX - barResize.startX) / dayWidth,
-      );
-      setBarResize((p) => (p ? { ...p, offsetDays: off } : p));
+      const current = barDragRef.current;
+      if (!current) return;
+
+      const deltaX = e.clientX - current.startX;
+      const offsetDays = Math.round(deltaX / dayWidth);
+
+      // Solo actualizar si el offset cambió (evitar re-renders innecesarios)
+      if (offsetDays === current.offsetDays) return;
+
+      setBarDrag(prev => prev ? { ...prev, offsetDays } : null);
     };
+    
     const onUp = () => {
-      const s = barResizeRef.current;
-      if (s && s.offsetDays !== 0) {
-        const start = new Date(s.originStart);
-        const end = new Date(s.originEnd);
-        if (s.type === 'start') {
-          start.setDate(start.getDate() + s.offsetDays);
-        } else {
-          end.setDate(end.getDate() + s.offsetDays);
-        }
-        if (start <= end) {
-          dispatch({
-            type: 'UPDATE_PROJECT',
-            payload: {
-              id: s.projectId,
-              updates: { startDate: start, endDate: end },
-            },
-          });
-        }
+      const current = barDragRef.current;
+      if (!current || current.offsetDays === 0) {
+        setBarDrag(null);
+        return;
       }
-      setBarResize(null);
+
+      let newStart: Date;
+      let newEnd: Date;
+
+      switch (current.mode) {
+        case 'move':
+          newStart = addDays(current.originStart, current.offsetDays);
+          newEnd = addDays(current.originEnd, current.offsetDays);
+          break;
+
+        case 'resize-start':
+          newStart = addDays(current.originStart, current.offsetDays);
+          newEnd = new Date(current.originEnd);
+          if (newStart >= newEnd) newStart = addDays(newEnd, -1);
+          break;
+
+        case 'resize-end':
+          newStart = new Date(current.originStart);
+          newEnd = addDays(current.originEnd, current.offsetDays);
+          if (newEnd <= newStart) newEnd = addDays(newStart, 1);
+          break;
+      }
+
+      dispatch({
+        type: 'UPDATE_PROJECT',
+        payload: {
+          id: current.projectId,
+          updates: { startDate: newStart, endDate: newEnd },
+        },
+      });
+
+      setBarDrag(null);
     };
+    
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
+    
     return () => {
       window.removeEventListener('mousemove', onMove);
       window.removeEventListener('mouseup', onUp);
     };
-  }, [barResize, dayWidth, dispatch]);
+  }, [barDrag, dayWidth, dispatch]);
 
   // Sidebar resize
   useEffect(() => {
@@ -2488,7 +2621,7 @@ export function GanttTimeline() {
           getBarProps={getBarPropsForProject}
           dependencies={depsFor}
           dependencyNames={depNames}
-          barResize={barResize}
+          barDrag={barDrag}
           milestoneDrag={milestoneDrag}
           editingProjectId={editingProjectId}
           editingProjectName={editingProjectName}
@@ -2506,6 +2639,7 @@ export function GanttTimeline() {
           }
           onToggleMilestone={toggleMilestone}
           onOpenDependencyEditor={setDependencyEditorProjectId}
+          onStartBarMove={handleStartBarMove}
           onStartBarResize={handleStartBarResize}
           onStartMilestoneDrag={handleStartMilestoneDrag}
           onCreateProjectFrom={handleCreateProjectFrom}
@@ -3295,6 +3429,7 @@ export function GanttTimeline() {
                   tooltip.project.id,
                 ) || []
               }
+              personColorMap={personColorMap}
             />
           )}
         </div>
