@@ -960,7 +960,7 @@ const GanttRow = React.memo(function GanttRow({
               top: '50%',
               transform: 'translateY(-50%)',
               color: COLORS.text,
-              maxWidth: '120px',
+              maxWidth: '300px',
             }}
             title={node.name}
           >
@@ -1000,7 +1000,7 @@ const GanttRow = React.memo(function GanttRow({
               top: '50%',
               transform: 'translateY(-50%)',
               color: COLORS.text,
-              maxWidth: '120px',
+              maxWidth: '300px',
             }}
             title={node.name}
           >
