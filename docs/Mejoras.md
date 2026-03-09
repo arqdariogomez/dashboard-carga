@@ -1,4 +1,4 @@
-\*Recordatorio hacer un commit no por cada pequeño movimiento, pero sí cada cierto tiempo o cambio importante. El push debe ser por solicitud explícita.
+* Recordatorio hacer un commit no por cada pequeño movimiento, pero sí cada cierto tiempo o cambio importante. El push debe ser por solicitud explícita.
 
 #### 
 
@@ -6,8 +6,6 @@
 
 Vista Linea de tiempo (GanttTImeline)
 
-* Poder arrastrar las barras de tiempo para ajustar al mismo tiempo su fecha de inicio y de fin, ajustar esas fechas ahí debe actualizarlo también en las demás vistas.
-* Que los nombres de proyectos mejor queden por fuera de la barra, a la derecha, como en monday.com
 * Que al dar clic en algún día, enliste los proyectos que se tienen en ese día, y que también esa lista sea agrupable, filtrable, etc.
 * Agregar a un lado de la barra, opcionalmente, un avatar de a quien está asignado.
 * Ver qué pasa en Colorear cuando hay mas de una persona (Dejar blanco?)
@@ -18,7 +16,6 @@ Vista Linea de tiempo (GanttTImeline)
 * Poner avance por proyecto, con un ligero cambio de tono, basado en la columna de Progreso, si no hay columna de progreso su fallback sería desactivado. (desactivable por toggle)
 * Idea: Poder activar una ventana en la parte de abajo, que muestre la gráfica de línea como en la vista Gráfica de linea, y estaría alineado a los filtros y zoom de tiempo activos en ese momento en el gráfico de arriba en esa misma vista. Si se hace zoom o se cambia cualquier cosa en la vista de arriba, ahí se actualizaría al mismo tiempo. La idea nace de la gráfica de línea que se muestra en la Timeline de los videos YouTube que muestran en qué parte del video la gente lo ve mas, pero aquí mostraría mas bien la carga. Como idea extra, en vez de eso podría mostrarse de forma minimalista en la misma barra de persona al activar el filtro Por persona. Se mostraría la carga por persona en su misma barra/altura. 
 * Mostrar distintas las barras de resumen que las de Tareas, por ejemplo las de tareas estarían redondeadas, y las de resumen tendrían un corte a 45 en una esquina al inicio y otra al final, como Forecast
-
 
 
 Vista Resumen por persona (GanttTImeline)
@@ -55,7 +52,7 @@ Otros:
 * Editor flotante de texto estilo Notion (negrita/cursiva) al entrar en edición de texto en Nombres de proyecto.
 * Ver según mejores practicas si agregar un botón con sólo el icono, de Comentarios, para tenerlo mas a la mano, sólo al hacer hover en las filas, en vista de Tabla de proyectos y vista Linea de tiempo (Gantt).
 * Integración de IA para sugerencias, alertas y bitácora inteligente priorizada de cambios.
-* 
+
 
 ---
 
@@ -89,6 +86,7 @@ Otros:
 * Permitir columnas mas compactas en algunos casos (ej. `Asignado`).
 * Revisar autosave para que "Guardado hace menos de un minuto" refleje cambios reales y no ruido. Y que solo se guarde si hubo un cambio.
 * Estructura/funcionalidad
-
-Orden personalizado y guardado de multiples ordenes.
-
+* Drag & Drop unificado para barras Gantt: Implementado sistema completo con estado unificado barDrag que soporta move y resize (start/end) con zonas de interacción específicas según tamaño de barra.
+* Mejoras visuales: Eliminados bordes innecesarios, diseño limpio tipo Monday.com, nombres siempre visibles, tooltip con asignados y avatares.
+* Accesibilidad: Barras pequeñas solo con move zone, barras grandes con resize handles, cursores dinámicos apropiados.
+* Que los nombres de proyectos mejor queden por fuera de la barra, a la derecha, como en monday.com
