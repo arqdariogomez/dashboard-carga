@@ -2,6 +2,8 @@ import { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { useProject } from '@/context/ProjectContext';
 import { useUiFeedback } from '@/context/UiFeedbackContext';
 import { usePersonProfiles } from '@/context/PersonProfilesContext';
+import { useDaySelection } from '@/hooks/useDaySelection';
+import { DayDetailSidebar } from './DayDetailSidebar';
 import {
   getPersons,
   getActiveProjects,
@@ -9,7 +11,7 @@ import {
 } from '@/lib/workloadEngine';
 import { buildHierarchy, isParent } from '@/lib/hierarchyEngine';
 import { getDateRange, format } from '@/lib/dateUtils';
-import { differenceInCalendarDays, addDays } from 'date-fns';
+import { differenceInCalendarDays, addDays, startOfDay } from 'date-fns';
 import { getLoadColor, PERSON_COLORS } from '@/lib/constants';
 import {
   ChevronDown,
@@ -49,9 +51,9 @@ import { useGanttTreeGeometry } from '@/modules/gantt/hooks/useGanttTreeGeometry
 import React from 'react';
 import { createPortal } from 'react-dom';
 
-// ────────────────────────────────────────────
+// --------------------------------------------
 //  DESIGN TOKENS (Nuevo Sistema Evolucionado)
-// ────────────────────────────────────────────
+// --------------------------------------------
 import {
   COLORS,
   TYPOGRAPHY,
@@ -60,9 +62,9 @@ import {
   TRANSITIONS,
 } from '@/lib/designTokens';
 
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 //  TYPES
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 
 type ColorMode = 'load' | 'person' | 'type' | 'custom';
 type CustomColorField = 'branch' | 'type';
@@ -129,12 +131,15 @@ interface TimelineViewPreset {
   showMilestonesOnly: boolean;
 }
 
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 //  CONSTANTS
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 
 const MIN_SIDEBAR_WIDTH = 320;
 const MAX_SIDEBAR_WIDTH = 760;
+const DAY_SIDEBAR_DEFAULT_WIDTH = 342;
+const DAY_SIDEBAR_MIN_WIDTH = 300;
+const DAY_SIDEBAR_MAX_WIDTH = 420;
 const MIN_BAR_WIDTH = 12;
 const INDENT_STEP_PX = 12;
 
@@ -170,9 +175,9 @@ const PRESET_LABELS: Record<TimePreset, string> = {
   ALL: 'Todo',
 };
 
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 //  PURE UTILITIES
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 
 function isMilestoneProject(project: Project): boolean {
   if (!project.startDate || !project.endDate) return false;
@@ -315,9 +320,9 @@ function computeBarProps(
   };
 }
 
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 //  ZOOM SLIDER COMPONENT
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 
 function ZoomSlider({
   zoom,
@@ -436,9 +441,9 @@ function ZoomSlider({
   );
 }
 
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 //  MINIMAP COMPONENT
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 
 function Minimap({
   projects,
@@ -567,9 +572,9 @@ function Minimap({
   );
 }
 
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 //  GANTT ROW (memoized)
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 
 interface GanttRowProps {
   node: HierarchyNode;
@@ -665,7 +670,7 @@ const GanttRow = React.memo(function GanttRow({
   isSidebarCollapsed,
   rowRef,
 }: GanttRowProps) {
-  // ── ALL HOOKS MUST BE BEFORE ANY EARLY RETURN ──
+  // -- ALL HOOKS MUST BE BEFORE ANY EARLY RETURN --
   const [rowMenuOpen, setRowMenuOpen] = useState(false);
   const rowMenuRef = useRef<HTMLDivElement | null>(null);
   const rowMenuPopupRef = useRef<HTMLDivElement | null>(null);
@@ -720,10 +725,10 @@ const GanttRow = React.memo(function GanttRow({
     [openRowMenuAt],
   );
 
-  // ── Compute bar props (after all hooks) ──
+  // -- Compute bar props (after all hooks) --
   const bar = getBarPropsFn(node);
 
-  // ── EARLY RETURN (safe — all hooks are above) ──
+  // -- EARLY RETURN (safe � all hooks are above) --
   if (!bar) return null;
 
   const dragOff =
@@ -939,7 +944,7 @@ const GanttRow = React.memo(function GanttRow({
                 <span className="max-w-[84px] truncate">
                   {branchLabel(node.branch)}
                 </span>
-                <span>·</span>
+                <span>�</span>
                 <span className="tabular-nums">{node.daysRequired}d</span>
               </div>
             </>
@@ -951,6 +956,7 @@ const GanttRow = React.memo(function GanttRow({
       <div className="relative z-0 flex-1 h-12 flex items-center overflow-hidden">
         {ms ? (
           <div
+            data-gantt-bar
             className="absolute z-[1] h-3.5 w-3.5 rotate-45 rounded-[2px] border shadow-sm cursor-pointer hover:scale-125 transition-transform"
             style={{
               left: bar.left - 7 + dragOff * dayWidth,
@@ -987,6 +993,7 @@ const GanttRow = React.memo(function GanttRow({
 
         {!ms && (
           <div
+            data-gantt-bar
             className="absolute z-[1] h-7 rounded-md flex items-center overflow-hidden cursor-pointer group/resize hover:shadow-md hover:brightness-[0.97] transition-all duration-150"
             style={{
               left: visualLeft,
@@ -1004,7 +1011,7 @@ const GanttRow = React.memo(function GanttRow({
               `}
               style={{
                 // Para barras anchas: dejar espacio a los resize handles
-                // Para barras pequeñas: ocupar todo
+                // Para barras peque�as: ocupar todo
                 left: visualWidth > 40 ? '8px' : '0',
                 right: visualWidth > 40 ? '8px' : '0',
               }}
@@ -1032,7 +1039,7 @@ const GanttRow = React.memo(function GanttRow({
           <div
             className="absolute z-[2] text-[10px] font-medium truncate whitespace-nowrap leading-none pointer-events-none"
             style={{
-              // Siempre mostrar a la derecha, pero ajustar posición para barras pequeñas
+              // Siempre mostrar a la derecha, pero ajustar posici�n para barras peque�as
               left: visualLeft + visualWidth + 4,
               top: '50%',
               transform: 'translateY(-50%)',
@@ -1087,9 +1094,9 @@ const GanttRow = React.memo(function GanttRow({
   );
 });
 
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 //  DEPENDENCIES MODAL
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 
 function DependenciesModal({
   projectId,
@@ -1194,9 +1201,9 @@ function DependenciesModal({
   );
 }
 
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 //  GANTT TOOLTIP
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 
 function GanttTooltip({
   project,
@@ -1273,18 +1280,18 @@ function GanttTooltip({
       )}
       
       <div className="text-[11px] text-text-secondary mb-2.5">
-        {branchLabel(project.branch)} · {project.type}
+        {branchLabel(project.branch)} � {project.type}
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px]">
         <div className="text-text-secondary">Inicio</div>
         <div className="text-text-primary tabular-nums">
           {project.startDate
             ? format(project.startDate, 'dd/MM/yyyy')
-            : '—'}
+            : '�'}
         </div>
         <div className="text-text-secondary">Fin</div>
         <div className="text-text-primary tabular-nums">
-          {project.endDate ? format(project.endDate, 'dd/MM/yyyy') : '—'}
+          {project.endDate ? format(project.endDate, 'dd/MM/yyyy') : '�'}
         </div>
         <div className="text-text-secondary">Dias req.</div>
         <div className="text-text-primary font-medium">
@@ -1333,9 +1340,9 @@ function GanttTooltip({
   );
 }
 
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 //  MAIN COMPONENT
-// ═══════════════════════════════════════════════
+// -----------------------------------------------
 
 export function GanttTimeline() {
   const {
@@ -1350,7 +1357,7 @@ export function GanttTimeline() {
   const { confirm } = useUiFeedback();
   const { getAvatarUrl } = usePersonProfiles();
 
-  // ── State ──
+  // -- State --
   const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(
     new Set(),
   );
@@ -1360,6 +1367,7 @@ export function GanttTimeline() {
   );
   const [editingProjectName, setEditingProjectName] = useState('');
   const [sidebarWidth, setSidebarWidth] = useState(500);
+const [daySidebarWidth, setDaySidebarWidth] = useState(DAY_SIDEBAR_DEFAULT_WIDTH);
   const [colorMode, setColorMode] = useState<ColorMode>('type');
   const [customColorField, setCustomColorField] =
     useState<CustomColorField>('branch');
@@ -1369,7 +1377,7 @@ export function GanttTimeline() {
   const [customGroupField, setCustomGroupField] =
     useState<CustomGroupField>('branch');
   const [hasSelectedCustomBefore, setHasSelectedCustomBefore] = useState(false);
-  const [orderMode, setOrderMode] = useState<OrderMode>('chronological');
+  const [orderMode, setOrderMode] = useState<OrderMode>('custom');
   const [dependencyEditorProjectId, setDependencyEditorProjectId] = useState<
     string | null
   >(null);
@@ -1383,6 +1391,7 @@ export function GanttTimeline() {
   const [isViewMenuOpen, setIsViewMenuOpen] = useState(false);
 
   const [isSidebarResizing, setIsSidebarResizing] = useState(false);
+const [isDaySidebarResizing, setIsDaySidebarResizing] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [barDrag, setBarDrag] = useState<{
     projectId: string;
@@ -1395,11 +1404,15 @@ export function GanttTimeline() {
   const [milestoneDrag, setMilestoneDrag] =
     useState<MilestoneDragState | null>(null);
 
-  // ── Refs ──
+  // -- Refs --
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const tooltipContainerRef = useRef<HTMLDivElement>(null);
   const viewMenuRef = useRef<HTMLDivElement | null>(null);
   const sidebarResizeRef = useRef<{
+    startX: number;
+    startWidth: number;
+  } | null>(null);
+const daySidebarResizeRef = useRef<{
     startX: number;
     startWidth: number;
   } | null>(null);
@@ -1416,7 +1429,7 @@ export function GanttTimeline() {
   } | null>(null);
   const milestoneDragRef = useRef<MilestoneDragState | null>(null);
 
-  // ── Tree connector overlay hook ──
+  // -- Tree connector overlay hook --
   const {
     rowRefs: treeRowRefs,
     groupHostRefs: treeGroupHostRefs,
@@ -1446,7 +1459,7 @@ export function GanttTimeline() {
     return () => document.removeEventListener('mousedown', onDocClick);
   }, [isViewMenuOpen]);
 
-  // ── Memoized data ──
+  // -- Memoized data --
   const activeProjects = useMemo(() => {
     const f = getActiveProjects(filteredProjects);
     return showMilestonesOnly ? f.filter(isMilestoneProject) : f;
@@ -1587,6 +1600,21 @@ export function GanttTimeline() {
     [activeProjects, globalRange],
   );
 
+
+  const {
+    selectedDate,
+    dayDetails,
+    selectDate,
+    navigateDay,
+    clearSelection,
+    canNavigatePrev,
+    canNavigateNext,
+  } = useDaySelection({
+    projects: filteredProjects.map((p) => ({ ...p, assignee: p.assignees })),
+    rangeStart: range?.start,
+    rangeEnd: range?.end,
+  });
+
   const timelineViewsStorageKey = useMemo(
     () =>
       `workload-dashboard-timeline-views-${activeBoardId || 'default'}`,
@@ -1612,7 +1640,7 @@ export function GanttTimeline() {
     ],
   );
 
-  // ── Derived ──
+  // -- Derived --
   const totalDays = range
     ? differenceInCalendarDays(range.end, range.start) + 1
     : 0;
@@ -1685,9 +1713,9 @@ export function GanttTimeline() {
     [range, totalDays, dayWidth, colorMode, customColorField, personColorMap],
   );
 
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
   //  SCROLL / ZOOM HELPERS
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
 
   const applyScrollToDOM = useCallback((value: number) => {
     const el = scrollContainerRef.current;
@@ -1799,9 +1827,9 @@ export function GanttTimeline() {
     [dayWidth, timelineWidth, getTimelineViewWidth, applyScrollToDOM],
   );
 
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
   //  CALLBACKS
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
 
   const toggleGroup = useCallback((groupId: string) => {
     setCollapsedGroups((prev) => {
@@ -1851,7 +1879,7 @@ export function GanttTimeline() {
         const ok = await confirm({
           title: 'Convertir en hito',
           message:
-            'Ajustara fecha fin = inicio y duracion = 0. ¿Continuar?',
+            'Ajustara fecha fin = inicio y duracion = 0. �Continuar?',
           confirmText: 'Convertir',
         });
         if (!ok) return;
@@ -2191,6 +2219,44 @@ export function GanttTimeline() {
     setTooltip(null);
   }, []);
 
+  const handleTimelineClick = useCallback(
+    (e: React.MouseEvent<HTMLDivElement>) => {
+      // Ignore clicks while dragging bars/milestones
+      if (barDrag || milestoneDrag) return;
+
+      const target = e.target as HTMLElement;
+
+      // Ignore clicks on bars
+      if (target.closest('[data-gantt-bar]')) return;
+
+      const container = scrollContainerRef.current;
+      if (!container || !range) return;
+
+      const rect = container.getBoundingClientRect();
+      const localX = e.clientX - rect.left;
+
+      // Ignore clicks in the left name sidebar
+      if (localX < sidebarWidth) return;
+
+      const clickX = localX + container.scrollLeft;
+      const adjustedClickX = clickX - sidebarWidth;
+
+      if (adjustedClickX < 0) return;
+
+      const dayOffset = Math.floor(adjustedClickX / dayWidth);
+      const clickedDate = addDays(range.start, dayOffset);
+
+      const clickedTime = startOfDay(clickedDate).getTime();
+      const rangeStartTime = startOfDay(range.start).getTime();
+      const rangeEndTime = startOfDay(range.end).getTime();
+
+      if (clickedTime >= rangeStartTime && clickedTime <= rangeEndTime) {
+        selectDate(clickedDate);
+      }
+    },
+    [barDrag, milestoneDrag, range, sidebarWidth, dayWidth, selectDate]
+  );
+
   const handleStartBarMove = useCallback(
     (e: React.MouseEvent, project: Project) => {
       e.preventDefault();
@@ -2257,7 +2323,17 @@ export function GanttTimeline() {
     [sidebarWidth, isSidebarCollapsed],
   );
 
-  const toggleSidebarCollapse = useCallback(() => {
+  const startDaySidebarResize = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    daySidebarResizeRef.current = {
+      startX: e.clientX,
+      startWidth: daySidebarWidth,
+    };
+    setIsDaySidebarResizing(true);
+  }, [daySidebarWidth]);
+
+const toggleSidebarCollapse = useCallback(() => {
     if (isSidebarCollapsed) {
       setSidebarWidth(
         clamp(
@@ -2274,13 +2350,13 @@ export function GanttTimeline() {
     setIsSidebarCollapsed(true);
   }, [isSidebarCollapsed, sidebarWidth]);
 
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
   //  EFFECTS
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
 
   // Drag cursor + prevent text selection
   useEffect(() => {
-    if (barDrag || milestoneDrag || isSidebarResizing) {
+    if (barDrag || milestoneDrag || isSidebarResizing || isDaySidebarResizing) {
       document.body.style.cursor =
         barDrag?.mode === 'move' ? 'grabbing' : 
         (barDrag || milestoneDrag) ? 'ew-resize' : 'col-resize';
@@ -2290,14 +2366,14 @@ export function GanttTimeline() {
         document.body.style.userSelect = '';
       };
     }
-  }, [barDrag, milestoneDrag, isSidebarResizing]);
+  }, [barDrag, milestoneDrag, isSidebarResizing, isDaySidebarResizing]);
 
-  // Sync state → DOM
+  // Sync state ? DOM
   useEffect(() => {
     applyScrollToDOM(scrollX);
   }, [scrollX, applyScrollToDOM]);
 
-  // Native scroll → state
+  // Native scroll ? state
   useEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -2382,7 +2458,7 @@ export function GanttTimeline() {
       const deltaX = e.clientX - current.startX;
       const offsetDays = Math.round(deltaX / dayWidth);
 
-      // Solo actualizar si el offset cambió (evitar re-renders innecesarios)
+      // Solo actualizar si el offset cambi� (evitar re-renders innecesarios)
       if (offsetDays === current.offsetDays) return;
 
       setBarDrag(prev => prev ? { ...prev, offsetDays } : null);
@@ -2436,6 +2512,32 @@ export function GanttTimeline() {
       window.removeEventListener('mouseup', onUp);
     };
   }, [barDrag, dayWidth, dispatch]);
+
+  // Day sidebar resize
+  useEffect(() => {
+    if (!isDaySidebarResizing) return;
+    const onMove = (e: MouseEvent) => {
+      if (!daySidebarResizeRef.current) return;
+      const d = daySidebarResizeRef.current.startX - e.clientX;
+      setDaySidebarWidth(
+        clamp(
+          daySidebarResizeRef.current.startWidth + d,
+          DAY_SIDEBAR_MIN_WIDTH,
+          DAY_SIDEBAR_MAX_WIDTH,
+        ),
+      );
+    };
+    const onUp = () => {
+      daySidebarResizeRef.current = null;
+      setIsDaySidebarResizing(false);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    return () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+  }, [isDaySidebarResizing]);
 
   // Sidebar resize
   useEffect(() => {
@@ -2525,9 +2627,9 @@ export function GanttTimeline() {
     }
   }, [timelineViewsStorageKey, timelineViews, activeTimelineViewId]);
 
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
   //  EARLY RETURN
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
   if (!range || activeProjects.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
@@ -2544,7 +2646,7 @@ export function GanttTimeline() {
     );
   }
 
-  // ── Year and Month headers ──
+  // -- Year and Month headers --
   const years: { label: string; startOffset: number; width: number }[] =
     [];
   const months: { label: string; startOffset: number; width: number }[] =
@@ -2588,9 +2690,9 @@ export function GanttTimeline() {
     return { min: Math.min(...indices), max: Math.max(...indices) };
   })();
 
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
   //  RENDER HELPERS
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
 
   const renderTree = (
     nodes: HierarchyNode[],
@@ -2663,12 +2765,12 @@ export function GanttTimeline() {
     return items;
   };
 
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
   //  JSX
-  // ═══════════════════════════════════════════════
+  // -----------------------------------------------
   return (
     <div className="p-2 flex-1 overflow-hidden flex flex-col">
-      {/* ── Toolbar ── */}
+      {/* -- Toolbar -- */}
       <div className="mb-2 space-y-1">
         <div
           style={{
@@ -2992,7 +3094,7 @@ export function GanttTimeline() {
             value={orderMode}
             onChange={(v) => setOrderMode(v as OrderMode)}
             options={[
-              { value: 'chronological', label: 'Cronológico' },
+              { value: 'chronological', label: 'Cronol�gico' },
               { value: 'custom', label: 'Personalizado' },
             ]}
             icon={TOOLBAR_ICONS.order}
@@ -3074,7 +3176,7 @@ export function GanttTimeline() {
                       opacity: 0.7,
                     }}
                   >
-                    ×
+                    �
                   </span>
                 </button>
               ))}
@@ -3117,7 +3219,7 @@ export function GanttTimeline() {
                       opacity: 0.7,
                     }}
                   >
-                    ×
+                    �
                   </span>
                 </button>
               )}
@@ -3155,19 +3257,22 @@ export function GanttTimeline() {
         </div>
       </div>
 
-      {/* ── Main ── */}
+      {/* -- Main -- */}
       <div className="flex flex-col flex-1 min-h-0">
-        {/* Timeline */}
-        <div
-          ref={tooltipContainerRef}
-          className="bg-white rounded-xl border border-border overflow-hidden flex-1 min-h-0 relative isolate"
-        >
+        <div className="flex flex-row flex-1 min-h-0">
+          {/* Timeline */}
+          <div
+            ref={tooltipContainerRef}
+            className="bg-white border border-border overflow-hidden flex-1 min-h-0 relative isolate"
+            style={dayDetails ? { borderTopRightRadius: 0, borderBottomRightRadius: 0 } : {}}
+          >
           <div
             ref={scrollContainerRef}
             className="overflow-auto h-full"
+            onClick={handleTimelineClick}
           >
-            <div style={{ minWidth: timelineWidth + sidebarWidth }}>
-              {/* ── HEADER ── */}
+            <div className="relative" style={{ minWidth: timelineWidth + sidebarWidth }}>
+              {/* -- HEADER -- */}
               <div className="sticky top-0 z-30 border-b border-border bg-white">
                 {/* Row 1: Sidebar label + Years */}
                 <div className="flex">
@@ -3249,22 +3354,57 @@ export function GanttTimeline() {
                         <div
                           className="absolute top-0 bottom-0 w-0.5 bg-blue-400 z-10 pointer-events-none"
                           style={{
-                            left: todayOffset * dayWidth,
+                            left: todayOffset * dayWidth + dayWidth / 2,
                           }}
                         />
                         <div
                           className="absolute top-1/2 w-3 h-3 bg-blue-400 rounded-full transform -translate-x-1/2 -translate-y-1/2 pointer-events-none z-20"
                           style={{
-                            left: todayOffset * dayWidth,
+                            left: todayOffset * dayWidth + dayWidth / 2,
                           }}
                         />
                       </>
+                    )}
+
+                    {selectedDate && (
+                      <div
+                        className="absolute w-3 h-3 bg-blue-500 rounded-full transform -translate-x-1/2 pointer-events-none z-20"
+                        style={{
+                          left: sidebarWidth + differenceInCalendarDays(selectedDate, range.start) * dayWidth + dayWidth / 2,
+                          top: 0,
+                        }}
+                      />
+                    )}
+
+                    {selectedDate && (
+                      <div
+                        className="absolute w-3 h-3 bg-blue-500 rounded-full transform -translate-x-1/2 pointer-events-none z-20"
+                        style={{
+                          left: sidebarWidth + differenceInCalendarDays(selectedDate, range.start) * dayWidth + dayWidth / 2,
+                          top: 0,
+                        }}
+                      />
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* ── GROUPS ── */}
+
+              {/* Selected Day Highlight */}
+              {selectedDate && range && (
+                <>
+                  <div
+                    className="absolute top-0 bottom-0 pointer-events-none z-20"
+                    style={{
+                      left: sidebarWidth + differenceInCalendarDays(selectedDate, range.start) * dayWidth,
+                      width: 0,
+                      borderLeft: '2px dashed #3B82F6',
+                      opacity: 0.7,
+                    }}
+                  />
+                </>
+              )}
+              {/* -- GROUPS -- */}
               {groupedTimeline.map((group, gi) => {
                 const pList = group.projects;
                 const collapsed = collapsedGroups.has(group.id);
@@ -3382,7 +3522,7 @@ export function GanttTimeline() {
                           <div
                             className="absolute top-0 bottom-0 w-0.5 bg-blue-400/50 pointer-events-none"
                             style={{
-                              left: todayOffset * dayWidth,
+                              left: todayOffset * dayWidth + dayWidth / 2,
                             }}
                           />
                         )}
@@ -3434,7 +3574,31 @@ export function GanttTimeline() {
           )}
         </div>
 
-        {/* ─── NAVIGATION BAR (Apple/shadcn/ui Style) ─── */}
+        {dayDetails && (
+          <div
+            className="relative flex-shrink-0 h-full"
+            style={{ width: daySidebarWidth }}
+          >
+            <div
+              onMouseDown={startDaySidebarResize}
+              className="absolute left-0 top-0 h-full w-2 cursor-col-resize hover:bg-blue-100/40 transition-colors"
+            >
+              <div className="mx-auto h-full w-px bg-text-secondary/20" />
+            </div>
+            <DayDetailSidebar
+              dayDetails={dayDetails}
+              onClose={clearSelection}
+              onNavigate={navigateDay}
+              canNavigatePrev={canNavigatePrev}
+              canNavigateNext={canNavigateNext}
+              width={daySidebarWidth}
+            />
+          </div>
+        )}
+
+        </div>
+
+        {/* --- NAVIGATION BAR (Apple/shadcn/ui Style) --- */}
         <div
           style={{
             marginTop: '8px',
@@ -3644,7 +3808,7 @@ export function GanttTimeline() {
                 addDays(range.start, Math.floor(viewStartDay)),
                 'dd MMM',
               )}
-              {' — '}
+              {' � '}
               {format(
                 addDays(range.start, Math.floor(viewEndDay)),
                 'dd MMM',

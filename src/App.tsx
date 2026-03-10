@@ -245,7 +245,7 @@ function DashboardContent() {
           onImport={() => setShowImportWizard(true)}
         />
         {state.activeView !== 'gantt' && <FilterBar />}
-        <div className="flex-1 flex flex-col overflow-hidden bg-bg-secondary">
+        <div className="flex-1 flex flex-col overflow-hidden bg-bg-secondary rounded-l-2xl">
           {renderView()}
         </div>
       </div>
