@@ -100,3 +100,4 @@ ehthumbs.db
 Thumbs.db
 
 .vercel
+.worktrees/
