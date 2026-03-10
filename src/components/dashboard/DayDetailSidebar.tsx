@@ -36,6 +36,22 @@ export function DayDetailSidebar({
   const [collapsedGroups, setCollapsedGroups] = React.useState<Set<string>>(
     new Set(),
   );
+  const handleToggle = React.useCallback((id: string) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
   
 
   return (
@@ -198,14 +214,7 @@ export function DayDetailSidebar({
                   key={node.id}
                   node={node}
                   collapsedGroups={collapsedGroups}
-                  onToggle={(id) => {
-                    setCollapsedGroups((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(id)) next.delete(id);
-                      else next.add(id);
-                      return next;
-                    });
-                  }}
+                  onToggle={handleToggle}
                 />
               ))}
             </div>
