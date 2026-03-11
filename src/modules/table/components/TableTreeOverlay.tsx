@@ -16,6 +16,8 @@ interface RowGeometry {
   projectCellLeft: number;
 }
 
+const GAP_BELOW_CHEVRON = 8;
+
 export function TableTreeOverlay({
   projects,
   rowRefs,
@@ -137,7 +139,12 @@ export function TableTreeOverlay({
 
     const firstRun = runs[0];
     const firstChild = firstRun[0];
-    segments.add(`v:${railX}:${Math.min(parentGeom.y, firstChild.y)}:${Math.max(parentGeom.y, firstChild.y)}`);
+    const topY = Math.min(parentGeom.y, firstChild.y);
+    const botY = Math.max(parentGeom.y, firstChild.y);
+    const gappedTopY = topY + GAP_BELOW_CHEVRON;
+    if (botY > gappedTopY) {
+      segments.add(`v:${railX}:${gappedTopY}:${botY}`);
+    }
 
     for (const run of runs) {
       const runFirst = run[0];
