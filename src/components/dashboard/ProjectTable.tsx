@@ -703,10 +703,27 @@ export function ProjectTable() {
       .filter((x): x is RenderColumn => Boolean(x));
   }, [columnOrder, dynamicColumns, essentialColumnDefs]);
 
+  const expandedMap = useMemo(() => {
+    const map = new Map<string, boolean>();
+    (orderedFilteredProjects || []).forEach((p) => {
+      map.set(p.id, p.isExpanded ?? true);
+    });
+    return map;
+  }, [orderedFilteredProjects]);
+
+  const visibleOrderedProjects = useMemo(() => {
+    if (!orderedFilteredProjects || !Array.isArray(orderedFilteredProjects)) return [];
+    return orderedFilteredProjects.filter((project) => {
+      if (!project.parentId) return true;
+      const parentExpanded = expandedMap.get(project.parentId);
+      return parentExpanded !== false;
+    });
+  }, [orderedFilteredProjects, expandedMap]);
+
   const sortedProjects = useMemo(() => {
-    if (!orderedFilteredProjects || !Array.isArray(orderedFilteredProjects)) return { scheduled: [], unscheduled: [], radar: [] };
-    
-    const filtered = orderedFilteredProjects.filter((project) => {
+    if (!visibleOrderedProjects || !Array.isArray(visibleOrderedProjects)) return { scheduled: [], unscheduled: [], radar: [] };
+
+    const filtered = visibleOrderedProjects.filter((project) => {
       if (search && !project.name.toLowerCase().includes(search.toLowerCase())) return false;
       if (!showRadar && project.type === 'En radar') return false;
       return true;
@@ -730,12 +747,12 @@ export function ProjectTable() {
     const radar = sorted.filter((p) => p.type === 'En radar');
 
     return { scheduled, unscheduled, radar };
-  }, [orderedFilteredProjects, search, sortKey, sortDir, showRadar]);
+  }, [visibleOrderedProjects, search, sortKey, sortDir, showRadar]);
 
   const radarCountRaw = useMemo(() => {
-    if (!orderedFilteredProjects || !Array.isArray(orderedFilteredProjects)) return 0;
-    return orderedFilteredProjects.filter((p) => p.type === 'En radar').length;
-  }, [orderedFilteredProjects]);
+    if (!visibleOrderedProjects || !Array.isArray(visibleOrderedProjects)) return 0;
+    return visibleOrderedProjects.filter((p) => p.type === 'En radar').length;
+  }, [visibleOrderedProjects]);
 
   // Flat list for compatibility
   const flatSortedProjects = [...sortedProjects.scheduled, ...sortedProjects.unscheduled, ...sortedProjects.radar];
@@ -1635,7 +1652,7 @@ export function ProjectTable() {
         <TableTools
           search={search}
           setSearch={setSearch}
-          projectsCount={orderedFilteredProjects.length}
+          projectsCount={visibleOrderedProjects.length}
           multiSelectMode={multiSelectMode}
           selectedRowId={selectedRowId}
           selectedRowIds={selectedRowIds}
