@@ -11,6 +11,9 @@ interface RowGeometry {
   nameCellLeft: number;
 }
 
+const GAP_BELOW_CHEVRON = 8;
+const LEAF_ELBOW_REDUCTION = 8;
+
 export interface GanttTreeOverlayProps {
   /** Flat list of visible projects in hierarchical order */
   projects: Project[];
@@ -36,7 +39,7 @@ export function GanttTreeOverlay({
   hostEl,
   step = 12,
   version = 0,
-  className = 'stroke-neutral-300/75',
+  className = 'stroke-neutral-200/50',
 }: GanttTreeOverlayProps) {
   /* ── 1. Geometry pass ───────────────────────────────────────────── */
   const geometry = useMemo(() => {
@@ -107,6 +110,11 @@ export function GanttTreeOverlay({
       byParent.set(project.parentId, list);
     }
 
+    const parentIds = new Set<string>();
+    for (const [parentId, children] of byParent.entries()) {
+      if (children.length > 0) parentIds.add(parentId);
+    }
+
     // Generate line segments
     for (const [parentId, children] of byParent.entries()) {
       const parentGeom = geometry.byId.get(parentId);
@@ -127,7 +135,7 @@ export function GanttTreeOverlay({
       if (childrenGeom.length === 0) continue;
 
       const railX = childrenGeom[0].x;
-      const elbowArm = Math.max(4, step - 4);
+      const baseElbowArm = Math.max(4, step - 4);
 
       // Split into contiguous runs
       const runs: Array<Array<{ id: string; y: number; x: number }>> = [];
@@ -161,11 +169,14 @@ export function GanttTreeOverlay({
       }
       runs.push(run);
 
-      // Vertical rail: parent center → first child center
+      // Vertical rail: parent center → first child center (with gap)
       const fc = runs[0][0];
-      segs.add(
-        `v:${railX}:${Math.min(parentGeom.y, fc.y)}:${Math.max(parentGeom.y, fc.y)}`,
-      );
+      const topY = Math.min(parentGeom.y, fc.y);
+      const botY = Math.max(parentGeom.y, fc.y);
+      const gappedTopY = topY + GAP_BELOW_CHEVRON;
+      if (botY > gappedTopY) {
+        segs.add(`v:${railX}:${gappedTopY}:${botY}`);
+      }
 
       // Per-run vertical rails + horizontal elbows
       for (const r of runs) {
@@ -175,6 +186,11 @@ export function GanttTreeOverlay({
           segs.add(`v:${railX}:${first.y}:${last.y}`);
         }
         for (const c of r) {
+          const isLeaf = !parentIds.has(c.id);
+          const elbowArm = Math.max(
+            4,
+            baseElbowArm - (isLeaf ? LEAF_ELBOW_REDUCTION : 0),
+          );
           segs.add(`h:${railX}:${c.y}:${railX + elbowArm}`);
         }
       }
@@ -189,7 +205,7 @@ export function GanttTreeOverlay({
   return (
     <svg
       aria-hidden="true"
-      className="pointer-events-none absolute left-0 top-0 z-[5]"
+      className="pointer-events-none absolute left-0 top-0 z-[60]"
       width={geometry.width}
       height={geometry.height}
       viewBox={`0 0 ${geometry.width} ${geometry.height}`}
