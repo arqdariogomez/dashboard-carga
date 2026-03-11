@@ -1163,7 +1163,12 @@ export function ProjectTable() {
       if (!target) return;
       const tag = target.tagName.toLowerCase();
       const editable = target.getAttribute('contenteditable');
-      if (tag === 'input' || tag === 'textarea' || tag === 'select' || editable === 'true') return;
+      if (tag === 'input') {
+        const inputType = (target as HTMLInputElement).type;
+        if (inputType !== 'checkbox') return;
+      } else if (tag === 'textarea' || tag === 'select' || editable === 'true') {
+        return;
+      }
 
       e.preventDefault();
       const targets = multiSelectMode
