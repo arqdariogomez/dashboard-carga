@@ -178,7 +178,7 @@ export function EditableTagsCell({
             );
           })
         ) : (
-          <span className="text-gray-400 text-[12px]">Editar etiquetas...</span>
+          <span className="text-gray-400 text-[14px]">Editar etiquetas...</span>
         )}
       </div>
 

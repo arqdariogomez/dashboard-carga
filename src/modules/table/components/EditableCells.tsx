@@ -307,7 +307,7 @@ export function EditableAssigneesCell({
         ) : (
           <span className="flex flex-wrap gap-1">
             {value.map((person, idx) => (
-              <span key={idx} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-person-1/10 text-person-1 rounded text-[12px]">
+              <span key={idx} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-person-1/10 text-person-1 rounded text-[14px]">
                 {person}
               </span>
             ))}
@@ -515,7 +515,7 @@ export function EditableTagsCell({
           ) : (
             <span className="flex flex-wrap gap-1">
               {currentTags.map((tag, idx) => (
-                <span key={idx} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-accent-blue/10 text-accent-blue rounded text-[12px]">
+                <span key={idx} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-accent-blue/10 text-accent-blue rounded text-[14px]">
                   {tag}
                 </span>
               ))}
@@ -537,7 +537,7 @@ export function EditableTagsCell({
                 onClick={() => handleOptionToggle(option)}
               >
                 <span>{option}</span>
-                {currentTags.includes(option) && <span className="text-[12px]">?</span>}
+                {currentTags.includes(option) && <span className="text-[14px]">?</span>}
               </button>
             ))}
             <button
