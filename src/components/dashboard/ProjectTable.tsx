@@ -1169,26 +1169,39 @@ export function ProjectTable() {
         return;
       }
 
-      const hasSelection = selectedRowId !== null || selectedRowIds.size > 0;
-      if (!hasSelection && !multiSelectMode) return;
+      if (multiSelectMode) {
+        e.preventDefault();
+        if (selectedRowIds.size > 0) {
+          const order = state.projectOrder.length > 0
+            ? [...state.projectOrder]
+            : state.projects.map((p) => p.id);
+          const sortedSelected = order.filter((id) => selectedRowIds.has(id));
+          if (e.shiftKey) {
+            for (let i = sortedSelected.length - 1; i >= 0; i -= 1) {
+              handleOutdent(sortedSelected[i]);
+            }
+          } else {
+            for (const id of sortedSelected) {
+              handleIndent(id);
+            }
+          }
+        }
+        return;
+      }
+
+      if (!selectedRowId) return;
 
       e.preventDefault();
-      const targets = multiSelectMode
-        ? Array.from(selectedRowIds)
-        : [selectedRowId];
-      for (const id of targets) {
-        if (!id) continue;
-        if (e.shiftKey) {
-          handleOutdent(id);
-        } else {
-          handleIndent(id);
-        }
+      if (e.shiftKey) {
+        handleOutdent(selectedRowId);
+      } else {
+        handleIndent(selectedRowId);
       }
     };
 
     window.addEventListener('keydown', onKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
-  }, [selectedRowId, selectedRowIds, multiSelectMode, handleIndent, handleOutdent]);
+  }, [selectedRowId, selectedRowIds, multiSelectMode, handleIndent, handleOutdent, state.projectOrder, state.projects]);
 
   useEffect(() => {
     const hasAnySelection = selectedRowId !== null || selectedRowIds.size > 0;
