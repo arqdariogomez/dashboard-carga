@@ -2,6 +2,7 @@ import React, { createContext, useContext, useReducer, useEffect, useMemo, useRe
 import type { AppState, AppAction, Project, DynamicCellValue, DynamicColumn } from '@/lib/types';
 import { DEFAULT_STATE, DEFAULT_FILTERS } from '@/lib/constants';
 import { calculateDailyWorkload, applyFilters, getBranches, getActiveProjects, computeProjectFields, getPersonsWithCatalog } from '@/lib/workloadEngine';
+import SyncManager from '@/lib/syncManager';
 import { getDateRange } from '@/lib/dateUtils';
 import { setDateDisplayFormat } from '@/lib/dateUtils';
 import { validateNoCircles, aggregateFromChildren, calculateHierarchyLevel } from '@/lib/hierarchyEngine';
@@ -922,10 +923,7 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
       if (Date.now() < ignoreRealtimeUntilRef.current) return;
       
       // Verificar si hay tickets activos que bloquean la sincronización
-      // Nota: SyncManager debería estar disponible globalmente o inyectado
-      const syncManager = (typeof window !== 'undefined' && window.SyncManager) 
-        ? window.SyncManager.getInstance() 
-        : null;
+      const syncManager = SyncManager.getInstance();
       
       if (syncManager && syncManager.isLocked()) {
         console.log('🎫 SyncManager: Sincronización bloqueada por ticket activo', syncManager.getCurrentTicket());
