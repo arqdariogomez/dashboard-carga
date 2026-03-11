@@ -1176,13 +1176,39 @@ export function ProjectTable() {
             ? [...state.projectOrder]
             : state.projects.map((p) => p.id);
           const sortedSelected = order.filter((id) => selectedRowIds.has(id));
+          const firstSelectedId = sortedSelected[0];
+          const firstProject = state.projects.find((p) => p.id === firstSelectedId);
+          if (!firstProject) return;
+
           if (e.shiftKey) {
-            for (let i = sortedSelected.length - 1; i >= 0; i -= 1) {
-              handleOutdent(sortedSelected[i]);
+            const currentParentId = firstProject.parentId;
+            if (!currentParentId) return;
+            const parentProject = state.projects.find((p) => p.id === currentParentId);
+            const newParentId = parentProject?.parentId ?? null;
+            for (const id of sortedSelected) {
+              if (!validateNoCircles(id, newParentId, state.projects)) continue;
+              dispatch({ type: 'UPDATE_HIERARCHY', payload: { projectId: id, newParentId } });
             }
           } else {
+            const currentLevel = firstProject.hierarchyLevel ?? 0;
+            let targetParentId: string | null = null;
+            const firstIdx = order.indexOf(firstSelectedId);
+            if (firstIdx > 0) {
+              for (let i = firstIdx - 1; i >= 0; i -= 1) {
+                const candidateId = order[i];
+                const candidate = state.projects.find((p) => p.id === candidateId);
+                if (!candidate) continue;
+                const candidateLevel = candidate.hierarchyLevel ?? 0;
+                if (candidateLevel === currentLevel) {
+                  targetParentId = candidateId;
+                  break;
+                }
+              }
+            }
+            if (!targetParentId) return;
             for (const id of sortedSelected) {
-              handleIndent(id);
+              if (!validateNoCircles(id, targetParentId, state.projects)) continue;
+              dispatch({ type: 'UPDATE_HIERARCHY', payload: { projectId: id, newParentId: targetParentId } });
             }
           }
         }
@@ -1190,6 +1216,18 @@ export function ProjectTable() {
       }
 
       if (!selectedRowId) return;
+
+      // Add row below:
+      // Windows/Linux: Ctrl + "+" (usually Ctrl + Shift + "=")
+      // macOS: Cmd + Shift + "+"
+      const isAddBelowShortcut =
+        (e.ctrlKey && !e.metaKey && (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd')) ||
+        (e.metaKey && e.shiftKey && (e.key === '+' || e.key === '='));
+      if (isAddBelowShortcut) {
+        e.preventDefault();
+        tableActions.handleAddBelow(selectedRowId);
+        return;
+      }
 
       e.preventDefault();
       if (e.shiftKey) {
@@ -1201,7 +1239,7 @@ export function ProjectTable() {
 
     window.addEventListener('keydown', onKeyDown, { capture: true });
     return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
-  }, [selectedRowId, selectedRowIds, multiSelectMode, handleIndent, handleOutdent, state.projectOrder, state.projects]);
+  }, [selectedRowId, selectedRowIds, multiSelectMode, handleIndent, handleOutdent, tableActions, state.projectOrder, state.projects]);
 
   useEffect(() => {
     const hasAnySelection = selectedRowId !== null || selectedRowIds.size > 0;
