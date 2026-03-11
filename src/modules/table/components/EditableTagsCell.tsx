@@ -170,7 +170,7 @@ export function EditableTagsCell({
             return (
               <span
                 key={tag}
-                className="inline-flex items-center px-1.5 py-0.5 rounded text-[14px] font-medium border"
+                className="inline-flex items-center px-1.5 py-0.5 rounded text-[12px] font-medium border"
                 style={{ backgroundColor: c.bg, color: c.text, borderColor: c.border }}
               >
                 {tag}
