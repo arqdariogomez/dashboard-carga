@@ -1156,14 +1156,66 @@ export function ProjectTable() {
         return;
       }
 
-      if (!selectedRowId || multiSelectMode) return;
       if (e.key !== 'Tab') return;
 
       const target = e.target as HTMLElement | null;
       if (!target) return;
       const tag = target.tagName.toLowerCase();
       const editable = target.getAttribute('contenteditable');
-      if (tag === 'input' || tag === 'textarea' || tag === 'select' || editable === 'true') return;
+      if (tag === 'input') {
+        const inputType = (target as HTMLInputElement).type;
+        if (inputType !== 'checkbox') return;
+      } else if (tag === 'textarea' || tag === 'select' || editable === 'true') {
+        return;
+      }
+
+      if (multiSelectMode) {
+        e.preventDefault();
+        if (selectedRowIds.size > 0) {
+          const order = state.projectOrder.length > 0
+            ? [...state.projectOrder]
+            : state.projects.map((p) => p.id);
+          const sortedSelected = order.filter((id) => selectedRowIds.has(id));
+          const firstSelectedId = sortedSelected[0];
+          const firstProject = state.projects.find((p) => p.id === firstSelectedId);
+          if (!firstProject) return;
+
+          if (e.shiftKey) {
+            const currentParentId = firstProject.parentId;
+            if (!currentParentId) return;
+            const parentProject = state.projects.find((p) => p.id === currentParentId);
+            const newParentId = parentProject?.parentId ?? null;
+            for (const id of sortedSelected) {
+              if (!validateNoCircles(id, newParentId, state.projects)) continue;
+              dispatch({ type: 'UPDATE_HIERARCHY', payload: { projectId: id, newParentId } });
+            }
+          } else {
+            const currentLevel = firstProject.hierarchyLevel ?? 0;
+            let targetParentId: string | null = null;
+            const firstIdx = order.indexOf(firstSelectedId);
+            if (firstIdx > 0) {
+              for (let i = firstIdx - 1; i >= 0; i -= 1) {
+                const candidateId = order[i];
+                const candidate = state.projects.find((p) => p.id === candidateId);
+                if (!candidate) continue;
+                const candidateLevel = candidate.hierarchyLevel ?? 0;
+                if (candidateLevel === currentLevel) {
+                  targetParentId = candidateId;
+                  break;
+                }
+              }
+            }
+            if (!targetParentId) return;
+            for (const id of sortedSelected) {
+              if (!validateNoCircles(id, targetParentId, state.projects)) continue;
+              dispatch({ type: 'UPDATE_HIERARCHY', payload: { projectId: id, newParentId: targetParentId } });
+            }
+          }
+        }
+        return;
+      }
+
+      if (!selectedRowId) return;
 
       // Add row below:
       // Windows/Linux: Ctrl + "+" (usually Ctrl + Shift + "=")
@@ -1185,9 +1237,9 @@ export function ProjectTable() {
       }
     };
 
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedRowId, multiSelectMode, handleIndent, handleOutdent, tableActions]);
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
+  }, [selectedRowId, selectedRowIds, multiSelectMode, handleIndent, handleOutdent, tableActions, state.projectOrder, state.projects]);
 
   useEffect(() => {
     const hasAnySelection = selectedRowId !== null || selectedRowIds.size > 0;
