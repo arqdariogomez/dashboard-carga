@@ -62,7 +62,7 @@ function StatusBadge({ status }: { status: ProjectStatus }) {
   };
   const c = config[status];
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[14px] font-medium ${c.bg} ${c.text} border ${c.border}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[12px] font-medium ${c.bg} ${c.text} border ${c.border}`}>
       {c.label}
     </span>
   );
