@@ -1156,7 +1156,7 @@ export function ProjectTable() {
         return;
       }
 
-      if (!selectedRowId || multiSelectMode) return;
+      if (!selectedRowId && selectedRowIds.size === 0) return;
       if (e.key !== 'Tab') return;
 
       const target = e.target as HTMLElement | null;
@@ -1165,29 +1165,23 @@ export function ProjectTable() {
       const editable = target.getAttribute('contenteditable');
       if (tag === 'input' || tag === 'textarea' || tag === 'select' || editable === 'true') return;
 
-      // Add row below:
-      // Windows/Linux: Ctrl + "+" (usually Ctrl + Shift + "=")
-      // macOS: Cmd + Shift + "+"
-      const isAddBelowShortcut =
-        (e.ctrlKey && !e.metaKey && (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd')) ||
-        (e.metaKey && e.shiftKey && (e.key === '+' || e.key === '='));
-      if (isAddBelowShortcut) {
-        e.preventDefault();
-        tableActions.handleAddBelow(selectedRowId);
-        return;
-      }
-
       e.preventDefault();
-      if (e.shiftKey) {
-        handleOutdent(selectedRowId);
-      } else {
-        handleIndent(selectedRowId);
+      const targets = multiSelectMode
+        ? Array.from(selectedRowIds)
+        : [selectedRowId];
+      for (const id of targets) {
+        if (!id) continue;
+        if (e.shiftKey) {
+          handleOutdent(id);
+        } else {
+          handleIndent(id);
+        }
       }
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [selectedRowId, multiSelectMode, handleIndent, handleOutdent, tableActions]);
+  }, [selectedRowId, selectedRowIds, multiSelectMode, handleIndent, handleOutdent]);
 
   useEffect(() => {
     const hasAnySelection = selectedRowId !== null || selectedRowIds.size > 0;
