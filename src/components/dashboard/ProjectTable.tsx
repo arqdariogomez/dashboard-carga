@@ -1156,7 +1156,6 @@ export function ProjectTable() {
         return;
       }
 
-      if (!selectedRowId && selectedRowIds.size === 0) return;
       if (e.key !== 'Tab') return;
 
       const target = e.target as HTMLElement | null;
@@ -1169,6 +1168,9 @@ export function ProjectTable() {
       } else if (tag === 'textarea' || tag === 'select' || editable === 'true') {
         return;
       }
+
+      const hasSelection = selectedRowId !== null || selectedRowIds.size > 0;
+      if (!hasSelection && !multiSelectMode) return;
 
       e.preventDefault();
       const targets = multiSelectMode
@@ -1184,8 +1186,8 @@ export function ProjectTable() {
       }
     };
 
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('keydown', onKeyDown, { capture: true });
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true });
   }, [selectedRowId, selectedRowIds, multiSelectMode, handleIndent, handleOutdent]);
 
   useEffect(() => {
