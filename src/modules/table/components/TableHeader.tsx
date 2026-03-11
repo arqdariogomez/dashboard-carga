@@ -100,7 +100,7 @@ export function TableHeader({
           return (
             <th
               key={rc.token}
-              className={`group relative bg-white px-2 py-2.5 text-left text-xs font-semibold text-text-secondary border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)]`}
+              className={`group relative bg-white px-2 py-2.5 text-left text-[14px] font-semibold text-text-secondary border-b border-border shadow-[0_1px_0_rgba(15,23,42,0.06)]`}
               style={{ width }}
               onDragOver={(e) => {
                 if (!dragColumnToken) return;

@@ -153,10 +153,10 @@ export function EditableAssigneesCell({
         {safeValue.length > 0 ? (
           <span className="inline-flex max-w-full items-center gap-1.5">
             <AvatarDot name={safeValue[0]} />
-            <span className="text-[11px] text-text-secondary truncate">{compactLabel}</span>
+            <span className="text-[14px] text-text-secondary truncate">{compactLabel}</span>
           </span>
         ) : (
-          <span className="text-text-secondary text-xs">Sin asignar</span>
+          <span className="text-text-secondary text-[14px]">Sin asignar</span>
         )}
       </div>
 
@@ -167,7 +167,7 @@ export function EditableAssigneesCell({
             <input
               type="text"
               placeholder="Buscar persona..."
-              className="flex-1 h-8 rounded border border-border px-2 text-xs bg-white"
+              className="flex-1 h-8 rounded border border-border px-2 text-[14px] bg-white"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               autoFocus
@@ -189,7 +189,7 @@ export function EditableAssigneesCell({
                   {editingName === p ? (
                     <input
                       type="text"
-                      className="flex-1 h-6 rounded border border-border px-1.5 text-xs bg-white"
+                      className="flex-1 h-6 rounded border border-border px-1.5 text-[14px] bg-white"
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
                       onKeyDown={(e) => {
@@ -201,7 +201,7 @@ export function EditableAssigneesCell({
                     />
                   ) : (
                     <span
-                      className="flex-1 text-xs text-text-primary truncate"
+                      className="flex-1 text-[14px] text-text-primary truncate"
                       onDoubleClick={(e) => { e.stopPropagation(); startEdit(p); }}
                       title="Doble clic para renombrar"
                     >
@@ -257,7 +257,7 @@ export function EditableAssigneesCell({
                 </div>
               ))}
             {mergedOptions.filter((p) => p.toLowerCase().includes(search.toLowerCase())).length === 0 && (
-              <div className="px-2 py-2 text-xs text-text-secondary">No hay resultados.</div>
+              <div className="px-2 py-2 text-[14px] text-text-secondary">No hay resultados.</div>
             )}
           </div>
 
@@ -267,7 +267,7 @@ export function EditableAssigneesCell({
                 <input
                   type="text"
                   placeholder="Nueva persona..."
-                  className="flex-1 h-8 rounded border border-border px-2 text-xs bg-white"
+                  className="flex-1 h-8 rounded border border-border px-2 text-[14px] bg-white"
                   value={rowValue}
                   onChange={(e) => {
                     const v = e.target.value;
@@ -303,7 +303,7 @@ export function EditableAssigneesCell({
                 />
                 <button
                   type="button"
-                  className="h-8 px-3 text-xs rounded border border-border hover:bg-bg-secondary disabled:opacity-40"
+                  className="h-8 px-3 text-[14px] rounded border border-border hover:bg-bg-secondary disabled:opacity-40"
                   disabled={!rowValue.trim()}
                   onClick={() => addQuick(idx)}
                   title="Agregar y continuar"
@@ -315,24 +315,24 @@ export function EditableAssigneesCell({
           </div>
 
           <details className="mt-3 rounded-lg border border-border p-3">
-            <summary className="cursor-pointer text-xs font-medium text-text-primary">Fusionar personas</summary>
+            <summary className="cursor-pointer text-[14px] font-medium text-text-primary">Fusionar personas</summary>
             <div className="grid grid-cols-2 gap-2">
-              <select value={mergeLeft} onChange={(e) => { setMergeLeft(e.target.value); if (!mergeKeep) setMergeKeep('left'); }} className="h-8 rounded border border-border px-2 text-xs bg-white">
+              <select value={mergeLeft} onChange={(e) => { setMergeLeft(e.target.value); if (!mergeKeep) setMergeKeep('left'); }} className="h-8 rounded border border-border px-2 text-[14px] bg-white">
                 <option value="">Persona A</option>
                 {mergedOptions.map((p) => <option key={`left-${p}`} value={p}>{p}</option>)}
               </select>
-              <select value={mergeRight} onChange={(e) => setMergeRight(e.target.value)} className="h-8 rounded border border-border px-2 text-xs bg-white">
+              <select value={mergeRight} onChange={(e) => setMergeRight(e.target.value)} className="h-8 rounded border border-border px-2 text-[14px] bg-white">
                 <option value="">Persona B</option>
                 {mergedOptions.map((p) => <option key={`right-${p}`} value={p}>{p}</option>)}
               </select>
             </div>
-            <div className="mt-2 flex items-center gap-2 text-xs">
+            <div className="mt-2 flex items-center gap-2 text-[14px]">
               <span className="text-text-secondary">Conservar:</span>
               <label className="inline-flex items-center gap-1"><input type="radio" checked={mergeKeep === 'left'} onChange={() => setMergeKeep('left')} />A</label>
               <label className="inline-flex items-center gap-1"><input type="radio" checked={mergeKeep === 'right'} onChange={() => setMergeKeep('right')} />B</label>
               <button
                 type="button"
-                className="ml-auto h-8 px-3 text-xs rounded border border-border hover:bg-bg-secondary disabled:opacity-40"
+                className="ml-auto h-8 px-3 text-[14px] rounded border border-border hover:bg-bg-secondary disabled:opacity-40"
                 disabled={!mergeLeft || !mergeRight || mergeLeft === mergeRight}
                 onClick={() => {
                   setMergeLeft('');
@@ -346,7 +346,7 @@ export function EditableAssigneesCell({
             </div>
             <button
               type="button"
-              className="mt-2 w-full h-8 px-3 text-xs rounded bg-accent-blue text-white hover:bg-accent-blue/90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+              className="mt-2 w-full h-8 px-3 text-[14px] rounded bg-accent-blue text-white hover:bg-accent-blue/90 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
               disabled={!mergeLeft || !mergeRight || mergeLeft === mergeRight || !onMergePersons}
               onClick={() => {
                 if (onMergePersons && mergeLeft && mergeRight) {

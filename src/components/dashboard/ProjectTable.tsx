@@ -1687,7 +1687,7 @@ export function ProjectTable() {
         onDragEnd={handleDragEnd}
       >
           <div ref={treeOverlayHostRef} className="relative">
-          <table className="w-full px-8 pb-6 border-separate border-spacing-0 table-fixed">
+          <table className="w-full px-8 pb-6 border-separate border-spacing-0 table-fixed text-[14px]">
             <TableHeader
               renderColumns={renderColumns}
               columnWidths={columnWidths}

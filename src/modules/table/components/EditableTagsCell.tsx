@@ -170,7 +170,7 @@ export function EditableTagsCell({
             return (
               <span
                 key={tag}
-                className="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium border"
+                className="inline-flex items-center px-1.5 py-0.5 rounded text-[14px] font-medium border"
                 style={{ backgroundColor: c.bg, color: c.text, borderColor: c.border }}
               >
                 {tag}
@@ -178,7 +178,7 @@ export function EditableTagsCell({
             );
           })
         ) : (
-          <span className="text-gray-400 text-xs">Editar etiquetas...</span>
+          <span className="text-gray-400 text-[14px]">Editar etiquetas...</span>
         )}
       </div>
 
@@ -189,7 +189,7 @@ export function EditableTagsCell({
             <input
               type="text"
               placeholder={`Buscar ${columnName.toLowerCase()}...`}
-              className="flex-1 h-8 rounded border border-border px-2 text-xs bg-white"
+              className="flex-1 h-8 rounded border border-border px-2 text-[14px] bg-white"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               autoFocus
@@ -208,7 +208,7 @@ export function EditableTagsCell({
                     {editingName === tag ? (
                       <input
                         type="text"
-                        className="h-6 flex-1 rounded border border-border px-1.5 text-xs bg-white"
+                        className="h-6 flex-1 rounded border border-border px-1.5 text-[14px] bg-white"
                         value={editValue}
                         onChange={(e) => setEditValue(e.target.value)}
                         onKeyDown={(e) => {
@@ -220,7 +220,7 @@ export function EditableTagsCell({
                       />
                     ) : (
                       <span
-                        className="truncate text-xs text-text-primary"
+                        className="truncate text-[14px] text-text-primary"
                         onDoubleClick={(e) => {
                           e.preventDefault();
                           e.stopPropagation();
@@ -270,7 +270,7 @@ export function EditableTagsCell({
               );
             })}
             {filteredOptions.length === 0 && (
-              <div className="px-2 py-2 text-xs text-text-secondary">No hay resultados.</div>
+              <div className="px-2 py-2 text-[14px] text-text-secondary">No hay resultados.</div>
             )}
           </div>
 
@@ -281,7 +281,7 @@ export function EditableTagsCell({
                   type="text"
                   value={rowValue}
                   placeholder={`Agregar ${columnName.toLowerCase()}...`}
-                  className="flex-1 h-8 rounded border border-border px-2 text-xs bg-white"
+                  className="flex-1 h-8 rounded border border-border px-2 text-[14px] bg-white"
                   onChange={(e) => {
                     const v = e.target.value;
                     setDraftRows((prev) => {
@@ -314,7 +314,7 @@ export function EditableTagsCell({
                 />
                 <button
                   type="button"
-                  className="h-8 px-3 text-xs rounded border border-border hover:bg-bg-secondary disabled:opacity-40"
+                  className="h-8 px-3 text-[14px] rounded border border-border hover:bg-bg-secondary disabled:opacity-40"
                   disabled={!rowValue.trim()}
                   onClick={() => { void addDraft(idx); }}
                   title="Agregar y continuar"
@@ -326,24 +326,24 @@ export function EditableTagsCell({
           </div>
 
           <details className="mt-2 rounded-lg border border-border p-3">
-            <summary className="cursor-pointer text-xs font-medium text-text-primary">Fusionar {columnName.toLowerCase()}</summary>
+            <summary className="cursor-pointer text-[14px] font-medium text-text-primary">Fusionar {columnName.toLowerCase()}</summary>
             <div className="grid grid-cols-2 gap-2 mt-2">
-              <select value={mergeLeft} onChange={(e) => setMergeLeft(e.target.value)} className="h-8 rounded border border-border px-2 text-xs bg-white">
+              <select value={mergeLeft} onChange={(e) => setMergeLeft(e.target.value)} className="h-8 rounded border border-border px-2 text-[14px] bg-white">
                 <option value="">{columnName} A</option>
                 {mergedOptions.map((t) => <option key={`left-${t}`} value={t}>{t}</option>)}
               </select>
-              <select value={mergeRight} onChange={(e) => setMergeRight(e.target.value)} className="h-8 rounded border border-border px-2 text-xs bg-white">
+              <select value={mergeRight} onChange={(e) => setMergeRight(e.target.value)} className="h-8 rounded border border-border px-2 text-[14px] bg-white">
                 <option value="">{columnName} B</option>
                 {mergedOptions.map((t) => <option key={`right-${t}`} value={t}>{t}</option>)}
               </select>
             </div>
-            <div className="mt-2 flex items-center gap-2 text-xs">
+            <div className="mt-2 flex items-center gap-2 text-[14px]">
               <span className="text-text-secondary">Conservar:</span>
               <label className="inline-flex items-center gap-1"><input type="radio" checked={mergeKeep === 'left'} onChange={() => setMergeKeep('left')} />A</label>
               <label className="inline-flex items-center gap-1"><input type="radio" checked={mergeKeep === 'right'} onChange={() => setMergeKeep('right')} />B</label>
               <button
                 type="button"
-                className="ml-auto h-8 px-3 text-xs rounded border border-border hover:bg-bg-secondary disabled:opacity-40"
+                className="ml-auto h-8 px-3 text-[14px] rounded border border-border hover:bg-bg-secondary disabled:opacity-40"
                 disabled={!mergeLeft || !mergeRight || mergeLeft === mergeRight}
                 onClick={async () => {
                   const keep = mergeKeep === 'left' ? mergeLeft : mergeRight;

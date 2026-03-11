@@ -62,7 +62,7 @@ function StatusBadge({ status }: { status: ProjectStatus }) {
   };
   const c = config[status];
   return (
-    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${c.bg} ${c.text} border ${c.border}`}>
+    <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[14px] font-medium ${c.bg} ${c.text} border ${c.border}`}>
       {c.label}
     </span>
   );
@@ -437,7 +437,7 @@ export function SortableRow({
           const col = rc.column;
           const cellValue = dynamicValues?.[col.id] ?? null;
           return (
-            <td key={rc.token} className={`relative px-2 py-2 border-b border-border text-xs ${rowBgClass} min-w-[140px] ${groupReadonlyToneClass}`}>
+            <td key={rc.token} className={`relative px-2 py-2 border-b border-border text-[14px] ${rowBgClass} min-w-[140px] ${groupReadonlyToneClass}`}>
               {col.type === 'checkbox' ? (
                 <input type="checkbox" checked={Boolean(cellValue)} onChange={(e) => onUpdateDynamicCell(project.id, col.id, e.target.checked)} className="h-3.5 w-3.5 accent-[#3B82F6]" />
               ) : col.type === 'number' ? (
@@ -589,7 +589,7 @@ export function SortableRow({
           case 'load':
             const loadAssignees = project.assignees?.length ?? 0;
             const displayLoad = loadAssignees > 0 ? project.dailyLoad / loadAssignees : project.dailyLoad;
-            return <td key={rc.token} className={`px-2 py-2 border-b border-border text-center ${rowBgClass} ${groupReadonlyToneClass}`}>{(displayLoad ?? 0) > 0 ? <LoadBubble load={displayLoad} size="sm" /> : <span className="text-xs text-text-secondary">Sin carga</span>}</td>;
+            return <td key={rc.token} className={`px-2 py-2 border-b border-border text-center text-[11px] ${rowBgClass} ${groupReadonlyToneClass}`}>{(displayLoad ?? 0) > 0 ? <LoadBubble load={displayLoad} size="sm" /> : <span className="text-[11px] text-text-secondary">Sin carga</span>}</td>;
           case 'status':
             return (
               <td key={rc.token} className={`px-2 py-2 border-b border-border ${rowBgClass} ${groupReadonlyToneClass}`}>
