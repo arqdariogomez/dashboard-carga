@@ -2150,6 +2150,7 @@ export function GanttTimeline() {
 
   const handleStartBarResize = useCallback(
     (e: React.MouseEvent, project: Project, type: 'start' | 'end') => {
+      if (e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
       if (!project.startDate || !project.endDate) return;
@@ -2167,6 +2168,7 @@ export function GanttTimeline() {
 
   const handleStartMilestoneDrag = useCallback(
     (e: React.MouseEvent, project: Project) => {
+      if (e.button !== 0) return;
       e.preventDefault();
       e.stopPropagation();
       const d = project.startDate || project.endDate;
