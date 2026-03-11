@@ -193,6 +193,9 @@ export function GanttTreeOverlay({
       width={geometry.width}
       height={geometry.height}
       viewBox={`0 0 ${geometry.width} ${geometry.height}`}
+      style={{
+        transform: 'translateX(var(--gantt-scroll-x, 0px))',
+      }}
     >
       {Array.from(segments).map((seg) => {
         const [kind, sa, sb, sc] = seg.split(':');

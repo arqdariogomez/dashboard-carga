@@ -1694,15 +1694,22 @@ export function GanttTimeline() {
   //  SCROLL / ZOOM HELPERS
   // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
 
+  const setScrollCssVar = useCallback((value: number) => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.style.setProperty('--gantt-scroll-x', `${value}px`);
+  }, []);
+
   const applyScrollToDOM = useCallback((value: number) => {
     const el = scrollContainerRef.current;
     if (!el) return;
     suppressScrollRef.current = true;
     el.scrollLeft = value;
+    setScrollCssVar(value);
     requestAnimationFrame(() => {
       suppressScrollRef.current = false;
     });
-  }, []);
+  }, [setScrollCssVar]);
 
   const zoomToDay = useCallback(
     (newZoom: number, anchorDay: number) => {
@@ -2237,6 +2244,7 @@ export function GanttTimeline() {
     const h = () => {
       if (suppressScrollRef.current) return;
       cancelAnimationFrame(scrollRafRef.current);
+      setScrollCssVar(el.scrollLeft);
       scrollRafRef.current = requestAnimationFrame(() =>
         setScrollX(el.scrollLeft),
       );
@@ -3082,13 +3090,15 @@ export function GanttTimeline() {
                         >
                           {renderTree(roots, pList)}
                         </div>
-                        <GanttTreeOverlay
-                          hostEl={treeGroupHostEls.get(group.id)}
-                          projects={group.projects}
-                          rowRefs={treeRowRefs}
-                          version={treeVersion}
-                          sidebarWidth={sidebarWidth}
-                        />
+                        {!isSidebarCollapsed && (
+                          <GanttTreeOverlay
+                            hostEl={treeGroupHostEls.get(group.id)}
+                            projects={group.projects}
+                            rowRefs={treeRowRefs}
+                            version={treeVersion}
+                            sidebarWidth={sidebarWidth}
+                          />
+                        )}
                       </>
                     )}
                   </div>
